@@ -1,0 +1,26 @@
+{
+  "name": "undarga",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant SaaS booking platform",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "api:dev": "pnpm --filter @undarga/api start:dev",
+    "api:build": "pnpm --filter @undarga/api build",
+    "api:test": "pnpm --filter @undarga/api test",
+    "api:test:e2e": "pnpm --filter @undarga/api test:e2e",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @undarga/api db:migrate",
+    "db:harden": "pnpm --filter @undarga/api db:harden",
+    "db:reset": "pnpm --filter @undarga/api db:reset",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,58 @@
+# Local development stack.
+#
+# NOTE on pgbouncer: RLS relies on `SET LOCAL app.current_company_id`, which is
+# transaction-scoped. pgbouncer MUST run in transaction pooling mode. Session
+# mode would leak tenant context between requests — see docs/DATABASE.md 4.7.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: undarga-postgres
+    environment:
+      POSTGRES_USER: undarga
+      POSTGRES_PASSWORD: undarga_dev
+      POSTGRES_DB: undarga
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U undarga -d undarga']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Separate database for the e2e isolation suite so it can be truncated freely.
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: undarga-postgres-test
+    environment:
+      POSTGRES_USER: undarga
+      POSTGRES_PASSWORD: undarga_dev
+      POSTGRES_DB: undarga_test
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U undarga -d undarga_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: undarga-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

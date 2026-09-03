@@ -1,6 +1,13 @@
 import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
-import type { Actor, CompanyUserActor, PlatformUserActor } from '../../tenancy/context/context.types';
-import { REQUEST_CONTEXT_KEY, type RequestWithContext } from '../../tenancy/guards/request-with-context';
+import type {
+  Actor,
+  CompanyUserActor,
+  PlatformUserActor,
+} from '../../tenancy/context/context.types';
+import {
+  REQUEST_CONTEXT_KEY,
+  type RequestWithContext,
+} from '../../tenancy/guards/request-with-context';
 
 function actorOf(ctx: ExecutionContext): Actor | null {
   const request = ctx.switchToHttp().getRequest<RequestWithContext>();

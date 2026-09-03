@@ -9,6 +9,12 @@
       "@test/*": ["test/*"]
     }
   },
-  "include": ["src/**/*", "test/**/*", "prisma/seed.ts"],
+  // Standalone scripts (seed, demo fixtures) run through ts-node, which needs
+  // CommonJS regardless of what a future ESM migration does to the build.
+  "ts-node": {
+    "compilerOptions": { "module": "commonjs" },
+    "transpileOnly": false
+  },
+  "include": ["src/**/*", "test/**/*", "prisma/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

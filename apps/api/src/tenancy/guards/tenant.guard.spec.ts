@@ -52,7 +52,13 @@ function tenantFor(companyId: string, viaPlatformAccess = false): TenantContext 
     },
     membership: viaPlatformAccess
       ? null
-      : { companyUserId: 'cu', userAccountId: 'user-a', isOwner: false, roleKeys: [], branchScope: null },
+      : {
+          companyUserId: 'cu',
+          userAccountId: 'user-a',
+          isOwner: false,
+          roleKeys: [],
+          branchScope: null,
+        },
     permissions: new Set(),
     source: 'ROUTE_PARAM',
     viaPlatformAccess,

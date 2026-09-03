@@ -6,8 +6,7 @@ const bool = (fallback: boolean) =>
     .default(fallback ? 'true' : 'false')
     .transform((v) => v === 'true' || v === '1');
 
-const int = (fallback: number, min = 0) =>
-  z.coerce.number().int().min(min).default(fallback);
+const int = (fallback: number, min = 0) => z.coerce.number().int().min(min).default(fallback);
 
 /**
  * Fail fast and loudly. A misconfigured tenant boundary is not something to

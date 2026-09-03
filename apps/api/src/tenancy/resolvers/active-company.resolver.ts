@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config';
 import { isCompanyUser, isCustomerActor } from '../context';
-import type { TenantCandidate, TenantResolutionInput, TenantResolver } from './tenant-resolver.types';
+import type {
+  TenantCandidate,
+  TenantResolutionInput,
+  TenantResolver,
+} from './tenant-resolver.types';
 
 /**
  * The primary strategy: the company the authenticated user currently has

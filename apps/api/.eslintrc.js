@@ -22,6 +22,13 @@ module.exports = {
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
+    // A leading underscore marks a parameter that exists for its TYPE or its
+    // POSITION rather than its value — required by an interface, or by a mock
+    // whose call signature the test asserts on.
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+    ],
     '@typescript-eslint/no-floating-promises': 'error',
     '@typescript-eslint/no-misused-promises': 'error',
 
@@ -51,12 +58,23 @@ module.exports = {
       // here is a deliberate, reviewed exception. Adding one is a security
       // decision, not a convenience.
       files: [
+        // Owns both connections.
         'src/database/**/*.ts',
+        // Resolves host/slug -> company. Cannot be tenant-scoped: it is the
+        // query that determines the scope.
         'src/tenancy/directory/**/*.ts',
+        // Cross-company by definition, permission-gated and audited.
         'src/platform/**/*.ts',
-        'src/audit/audit.repository.ts',
+        // Authentication runs before a company is known, and RLS denies the
+        // tenant connection any access to credential tables.
+        'src/auth/identity.repository.ts',
+        // Writes platform-level rows (company_id NULL), which RLS hides from
+        // the tenant connection, and takes an advisory lock for the hash chain.
+        'src/audit/audit.service.ts',
+        // Claims pending work across tenants, then re-enters each one.
         'src/jobs/**/*.ts',
         'prisma/**/*.ts',
+        'scripts/**/*.ts',
         'test/**/*.ts',
       ],
       rules: { 'no-restricted-syntax': 'off' },

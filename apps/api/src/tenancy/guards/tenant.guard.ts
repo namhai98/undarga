@@ -96,14 +96,16 @@ export class TenantGuard implements CanActivate {
     const input = this.toResolutionInput(request);
     const candidate = await this.resolvers.resolve(input);
 
-    if (!candidate) {
-      throw new TenantUnresolvedError();
+    // Checked before the generic "unresolved" case so an operator gets an
+    // actionable message. They have no active company of their own, so *no*
+    // candidate and an *implicit* candidate mean the same thing here: they did
+    // not name a target, and one must never be invented for them.
+    if (isPlatformUser(actor) && (!candidate || !candidate.explicit)) {
+      throw new PlatformAccessNotTargetedError();
     }
 
-    if (isPlatformUser(actor) && !candidate.explicit) {
-      // An operator has no active company of their own, so an implicit
-      // candidate here would mean we invented one. Make them name it.
-      throw new PlatformAccessNotTargetedError();
+    if (!candidate) {
+      throw new TenantUnresolvedError();
     }
 
     // The authorization step. Throws 404 when the actor is not a member.

@@ -182,7 +182,9 @@ export class TenantReadOnlyError extends DomainError {
   constructor() {
     // 402 rather than 403: this is a billing state, not a permission problem,
     // and the client should surface an upgrade path rather than "access denied".
-    super('This company is in a read-only grace period. Settle the outstanding invoice to resume changes.');
+    super(
+      'This company is in a read-only grace period. Settle the outstanding invoice to resume changes.',
+    );
   }
 }
 

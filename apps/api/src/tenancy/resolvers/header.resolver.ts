@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config';
-import type { TenantCandidate, TenantResolutionInput, TenantResolver } from './tenant-resolver.types';
+import type {
+  TenantCandidate,
+  TenantResolutionInput,
+  TenantResolver,
+} from './tenant-resolver.types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;

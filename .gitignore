@@ -10,3 +10,6 @@ coverage/
 .turbo/
 .pnpm-store/
 generated/
+
+# TypeScript incremental build metadata
+*.tsbuildinfo

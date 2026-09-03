@@ -109,13 +109,28 @@ export class TokenService {
    *         elsewhere, only that it is not valid here.
    */
   verify(token: string, expectedRealm: TokenRealm): AccessClaims {
+    return this.verifyAny(token, [expectedRealm]);
+  }
+
+  /**
+   * Verify a token against several acceptable audiences.
+   *
+   * Needed because a company-scoped route carrying `@AllowPlatformAccess()`
+   * legitimately serves two realms: its own staff, and a platform operator who
+   * has explicitly targeted the company.
+   *
+   * The set is derived from the ROUTE's decorators, never from the token — the
+   * caller cannot widen it by claiming a different audience. Everything the
+   * operator can then do is still gated by TenantGuard and MembershipService.
+   */
+  verifyAny(token: string, allowedRealms: readonly TokenRealm[]): AccessClaims {
     let claims: AccessClaims;
 
     try {
       claims = this.jwt.verify<AccessClaims>(token, {
         secret: this.config.jwtAccessSecret,
         issuer: ISSUER,
-        // Verified explicitly below so the failure is a typed domain error
+        // Checked explicitly below so the failure is a typed domain error
         // rather than a generic jsonwebtoken message.
         audience: undefined,
       });
@@ -123,8 +138,8 @@ export class TokenService {
       throw new UnauthenticatedError();
     }
 
-    if (claims.aud !== expectedRealm) {
-      throw new TokenAudienceMismatchError(expectedRealm, String(claims.aud));
+    if (!allowedRealms.includes(claims.aud)) {
+      throw new TokenAudienceMismatchError(allowedRealms.join('|'), String(claims.aud));
     }
 
     return claims;

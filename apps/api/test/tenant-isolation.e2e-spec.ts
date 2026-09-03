@@ -28,6 +28,14 @@ import { bearer, createTestHarness, type TestHarness } from './support/test-app'
  * exists, which turns any id into an existence oracle — and UUIDv7 ids also
  * encode a creation timestamp.
  */
+/** Distinct companyIds present in a list response. Should always be exactly one. */
+const companyIdsIn = (res: { body: { items: Array<{ companyId: string }> } }): string[] => [
+  ...new Set(res.body.items.map((i) => i.companyId)),
+];
+
+const idsIn = (res: { body: { items: Array<{ id: string }> } }): string[] =>
+  res.body.items.map((i) => i.id);
+
 describe('tenant isolation', () => {
   let harness: TestHarness;
   let http: Server;
@@ -72,8 +80,12 @@ describe('tenant isolation', () => {
         .expect(200);
 
       expect(res.body.companyId).toBe(world.companyA.id);
-      expect(res.body.items).toHaveLength(1);
-      expect(res.body.items[0].id).toBe(world.companyA.appointmentId);
+      // Assert the property rather than a row count: every row belongs to
+      // company A, and company B's row is absent. A hardcoded count breaks
+      // whenever the fixture grows and tests nothing extra.
+      expect(companyIdsIn(res)).toEqual([world.companyA.id]);
+      expect(idsIn(res)).toContain(world.companyA.appointmentId);
+      expect(idsIn(res)).not.toContain(world.companyB.appointmentId);
     });
   });
 
@@ -119,7 +131,8 @@ describe('tenant isolation', () => {
         .set(bearer(tokenB))
         .expect(200);
       expect(res.body.companyId).toBe(world.companyB.id);
-      expect(res.body.items).toHaveLength(1);
+      expect(companyIdsIn(res)).toEqual([world.companyB.id]);
+      expect(idsIn(res)).not.toContain(world.companyA.appointmentId);
     });
   });
 
@@ -157,8 +170,11 @@ describe('tenant isolation', () => {
     });
 
     it('can still delete its own', async () => {
+      // Uses the payment-free appointment. The other one is referenced by a
+      // payment and the foreign key correctly refuses to hard-delete it —
+      // financial history is not removable. See the note in seed.ts.
       await request(http)
-        .delete(`/api/v1/probe/appointments/${world.companyA.appointmentId}`)
+        .delete(`/api/v1/probe/appointments/${world.companyA.deletableAppointmentId}`)
         .set(bearer(tokenA))
         .expect(200);
     });
@@ -201,15 +217,17 @@ describe('tenant isolation', () => {
   // -------------------------------------------------------------------------
   describe('Test 7: a company A user cannot see company B in a report', () => {
     it('aggregates only over its own company', async () => {
-      // Both companies have exactly one appointment and one payment, so an
-      // unscoped aggregate would return 2 and this assertion would catch it.
+      // Each company has exactly two appointments and one payment. An unscoped
+      // aggregate would report four and two, which this catches. Reports are
+      // the endpoint class where a missing tenant filter is least likely to be
+      // noticed in review and most damaging when it happens.
       const res = await request(http)
         .get('/api/v1/probe/reports/revenue')
         .set(bearer(tokenA))
         .expect(200);
 
       expect(res.body.companyId).toBe(world.companyA.id);
-      expect(res.body.appointments).toBe(1);
+      expect(res.body.appointments).toBe(2);
       expect(res.body.payments).toBe(1);
     });
   });
@@ -261,9 +279,9 @@ describe('tenant isolation', () => {
       const res = await request(http).get('/api/v1/auth/me').set(bearer(token)).expect(200);
 
       expect(res.body.memberships).toHaveLength(2);
-      expect(res.body.memberships.map((m: { companySlug: string }) => m.companySlug).sort()).toEqual(
-        ['company-a', 'company-b'],
-      );
+      expect(
+        res.body.memberships.map((m: { companySlug: string }) => m.companySlug).sort(),
+      ).toEqual(['company-a', 'company-b']);
     });
 
     it('sees only company A data while active in A, and only B while active in B', async () => {
@@ -273,8 +291,9 @@ describe('tenant isolation', () => {
         .set(bearer(inA))
         .expect(200);
       expect(resA.body.companyId).toBe(world.companyA.id);
-      expect(resA.body.items).toHaveLength(1);
-      expect(resA.body.items[0].id).toBe(world.companyA.appointmentId);
+      expect(companyIdsIn(resA)).toEqual([world.companyA.id]);
+      expect(idsIn(resA)).toContain(world.companyA.appointmentId);
+      expect(idsIn(resA)).not.toContain(world.companyB.appointmentId);
 
       const inB = await harness.staffTokenForCompany(world.userAB.email, world.companyB.id);
       const resB = await request(http)
@@ -282,7 +301,9 @@ describe('tenant isolation', () => {
         .set(bearer(inB))
         .expect(200);
       expect(resB.body.companyId).toBe(world.companyB.id);
-      expect(resB.body.items[0].id).toBe(world.companyB.appointmentId);
+      expect(companyIdsIn(resB)).toEqual([world.companyB.id]);
+      expect(idsIn(resB)).toContain(world.companyB.appointmentId);
+      expect(idsIn(resB)).not.toContain(world.companyA.appointmentId);
     });
 
     it('cannot switch to a company it does not belong to', async () => {
@@ -345,7 +366,8 @@ describe('tenant isolation', () => {
         .set('X-Company-Id', world.companyA.id)
         .expect(200);
 
-      expect(res.body.items).toHaveLength(1);
+      expect(companyIdsIn(res)).toEqual([world.companyA.id]);
+      expect(idsIn(res)).not.toContain(world.companyB.appointmentId);
     });
 
     it('is refused when it does not name a company — access is never implicit', async () => {
@@ -359,12 +381,16 @@ describe('tenant isolation', () => {
     });
 
     it('is refused on a route that has not opted in to platform access', async () => {
+      // 401, not 403/404: a route without @AllowPlatformAccess() accepts only
+      // the staff audience, so the platform token is rejected at authentication
+      // — before authorization is even consulted. Failing at the earliest gate
+      // is the behaviour we want; it discloses nothing about the company.
       const token = await harness.platformToken(world.operator.email);
       await request(http)
         .get(`/api/v1/probe/customers/${world.companyA.customerId}`)
         .set(bearer(token))
         .set('X-Company-Id', world.companyA.id)
-        .expect(400);
+        .expect(401);
     });
 
     it('an operator without the data permission gets nothing', async () => {
@@ -379,15 +405,16 @@ describe('tenant isolation', () => {
     it('a company user cannot reach the platform realm, however privileged', async () => {
       // Company roles and platform roles are separate catalogs; no amount of
       // escalation inside a tenant produces a platform permission.
-      await request(http)
-        .post('/api/v1/platform/auth/logout')
-        .set(bearer(tokenA))
-        .expect(401);
+      await request(http).post('/api/v1/platform/auth/logout').set(bearer(tokenA)).expect(401);
     });
 
     it('a platform token is rejected by staff routes on audience alone', async () => {
       const token = await harness.platformToken(world.operator.email);
-      await request(http).post('/api/v1/auth/switch-company').set(bearer(token)).send({}).expect(401);
+      await request(http)
+        .post('/api/v1/auth/switch-company')
+        .set(bearer(token))
+        .send({})
+        .expect(401);
     });
   });
 
@@ -402,11 +429,14 @@ describe('tenant isolation', () => {
       const job: TenantJob = { name: 'probe-job', data: { companyId: world.companyA.id } };
 
       const visible = await runner.run(job, async (_payload, ctx) =>
-        ctx.withTransaction((tx) => tx.appointment.findMany({ where: { companyId: ctx.companyId } })),
+        ctx.withTransaction((tx) =>
+          tx.appointment.findMany({ where: { companyId: ctx.companyId } }),
+        ),
       );
 
-      expect(visible).toHaveLength(1);
-      expect(visible[0]?.id).toBe(world.companyA.appointmentId);
+      expect([...new Set(visible.map((a) => a.companyId))]).toEqual([world.companyA.id]);
+      expect(visible.map((a) => a.id)).toContain(world.companyA.appointmentId);
+      expect(visible.map((a) => a.id)).not.toContain(world.companyB.appointmentId);
       expect(context.tenantOrNull()).toBeNull();
     });
 
@@ -548,4 +578,3 @@ describe('tenant isolation', () => {
     });
   });
 });
-

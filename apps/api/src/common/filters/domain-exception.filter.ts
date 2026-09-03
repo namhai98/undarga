@@ -1,10 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { DomainError } from '../errors';
 
@@ -59,9 +53,7 @@ export class DomainExceptionFilter implements ExceptionFilter {
           error: {
             code: exception.code,
             message: exposed,
-            ...(exception.exposeMessage && exception.details
-              ? { details: exception.details }
-              : {}),
+            ...(exception.exposeMessage && exception.details ? { details: exception.details } : {}),
             requestId,
           },
         },

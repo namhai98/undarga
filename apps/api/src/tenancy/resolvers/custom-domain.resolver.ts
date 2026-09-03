@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AppConfig } from '../../config';
 import { TenantDirectoryService } from '../directory/tenant-directory.service';
-import type { TenantCandidate, TenantResolutionInput, TenantResolver } from './tenant-resolver.types';
+import type {
+  TenantCandidate,
+  TenantResolutionInput,
+  TenantResolver,
+} from './tenant-resolver.types';
 
 /**
  * `book.acme.mn` -> the company that verified that hostname.

@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config';
 import { normaliseHost } from './custom-domain.resolver';
-import type { TenantCandidate, TenantResolutionInput, TenantResolver } from './tenant-resolver.types';
+import type {
+  TenantCandidate,
+  TenantResolutionInput,
+  TenantResolver,
+} from './tenant-resolver.types';
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
@@ -16,9 +20,29 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
  * request to api.booking.app.
  */
 const RESERVED_LABELS = new Set([
-  'www', 'api', 'app', 'admin', 'platform', 'static', 'assets', 'cdn',
-  'mail', 'smtp', 'imap', 'ftp', 'ns1', 'ns2', 'status', 'docs', 'help',
-  'support', 'blog', 'dev', 'staging', 'test', 'localhost',
+  'www',
+  'api',
+  'app',
+  'admin',
+  'platform',
+  'static',
+  'assets',
+  'cdn',
+  'mail',
+  'smtp',
+  'imap',
+  'ftp',
+  'ns1',
+  'ns2',
+  'status',
+  'docs',
+  'help',
+  'support',
+  'blog',
+  'dev',
+  'staging',
+  'test',
+  'localhost',
 ]);
 
 @Injectable()

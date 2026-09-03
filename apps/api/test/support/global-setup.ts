@@ -36,9 +36,11 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
-  const rlsRows = await prisma
-    .$queryRaw<Array<{ count: bigint }>>`SELECT count(*)::bigint AS count FROM tables_missing_rls`
-    .catch(() => [{ count: -1n }] as Array<{ count: bigint }>);
+  const rlsRows = await prisma.$queryRaw<
+    Array<{ count: bigint }>
+  >`SELECT count(*)::bigint AS count FROM tables_missing_rls`.catch(
+    () => [{ count: -1n }] as Array<{ count: bigint }>,
+  );
 
   const missingRls = rlsRows[0]?.count ?? -1n;
 

@@ -32,10 +32,7 @@ import { AppConfig } from '../config';
  * enforces the allowlist, and adding a file to it is a security decision.
  */
 @Injectable()
-export class PlatformPrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PlatformPrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PlatformPrismaService.name);
 
   constructor(private readonly config: AppConfig) {

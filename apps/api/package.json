@@ -19,11 +19,12 @@
     "test:isolation": "jest --config jest.e2e.config.js --runInBand -t 'tenant isolation'",
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
-    "db:deploy": "prisma migrate deploy && pnpm db:harden",
-    "db:harden": "node scripts/apply-hardening.js",
-    "db:reset": "prisma migrate reset --force && pnpm db:harden && pnpm db:seed",
-    "db:seed": "ts-node prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy && pnpm db:harden",
+    "db:harden": "dotenv -e ../../.env -- node scripts/apply-hardening.js",
+    "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force && pnpm db:harden && pnpm db:seed",
+    "db:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts",
+    "db:seed:demo": "dotenv -e ../../.env -- ts-node scripts/seed-demo.ts",
+    "db:studio": "dotenv -e ../../.env -- prisma studio"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

@@ -99,11 +99,7 @@ describe('TenantJobRunner', () => {
   describe('context establishment', () => {
     it('makes the company available to the handler through the ambient context', async () => {
       const { service } = dbStub();
-      const runner = new TenantJobRunner(
-        context,
-        directoryStub({ [COMPANY_A]: {} }),
-        service,
-      );
+      const runner = new TenantJobRunner(context, directoryStub({ [COMPANY_A]: {} }), service);
       const job: TenantJob<ReminderPayload> = {
         name: 'send-reminder',
         data: { companyId: COMPANY_A, appointmentId: 'appt-1' },

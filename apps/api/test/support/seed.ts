@@ -3,7 +3,6 @@ import * as argon2 from 'argon2';
 import {
   ALL_COMPANY_PERMISSIONS,
   ALL_PLATFORM_PERMISSIONS,
-  COMPANY_PERMISSIONS,
   PLATFORM_PERMISSIONS,
 } from '../../src/authz/permissions';
 
@@ -15,6 +14,15 @@ export interface SeededCompany {
   branchId: string;
   customerId: string;
   appointmentId: string;
+  /** A second appointment with no payment attached.
+   *
+   * The main one is referenced by a payment, and the foreign key correctly
+   * refuses to hard-delete it. That is the right database behaviour — a
+   * settled appointment is financial history — so the delete control needs a
+   * row that is genuinely deletable. Surfacing the FK refusal as a 409 rather
+   * than a 500 belongs to the booking module.
+   */
+  deletableAppointmentId: string;
   paymentId: string;
 }
 
@@ -197,12 +205,30 @@ async function seedCompany(
     },
   });
 
+  const deletable = await prisma.appointment.create({
+    data: {
+      companyId: company.id,
+      branchId: branch.id,
+      customerId: customer.id,
+      appointmentNumber: `${slug.toUpperCase()}-0002`,
+      status: 'PENDING',
+      paymentStatus: 'UNPAID',
+      source: 'STAFF',
+      startsAt: new Date('2026-10-02T02:00:00Z'),
+      endsAt: new Date('2026-10-02T03:00:00Z'),
+      bookedTimezoneName: 'Asia/Ulaanbaatar',
+      currencyCode: 'MNT',
+      totalMinor: 0n,
+    },
+  });
+
   return {
     id: company.id,
     slug,
     branchId: branch.id,
     customerId: customer.id,
     appointmentId: appointment.id,
+    deletableAppointmentId: deletable.id,
     paymentId: payment.id,
   };
 }

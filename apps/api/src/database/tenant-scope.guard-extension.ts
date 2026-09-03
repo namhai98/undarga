@@ -199,13 +199,19 @@ function whereIsScoped(where: unknown, compoundKeys: readonly string[]): boolean
  * except", which is the opposite of scoping.
  */
 function isCompanyIdConstrained(value: unknown): boolean {
-  if (hasConcreteValue(value)) return typeof value !== 'object';
+  if (!hasConcreteValue(value)) return false;
 
+  // The common case: `{ companyId: '018f…' }`.
+  if (typeof value !== 'object') return true;
+
+  // Filter object: `{ equals }` and a non-empty `{ in }` both scope. Everything
+  // else — `not`, `notIn`, an empty `in` — does not, and falls through.
   if (isRecord(value)) {
     if (hasConcreteValue(value['equals'])) return true;
     const inList = value['in'];
     if (Array.isArray(inList) && inList.length > 0) return true;
   }
+
   return false;
 }
 

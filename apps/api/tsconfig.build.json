@@ -1,5 +1,23 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "./dist" },
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.e2e-spec.ts"]
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "./dist",
+    // MUST stay false. The base config enables `incremental` for fast
+    // typechecking, but nest-cli sets `deleteOutDir: true`, so a build wipes
+    // dist/ and then tsc consults a .tsbuildinfo that says everything is
+    // already emitted — producing a silent, exit-code-0 build with no output.
+    "incremental": false,
+    "tsBuildInfoFile": null
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "prisma",
+    "scripts",
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts"
+  ]
 }

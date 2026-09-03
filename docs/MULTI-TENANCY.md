@@ -3,9 +3,9 @@
 Companion to [ARCHITECTURE.md](./ARCHITECTURE.md) and [DATABASE.md](./DATABASE.md).
 This describes what was **built**, not what was planned.
 
-> **Not yet verified by execution.** No Node, npm, Docker or PostgreSQL is installed on the
-> machine this was written on, so nothing here has been compiled, generated, or run. See
-> §7 for exactly what that leaves unproven and the commands to close the gap.
+> **Verified by execution.** Typecheck clean, lint clean, 123 unit tests and 37 isolation
+> tests passing against PostgreSQL 18 with RLS applied, and the API boots and serves
+> traffic. §7 has the commands; §8 lists the eight defects that running it exposed.
 
 ---
 
@@ -202,41 +202,81 @@ a follow-up, not built.
 
 ---
 
-## 7. What is verified, and what is not
+## 7. Running it
 
-### Runnable with no database
+### First time
 
 ```bash
-pnpm install          # also runs `prisma generate` — no DB needed
-pnpm --filter @undarga/api test
+pnpm install                       # also runs `prisma generate`
+cp .env.example .env               # then point the three DB URLs at your instance
 ```
 
-`src/**/*.spec.ts` — 8 suites covering the request context, the resolver chain, membership
-authorization, both guards, the scoped-query assertion, the repository base class, and the
-job runner.
-
-### Requires PostgreSQL
+Create the databases and the two application roles:
 
 ```bash
-docker compose up -d postgres-test
+createdb undarga && createdb undarga_test
 cd apps/api
-pnpm prisma migrate dev --name init     # generates the structural migration
-pnpm db:harden                          # applies prisma/sql/001_hardening.sql
-pnpm db:seed
-pnpm test:e2e
+pnpm prisma migrate deploy         # or `migrate dev --name init` on a fresh schema
+pnpm db:harden                     # RLS, exclusion constraints, CHECKs, partitions
+pnpm db:seed                       # timezones, currencies, permissions, platform roles
+pnpm db:seed:demo                  # two adjacent demo companies + users (dev only)
 ```
 
-`test/tenant-isolation.e2e-spec.ts` — the twelve scenarios from the brief, plus the nested
-resource attack and the ambiguity case.
+`db:harden` is idempotent and safe to re-run after any schema change. It refuses to finish
+if a company-owned table ends up without a row-security policy.
+
+### Day to day
+
+```bash
+pnpm --filter @undarga/api test        # 123 unit tests, no database needed
+pnpm --filter @undarga/api test:e2e    # 37 isolation tests, needs the hardened test DB
+pnpm --filter @undarga/api lint
+pnpm --filter @undarga/api typecheck
+pnpm --filter @undarga/api start:dev
+```
+
+The e2e run needs its own env, since it truncates every table:
+
+```bash
+DATABASE_URL=postgresql://app_tenant:app_tenant_dev@localhost:5432/undarga_test \
+PLATFORM_DATABASE_URL=postgresql://app_platform:app_platform_dev@localhost:5432/undarga_test \
+MIGRATION_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/undarga_test \
+pnpm --filter @undarga/api test:e2e
+```
 
 `test/support/global-setup.ts` **refuses to run** if the hardening SQL has not been applied
-or if `app_tenant` has `BYPASSRLS`. Without that check most of these assertions would pass
-on the repository layer alone, and the green run would be a lie about the property that
-actually matters.
+or if `app_tenant` holds `BYPASSRLS`. Without that check most assertions would pass on the
+repository layer alone, and the green run would be a lie about the property that matters.
 
-### Not verified at all
+The API makes the same check at boot and will not start against a privileged connection:
 
-Nothing in this directory has been compiled or executed. In particular: the Prisma schema
-has never been through `prisma validate`, the initial migration has never been generated,
-and no test has ever run. Treat the first `pnpm install && pnpm test` as part of the
-review, not as a formality.
+```
+[TenantPrismaService] Tenant role "app_tenant" confirmed subject to row-level security
+[TenantPrismaService] Tenant connection established — 64/79 models are company-scoped and guarded
+```
+
+`GET /api/v1/health/tenancy` reports which resolvers are live, the pooling mode, and how
+many models are guarded — answerable during an incident without shell access.
+
+---
+
+## 8. What running it exposed
+
+Eight defects that no amount of re-reading would have found. Recorded because the pattern
+is the point: the design held up, the wiring did not.
+
+| # | Defect | Why it mattered |
+|---|---|---|
+| 1 | Three 1:1 relations lacked the `@@unique` their composite FK needs | Schema would not validate at all |
+| 2 | `reserved_range` as a generated column | Postgres rejects it — `timestamptz + interval` is STABLE, not IMMUTABLE. Now trigger-maintained |
+| 3 | RLS loop applied a `company_id` policy to `company`, whose key is `id` | Hardening aborted |
+| 4 | `audit_log` partitions had no RLS | **Real bypass.** A partition read directly is governed by its own policies, so `SELECT * FROM audit_log_2026_09` would have returned every tenant's rows |
+| 5 | Partitioning ran *after* grants and policies | `CREATE TABLE (LIKE … INCLUDING ALL)` copies neither, so both were silently discarded. Also would have dropped live partitions on every re-run |
+| 6 | `BigInt` has no JSON representation | **Every endpoint returning money would 500.** Now serialised as a string, because `Number(bigint)` silently rounds above 2^53 |
+| 7 | `@UsePipes` at handler level pipes *every* parameter | The body schema was being validated against the `@CurrentUser()` actor, so company switching always 400'd |
+| 8 | `@AllowPlatformAccess()` routes still demanded the `staff` audience | Platform operators were rejected at authentication before the opt-in was ever consulted |
+
+Two more were caught by the tests rather than by running: an early-return in the
+scoped-query assertion rejected `{ companyId: { equals: … } }` (fails closed, but blocks
+valid code), and `incremental: true` combined with nest's `deleteOutDir` produced a
+silent, exit-code-0 build that emitted nothing.

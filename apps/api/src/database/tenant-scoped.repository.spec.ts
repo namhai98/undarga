@@ -136,7 +136,12 @@ describe('TenantScopedRepository', () => {
   const asCompanyA = <T>(fn: () => Promise<T>): Promise<T> =>
     new Promise((resolve, reject) => {
       context.run(
-        { requestId: 'r', actor: { kind: 'SYSTEM', name: 't' }, tenant: null, startedAt: new Date() },
+        {
+          requestId: 'r',
+          actor: { kind: 'SYSTEM', name: 't' },
+          tenant: null,
+          startedAt: new Date(),
+        },
         () => {
           context.attachTenant(tenantFor(COMPANY_A));
           fn().then(resolve, reject);
@@ -206,9 +211,9 @@ describe('TenantScopedRepository', () => {
     });
 
     it('raises 404 from requireUpdateById for another company row', async () => {
-      await expect(asCompanyA(() => repo.requireUpdateById('row-b1', { label: 'x' }))).rejects.toThrow(
-        ResourceNotFoundError,
-      );
+      await expect(
+        asCompanyA(() => repo.requireUpdateById('row-b1', { label: 'x' })),
+      ).rejects.toThrow(ResourceNotFoundError);
     });
   });
 

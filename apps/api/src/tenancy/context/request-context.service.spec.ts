@@ -133,13 +133,20 @@ describe('RequestContextService', () => {
     it('keeps concurrent flows separate', async () => {
       const observed: string[] = [];
 
+      // `run` returns whatever the callback returns — here a promise. It is
+      // settled through the enclosing `resolve`, so the return value is
+      // deliberately discarded rather than awaited.
       const flow = (companyId: string, delay: number) =>
-        new Promise<void>((resolve) => {
-          service.run(contextFor(), async () => {
-            service.attachTenant(tenantFor(companyId));
-            await new Promise((r) => setTimeout(r, delay));
-            observed.push(`${companyId}:${service.requireCompanyId()}`);
-            resolve();
+        new Promise<void>((resolve, reject) => {
+          void service.run(contextFor(), async () => {
+            try {
+              service.attachTenant(tenantFor(companyId));
+              await new Promise((r) => setTimeout(r, delay));
+              observed.push(`${companyId}:${service.requireCompanyId()}`);
+              resolve();
+            } catch (error) {
+              reject(error);
+            }
           });
         });
 

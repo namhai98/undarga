@@ -1,3 +1,8 @@
+// Side-effect import: BigInt has no JSON representation, and every money
+// column in this schema is a BigInt. Must run before anything serialises a
+// response. See the file for why money crosses the wire as a string.
+import './common/json/bigint-serialization';
+
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AuditModule } from './audit/audit.module';

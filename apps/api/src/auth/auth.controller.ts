@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { UnauthenticatedError } from '../common/errors';
 import { ZodValidationPipe } from '../common/pipes';
@@ -32,8 +32,7 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(200)
-  @UsePipes(new ZodValidationPipe(loginSchema))
-  async login(@Body() dto: LoginDto, @Req() req: Request) {
+  async login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto, @Req() req: Request) {
     return this.auth.loginStaff(dto.email, dto.password, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
@@ -43,8 +42,7 @@ export class AuthController {
   @Post('refresh')
   @Public()
   @HttpCode(200)
-  @UsePipes(new ZodValidationPipe(refreshSchema))
-  async refresh(@Body() dto: RefreshDto, @Req() req: Request) {
+  async refresh(@Body(new ZodValidationPipe(refreshSchema)) dto: RefreshDto, @Req() req: Request) {
     return this.auth.refreshStaff(dto.refreshToken, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
@@ -101,8 +99,10 @@ export class AuthController {
    */
   @Post('switch-company')
   @HttpCode(200)
-  @UsePipes(new ZodValidationPipe(switchCompanySchema))
-  async switchCompany(@Body() dto: SwitchCompanyDto, @CurrentUser() actor: Actor | null) {
+  async switchCompany(
+    @Body(new ZodValidationPipe(switchCompanySchema)) dto: SwitchCompanyDto,
+    @CurrentUser() actor: Actor | null,
+  ) {
     if (!actor || !isCompanyUser(actor)) throw new UnauthenticatedError();
     return this.auth.switchCompany(actor.userAccountId, actor.sessionId, dto.companyId);
   }
@@ -123,8 +123,7 @@ export class PlatformAuthController {
   @Post('login')
   @Public()
   @HttpCode(200)
-  @UsePipes(new ZodValidationPipe(loginSchema))
-  async login(@Body() dto: LoginDto, @Req() req: Request) {
+  async login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto, @Req() req: Request) {
     return this.auth.loginPlatform(dto.email, dto.password, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],

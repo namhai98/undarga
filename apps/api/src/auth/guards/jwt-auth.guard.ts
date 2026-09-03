@@ -1,6 +1,10 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { META_IS_PUBLIC, META_TOKEN_REALM } from '../../common/decorators/metadata';
+import {
+  META_ALLOW_PLATFORM_ACCESS,
+  META_IS_PUBLIC,
+  META_TOKEN_REALM,
+} from '../../common/decorators/metadata';
 import { SessionRevokedError, UnauthenticatedError } from '../../common/errors';
 import { RequestContextService } from '../../tenancy/context/request-context.service';
 import {
@@ -51,7 +55,20 @@ export class JwtAuthGuard implements CanActivate {
     const targets = [ctx.getHandler(), ctx.getClass()];
 
     const isPublic = this.reflector.getAllAndOverride<boolean>(META_IS_PUBLIC, targets) ?? false;
-    const realm = this.reflector.getAllAndOverride<TokenRealm>(META_TOKEN_REALM, targets) ?? 'staff';
+    const declaredRealm =
+      this.reflector.getAllAndOverride<TokenRealm>(META_TOKEN_REALM, targets) ?? 'staff';
+    const allowsPlatform =
+      this.reflector.getAllAndOverride<boolean>(META_ALLOW_PLATFORM_ACCESS, targets) ?? false;
+
+    // A route marked @AllowPlatformAccess() serves two realms: its own staff,
+    // and an operator who has explicitly targeted the company. The set comes
+    // from the ROUTE, so a caller cannot widen it by presenting a different
+    // audience — and everything an operator may then do is still gated by
+    // TenantGuard and MembershipService.
+    const allowedRealms: TokenRealm[] =
+      allowsPlatform && declaredRealm !== 'platform'
+        ? [declaredRealm, 'platform']
+        : [declaredRealm];
 
     const token = extractBearer(request.headers.authorization);
 
@@ -66,7 +83,7 @@ export class JwtAuthGuard implements CanActivate {
     // A token on a public route is still verified. Ignoring it would mean an
     // expired or revoked token silently downgrades to anonymous, which makes
     // "why am I seeing logged-out content" undebuggable.
-    const claims = this.tokens.verify(token, realm);
+    const claims = this.tokens.verifyAny(token, allowedRealms);
 
     if (this.denyList.isRevoked(claims.sid)) {
       throw new SessionRevokedError();
@@ -131,7 +148,6 @@ export class JwtAuthGuard implements CanActivate {
         };
     }
   }
-
 }
 
 function extractBearer(header?: string): string | null {
@@ -142,4 +158,3 @@ function extractBearer(header?: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-

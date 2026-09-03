@@ -274,7 +274,10 @@ describe('MembershipService', () => {
   });
 
   describe('platform operators', () => {
-    const operator = (permissions: string[], impersonation?: Actor['kind'] extends never ? never : unknown): Actor =>
+    const operator = (
+      permissions: string[],
+      impersonation?: Actor['kind'] extends never ? never : unknown,
+    ): Actor =>
       ({
         kind: 'PLATFORM_USER',
         platformUserId: 'op-1',

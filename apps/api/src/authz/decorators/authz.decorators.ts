@@ -16,9 +16,8 @@ export type PermissionMode = 'all' | 'any';
  * same data — "read any appointment" OR "read my own" both reach the calendar,
  * with the record-level narrowing applied afterwards by the policy layer.
  */
-export const RequirePermission = (
-  ...permissions: CompanyPermission[]
-) => SetMetadata(META_REQUIRED_PERMISSIONS, permissions);
+export const RequirePermission = (...permissions: CompanyPermission[]) =>
+  SetMetadata(META_REQUIRED_PERMISSIONS, permissions);
 
 export const RequireAllPermissions = (...permissions: CompanyPermission[]) => {
   const decorate = SetMetadata(META_REQUIRED_PERMISSIONS, permissions);

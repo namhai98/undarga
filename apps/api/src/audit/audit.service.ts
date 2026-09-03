@@ -165,13 +165,8 @@ export class AuditService {
    * The lock is transaction-scoped, so it is released on COMMIT or ROLLBACK
    * with no possibility of leaking.
    */
-  private async lockAndReadPreviousHash(
-    tx: TenantTx,
-    companyId: string,
-  ): Promise<Buffer | null> {
-    await tx.$queryRaw<unknown>(
-      Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`,
-    );
+  private async lockAndReadPreviousHash(tx: TenantTx, companyId: string): Promise<Buffer | null> {
+    await tx.$queryRaw<unknown>(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`);
 
     const rows = await tx.$queryRaw<Array<{ row_hash: Buffer }>>(
       Prisma.sql`
@@ -257,7 +252,8 @@ function hashRow(row: AuditRow, prevHash: Buffer | null): Buffer {
  * per-resource-type field allow-list, so a new sensitive column is opt-in to
  * the audit trail rather than opt-out. Noted in the report.
  */
-const SENSITIVE_KEY = /pass|secret|token|hash|pepper|salt|credential|authorization|cookie|pin|cvv|card/i;
+const SENSITIVE_KEY =
+  /pass|secret|token|hash|pepper|salt|credential|authorization|cookie|pin|cvv|card/i;
 
 function redact(value: unknown): unknown {
   if (value === undefined || value === null) return undefined;

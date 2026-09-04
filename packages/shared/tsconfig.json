@@ -1,0 +1,11 @@
+{
+  "extends": "@undarga/tsconfig/library.json",
+  "compilerOptions": {
+    // Typechecking must never emit. Without this a bare `tsc` drops .js and
+    // .d.ts next to the sources, which then get linted, committed, and shadow
+    // the real build output.
+    "noEmit": true
+  },
+  "include": ["src/**/*", "eslint.config.js"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -5,22 +5,42 @@
   "description": "Multi-tenant SaaS booking platform",
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "api:dev": "pnpm --filter @undarga/api start:dev",
-    "api:build": "pnpm --filter @undarga/api build",
-    "api:test": "pnpm --filter @undarga/api test",
-    "api:test:e2e": "pnpm --filter @undarga/api test:e2e",
-    "db:up": "docker compose up -d postgres redis",
-    "db:down": "docker compose down",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint -- --fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "clean": "turbo run clean && rimraf node_modules/.cache .turbo",
+
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+
+    "dev:api": "pnpm --filter @undarga/api start:dev",
+    "dev:web": "pnpm --filter @undarga/web dev",
+
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+
     "db:migrate": "pnpm --filter @undarga/api db:migrate",
+    "db:deploy": "pnpm --filter @undarga/api db:deploy",
     "db:harden": "pnpm --filter @undarga/api db:harden",
+    "db:seed": "pnpm --filter @undarga/api db:seed",
+    "db:seed:demo": "pnpm --filter @undarga/api db:seed:demo",
     "db:reset": "pnpm --filter @undarga/api db:reset",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "db:studio": "pnpm --filter @undarga/api db:studio"
   },
   "devDependencies": {
+    "prettier": "3.3.3",
+    "rimraf": "6.0.1",
+    "turbo": "2.10.12",
     "typescript": "5.6.3"
   }
 }

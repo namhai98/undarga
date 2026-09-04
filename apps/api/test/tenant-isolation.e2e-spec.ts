@@ -16,7 +16,7 @@ import { bearer, createTestHarness, type TestHarness } from './support/test-app'
  * applied, through the real guards.
  *
  * REQUIRES A DATABASE:
- *   docker compose up -d postgres-test
+ *   docker compose up -d postgres
  *   pnpm db:deploy      # migrate + apply 001_hardening.sql
  *   pnpm test:e2e
  *
@@ -28,13 +28,21 @@ import { bearer, createTestHarness, type TestHarness } from './support/test-app'
  * exists, which turns any id into an existence oracle — and UUIDv7 ids also
  * encode a creation timestamp.
  */
+/**
+ * Success responses are enveloped as `{ data, meta }`, so list payloads live at
+ * `body.data.items`. Error responses keep their own `{ error }` shape — the
+ * exception filter owns those and runs before any interceptor.
+ */
+interface ListResponse {
+  body: { data: { items: Array<{ id: string; companyId: string }> } };
+}
+
 /** Distinct companyIds present in a list response. Should always be exactly one. */
-const companyIdsIn = (res: { body: { items: Array<{ companyId: string }> } }): string[] => [
-  ...new Set(res.body.items.map((i) => i.companyId)),
+const companyIdsIn = (res: ListResponse): string[] => [
+  ...new Set(res.body.data.items.map((i) => i.companyId)),
 ];
 
-const idsIn = (res: { body: { items: Array<{ id: string }> } }): string[] =>
-  res.body.items.map((i) => i.id);
+const idsIn = (res: ListResponse): string[] => res.body.data.items.map((i) => i.id);
 
 describe('tenant isolation', () => {
   let harness: TestHarness;
@@ -69,8 +77,8 @@ describe('tenant isolation', () => {
         .set(bearer(tokenA))
         .expect(200);
 
-      expect(res.body.id).toBe(world.companyA.appointmentId);
-      expect(res.body.companyId).toBe(world.companyA.id);
+      expect(res.body.data.id).toBe(world.companyA.appointmentId);
+      expect(res.body.data.companyId).toBe(world.companyA.id);
     });
 
     it('lists only company A appointments', async () => {
@@ -79,7 +87,7 @@ describe('tenant isolation', () => {
         .set(bearer(tokenA))
         .expect(200);
 
-      expect(res.body.companyId).toBe(world.companyA.id);
+      expect(res.body.data.companyId).toBe(world.companyA.id);
       // Assert the property rather than a row count: every row belongs to
       // company A, and company B's row is absent. A hardcoded count breaks
       // whenever the fixture grows and tests nothing extra.
@@ -130,7 +138,7 @@ describe('tenant isolation', () => {
         .get('/api/v1/probe/appointments')
         .set(bearer(tokenB))
         .expect(200);
-      expect(res.body.companyId).toBe(world.companyB.id);
+      expect(res.body.data.companyId).toBe(world.companyB.id);
       expect(companyIdsIn(res)).toEqual([world.companyB.id]);
       expect(idsIn(res)).not.toContain(world.companyA.appointmentId);
     });
@@ -196,7 +204,7 @@ describe('tenant isolation', () => {
         .get(`/api/v1/probe/customers/${world.companyA.customerId}`)
         .set(bearer(tokenA))
         .expect(200);
-      expect(res.body.companyId).toBe(world.companyA.id);
+      expect(res.body.data.companyId).toBe(world.companyA.id);
     });
   });
 
@@ -226,9 +234,9 @@ describe('tenant isolation', () => {
         .set(bearer(tokenA))
         .expect(200);
 
-      expect(res.body.companyId).toBe(world.companyA.id);
-      expect(res.body.appointments).toBe(2);
-      expect(res.body.payments).toBe(1);
+      expect(res.body.data.companyId).toBe(world.companyA.id);
+      expect(res.body.data.appointments).toBe(2);
+      expect(res.body.data.payments).toBe(1);
     });
   });
 
@@ -248,7 +256,7 @@ describe('tenant isolation', () => {
         .get(`/api/v1/companies/${world.companyA.id}/probe/appointments`)
         .set(bearer(tokenA))
         .expect(200);
-      expect(res.body.companyId).toBe(world.companyA.id);
+      expect(res.body.data.companyId).toBe(world.companyA.id);
     });
 
     it('an X-Company-Id header for another company is also 404', async () => {
@@ -278,9 +286,9 @@ describe('tenant isolation', () => {
       const token = await harness.staffToken(world.userAB.email);
       const res = await request(http).get('/api/v1/auth/me').set(bearer(token)).expect(200);
 
-      expect(res.body.memberships).toHaveLength(2);
+      expect(res.body.data.memberships).toHaveLength(2);
       expect(
-        res.body.memberships.map((m: { companySlug: string }) => m.companySlug).sort(),
+        res.body.data.memberships.map((m: { companySlug: string }) => m.companySlug).sort(),
       ).toEqual(['company-a', 'company-b']);
     });
 
@@ -290,7 +298,7 @@ describe('tenant isolation', () => {
         .get('/api/v1/probe/appointments')
         .set(bearer(inA))
         .expect(200);
-      expect(resA.body.companyId).toBe(world.companyA.id);
+      expect(resA.body.data.companyId).toBe(world.companyA.id);
       expect(companyIdsIn(resA)).toEqual([world.companyA.id]);
       expect(idsIn(resA)).toContain(world.companyA.appointmentId);
       expect(idsIn(resA)).not.toContain(world.companyB.appointmentId);
@@ -300,7 +308,7 @@ describe('tenant isolation', () => {
         .get('/api/v1/probe/appointments')
         .set(bearer(inB))
         .expect(200);
-      expect(resB.body.companyId).toBe(world.companyB.id);
+      expect(resB.body.data.companyId).toBe(world.companyB.id);
       expect(companyIdsIn(resB)).toEqual([world.companyB.id]);
       expect(idsIn(resB)).toContain(world.companyB.appointmentId);
       expect(idsIn(resB)).not.toContain(world.companyA.appointmentId);
@@ -346,14 +354,14 @@ describe('tenant isolation', () => {
         .set(bearer(token))
         .set('X-Company-Id', world.companyA.id)
         .expect(200);
-      expect(resA.body.items[0].id).toBe(world.companyA.appointmentId);
+      expect(resA.body.data.items[0].id).toBe(world.companyA.appointmentId);
 
       const resB = await request(http)
         .get('/api/v1/probe/appointments')
         .set(bearer(token))
         .set('X-Company-Id', world.companyB.id)
         .expect(200);
-      expect(resB.body.items[0].id).toBe(world.companyB.appointmentId);
+      expect(resB.body.data.items[0].id).toBe(world.companyB.appointmentId);
     });
 
     it('sees ONE company at a time, never a union', async () => {

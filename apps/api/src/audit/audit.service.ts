@@ -123,7 +123,7 @@ export class AuditService {
 
   private async writeCompanyRow(companyId: string, row: AuditRow): Promise<void> {
     await this.tenantDb.runInCompany(companyId, async (tx) => {
-      const prevHash = this.config.auditHashChain
+      const prevHash = this.config.audit.hashChain
         ? await this.lockAndReadPreviousHash(tx, companyId)
         : null;
 

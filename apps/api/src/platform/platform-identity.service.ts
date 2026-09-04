@@ -26,7 +26,7 @@ export class PlatformIdentityService {
     config: AppConfig,
   ) {
     // Shorter than the tenant cache: these grants are worth re-checking often.
-    this.cache = new TtlCache(Math.min(config.tenantCacheTtlSeconds, 30) * 1000, 1_000);
+    this.cache = new TtlCache(Math.min(config.tenancy.cacheTtlSeconds, 30) * 1000, 1_000);
   }
 
   async loadPermissions(platformUserId: string): Promise<ReadonlySet<string>> {

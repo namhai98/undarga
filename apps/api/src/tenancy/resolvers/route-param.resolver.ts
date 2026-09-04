@@ -26,7 +26,7 @@ export class RouteParamTenantResolver implements TenantResolver {
   constructor(private readonly config: AppConfig) {}
 
   isEnabled(): boolean {
-    return this.config.tenantResolvers.routeParam;
+    return this.config.tenancy.resolvers.routeParam;
   }
 
   resolve(input: TenantResolutionInput): TenantCandidate | null {

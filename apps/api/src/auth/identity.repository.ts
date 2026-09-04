@@ -86,6 +86,87 @@ export class IdentityRepository {
   }
 
   // -------------------------------------------------------------------------
+  // Account creation — invitation and provisioning paths
+  // -------------------------------------------------------------------------
+
+  /**
+   * What the invitation-accept path is allowed to learn about an address.
+   *
+   * Deliberately narrower than `findStaffByEmail`: that method returns the
+   * password hash, and accept is reachable from a PUBLIC route. Pulling a
+   * credential into a public code path is how it ends up in a log line or an
+   * error payload. `hasPassword` is the only thing the flow actually needs —
+   * enough to choose between "set a password" and "sign in first" — and it
+   * cannot be turned back into the hash.
+   *
+   * Soft-deleted accounts are returned rather than filtered out, so the caller
+   * can refuse them explicitly instead of silently creating a duplicate.
+   */
+  async findStaffAccountForInvite(email: string) {
+    const account = await this.prisma.userAccount.findFirst({
+      where: { email },
+      select: { id: true, email: true, status: true, deletedAt: true, passwordHash: true },
+    });
+
+    if (!account) return null;
+
+    const { passwordHash, ...rest } = account;
+    return { ...rest, hasPassword: passwordHash !== null };
+  }
+
+  /**
+   * Create a fully active staff account, used when someone accepts an
+   * invitation for an address that has no account yet.
+   *
+   * `emailVerifiedAt` stays null on purpose. A link distributed by hand proves
+   * nothing about who controls the address — only that whoever accepted had
+   * the link. Verification is a separate flow and arrives with email in phase 6.
+   */
+  async createActiveStaffAccount(input: {
+    email: string;
+    fullName: string;
+    passwordHash: string;
+    locale?: string;
+  }) {
+    return this.prisma.userAccount.create({
+      data: {
+        email: input.email,
+        fullName: input.fullName,
+        passwordHash: input.passwordHash,
+        locale: input.locale,
+        status: 'ACTIVE',
+      },
+      select: { id: true, email: true, fullName: true, status: true },
+    });
+  }
+
+  /**
+   * Find or create the placeholder account a provisioned company's owner will
+   * accept into.
+   *
+   * Created with no password and `INVITED` status: the account exists so the
+   * invitation can point at a membership, but it cannot be signed into until
+   * the owner accepts and sets a password. Idempotent by email, because the
+   * owner of a new company may already be a member of another one — and
+   * because it makes provisioning safe to retry.
+   */
+  async findOrCreateInvitedStaffAccount(input: { email: string; fullName: string }) {
+    const existing = await this.prisma.userAccount.findFirst({
+      where: { email: input.email, deletedAt: null },
+      select: { id: true, email: true, fullName: true, status: true },
+    });
+
+    if (existing) return { account: existing, created: false };
+
+    const account = await this.prisma.userAccount.create({
+      data: { email: input.email, fullName: input.fullName, status: 'INVITED' },
+      select: { id: true, email: true, fullName: true, status: true },
+    });
+
+    return { account, created: true };
+  }
+
+  // -------------------------------------------------------------------------
   // Staff sessions — family rotation with reuse detection
   // -------------------------------------------------------------------------
 
@@ -94,6 +175,7 @@ export class IdentityRepository {
     tokenHash: string;
     familyId: string;
     expiresAt: Date;
+    activeCompanyId?: string | null;
     ipAddress?: string;
     userAgent?: string;
   }) {
@@ -103,6 +185,7 @@ export class IdentityRepository {
         tokenHash: input.tokenHash,
         familyId: input.familyId,
         expiresAt: input.expiresAt,
+        activeCompanyId: input.activeCompanyId ?? null,
         ipAddress: input.ipAddress,
         userAgent: input.userAgent?.slice(0, 512),
       },
@@ -120,6 +203,7 @@ export class IdentityRepository {
         replacedById: true,
         revokedAt: true,
         expiresAt: true,
+        activeCompanyId: true,
       },
     });
   }
@@ -130,6 +214,7 @@ export class IdentityRepository {
     tokenHash: string;
     familyId: string;
     expiresAt: Date;
+    activeCompanyId?: string | null;
     ipAddress?: string;
     userAgent?: string;
   }) {
@@ -140,6 +225,7 @@ export class IdentityRepository {
           tokenHash: input.tokenHash,
           familyId: input.familyId,
           expiresAt: input.expiresAt,
+          activeCompanyId: input.activeCompanyId ?? null,
           ipAddress: input.ipAddress,
           userAgent: input.userAgent?.slice(0, 512),
         },

@@ -21,7 +21,7 @@ export class TokenHashService {
   }
 
   hash(value: string): string {
-    return createHmac('sha256', this.config.tokenHashPepper).update(value).digest('base64');
+    return createHmac('sha256', this.config.auth.tokenHashPepper).update(value).digest('base64');
   }
 
   matches(value: string, expectedHash: string): boolean {

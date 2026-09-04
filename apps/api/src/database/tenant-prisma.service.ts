@@ -10,8 +10,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function createTenantClient(config: AppConfig) {
   const base = new PrismaClient({
-    datasources: { db: { url: config.databaseUrl } },
-    log: config.isProduction ? ['warn', 'error'] : ['warn', 'error'],
+    datasources: { db: { url: config.database.url } },
+    log: config.app.isProduction ? ['warn', 'error'] : ['warn', 'error'],
   });
 
   return base.$extends({
@@ -148,7 +148,7 @@ export class TenantPrismaService implements OnModuleInit, OnModuleDestroy {
     return this.client.$transaction(async (tx) => {
       // `true` = transaction-local, released at COMMIT/ROLLBACK.
       await tx.$executeRaw`SELECT set_config('app.current_company_id', ${companyId}, true)`;
-      return fn(tx as unknown as TenantTx);
+      return fn(tx);
     });
   }
 

@@ -1,0 +1,23 @@
+{
+  "name": "@undarga/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared ESLint flat configs, including the tenant-safety rules",
+  "main": "./index.js",
+  "files": ["*.js"],
+  "scripts": {
+    "lint": "echo 'config package: plain JS, reviewed not linted' && exit 0",
+    "typecheck": "echo 'config package: no TypeScript' && exit 0",
+    "test": "echo 'config package: no tests' && exit 0",
+    "clean": "echo 'config package: nothing to clean' && exit 0"
+  },
+  "dependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint-config-prettier": "9.1.0",
+    "globals": "15.14.0",
+    "typescript-eslint": "8.69.0"
+  },
+  "peerDependencies": {
+    "eslint": "^9.0.0"
+  }
+}

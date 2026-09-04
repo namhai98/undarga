@@ -1,145 +1,166 @@
 /**
- * The permission catalog.
+ * Permission RULES.
  *
- * Keys are `resource:action` or `resource:action:qualifier`, static, and
- * namespaced by realm. Two separate catalogs, not one with a flag:
+ * The keys themselves live in `@undarga/shared` so the web app compiles against
+ * the same union (see that file for why). Everything here is a rule — who holds
+ * what, which reads are sensitive, which roles are seeded — and rules stay
+ * server-side under `docs/ARCHITECTURE-RULES.md` rule 8.
  *
- *   COMPANY_PERMISSIONS  — what you can do *inside* one company.
- *   PLATFORM_PERMISSIONS — what you can do to the SaaS itself.
- *
- * They never mix. A company OWNER holds every company permission and zero
- * platform permissions, so no amount of privilege escalation inside a tenant
- * produces cross-tenant reach. That separation is the whole reason for two
- * constants rather than one list with a `scope` column in code.
- *
- * The database mirrors this in `permission.scope`, and these keys are the seed
- * data for that table.
+ * The keys are re-exported so every existing importer keeps working and so
+ * server code has one place to import from.
  */
 
-export const COMPANY_PERMISSIONS = {
-  // company administration
-  COMPANY_READ: 'company:read',
-  COMPANY_WRITE: 'company:write',
-  SETTINGS_READ: 'settings:read',
-  SETTINGS_WRITE: 'settings:write',
-  BRANDING_WRITE: 'settings:branding:write',
-  BILLING_READ: 'settings:billing:read',
-  BILLING_WRITE: 'settings:billing:write',
-  DOMAIN_WRITE: 'settings:domain:write',
+import {
+  ALL_COMPANY_PERMISSIONS,
+  COMPANY_PERMISSIONS,
+  SYSTEM_ROLES,
+  type CompanyPermission,
+  type SystemRoleKey,
+} from '@undarga/shared';
 
-  // people
-  MEMBER_READ: 'member:read',
-  MEMBER_INVITE: 'member:invite',
-  MEMBER_WRITE: 'member:write',
-  MEMBER_REMOVE: 'member:remove',
-  ROLE_READ: 'role:read',
-  ROLE_WRITE: 'role:write',
-
-  BRANCH_READ: 'branch:read',
-  BRANCH_WRITE: 'branch:write',
-
-  EMPLOYEE_READ: 'employee:read',
-  EMPLOYEE_WRITE: 'employee:write',
-  SCHEDULE_READ: 'schedule:read',
-  SCHEDULE_WRITE_OWN: 'schedule:write:own',
-  SCHEDULE_WRITE_ANY: 'schedule:write:any',
-  TIME_OFF_REQUEST: 'timeoff:request',
-  TIME_OFF_APPROVE: 'timeoff:approve',
-
-  // catalog
-  SERVICE_READ: 'service:read',
-  SERVICE_WRITE: 'service:write',
-  RESOURCE_READ: 'resource:read',
-  RESOURCE_WRITE: 'resource:write',
-
-  // customers
-  CUSTOMER_READ: 'customer:read',
-  CUSTOMER_WRITE: 'customer:write',
-  CUSTOMER_NOTE_READ_PRIVATE: 'customer:note:read:private',
-  /** Separate from customer:read so bulk exfiltration is its own decision. */
-  CUSTOMER_EXPORT: 'customer:export',
-
-  // bookings
-  APPOINTMENT_READ_OWN: 'appointment:read:own',
-  APPOINTMENT_READ_ANY: 'appointment:read:any',
-  APPOINTMENT_WRITE: 'appointment:write',
-  APPOINTMENT_CANCEL_OWN: 'appointment:cancel:own',
-  APPOINTMENT_CANCEL_ANY: 'appointment:cancel:any',
-
-  // money
-  PAYMENT_READ: 'payment:read',
-  PAYMENT_WRITE: 'payment:write',
-  PAYMENT_REFUND: 'payment:refund',
-  INVOICE_READ: 'invoice:read',
-  PROMOTION_READ: 'promotion:read',
-  PROMOTION_WRITE: 'promotion:write',
-  GIFTCARD_READ: 'giftcard:read',
-  GIFTCARD_ISSUE: 'giftcard:issue',
-  GIFTCARD_ADJUST: 'giftcard:adjust',
-
-  // reporting
-  REPORT_READ: 'report:read',
-  REPORT_REVENUE_READ: 'report:revenue:read',
-  REPORT_EXPORT: 'report:export',
-
-  // audit
-  AUDIT_READ: 'audit:read',
-} as const;
-
-export const PLATFORM_PERMISSIONS = {
-  COMPANY_LIST: 'platform:company:list',
-  COMPANY_PROVISION: 'platform:company:provision',
-  COMPANY_SUSPEND: 'platform:company:suspend',
-  /** Read a tenant's business data. Never implicit — see MembershipService. */
-  COMPANY_DATA_READ: 'platform:company:data:read',
-  /** Modify a tenant's business data. Reserved for incident recovery. */
-  COMPANY_DATA_WRITE: 'platform:company:data:write',
-  IMPERSONATE: 'platform:impersonate',
-  PLAN_WRITE: 'platform:plan:write',
-  BILLING_MANAGE: 'platform:billing:manage',
-  OPERATOR_MANAGE: 'platform:operator:manage',
-  AUDIT_READ_ALL: 'platform:audit:read',
-} as const;
-
-export type CompanyPermission = (typeof COMPANY_PERMISSIONS)[keyof typeof COMPANY_PERMISSIONS];
-export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[keyof typeof PLATFORM_PERMISSIONS];
-export type Permission = CompanyPermission | PlatformPermission;
-
-export const ALL_COMPANY_PERMISSIONS: readonly CompanyPermission[] =
-  Object.values(COMPANY_PERMISSIONS);
-export const ALL_PLATFORM_PERMISSIONS: readonly PlatformPermission[] =
-  Object.values(PLATFORM_PERMISSIONS);
-
-/**
- * The read-only subset, used when a platform operator has
- * `platform:company:data:read` but not `:write`. Derived rather than listed so
- * a new read permission is covered automatically.
- */
-export const READ_ONLY_COMPANY_PERMISSIONS: readonly CompanyPermission[] =
-  ALL_COMPANY_PERMISSIONS.filter((p) => p.includes(':read') || p.includes(':list'));
-
-export function isPlatformPermission(key: string): key is PlatformPermission {
-  return key.startsWith('platform:');
-}
-
-/**
- * Seeded system roles. A company may clone one into a custom role; the system
- * roles themselves are immutable, so a tenant cannot edit `OWNER` to grant
- * itself something the platform did not intend.
- */
-export const SYSTEM_ROLES = {
-  OWNER: 'OWNER',
-  ADMIN: 'ADMIN',
-  BRANCH_MANAGER: 'BRANCH_MANAGER',
-  RECEPTIONIST: 'RECEPTIONIST',
-  EMPLOYEE: 'EMPLOYEE',
-  READ_ONLY: 'READ_ONLY',
-} as const;
-
-export type SystemRoleKey = (typeof SYSTEM_ROLES)[keyof typeof SYSTEM_ROLES];
+export {
+  ALL_COMPANY_PERMISSIONS,
+  ALL_PLATFORM_PERMISSIONS,
+  COMPANY_PERMISSIONS,
+  PLATFORM_PERMISSIONS,
+  SYSTEM_ROLES,
+  isPlatformPermission,
+} from '@undarga/shared';
+export type {
+  CompanyPermission,
+  Permission,
+  PlatformPermission,
+  SystemRoleKey,
+} from '@undarga/shared';
 
 const C = COMPANY_PERMISSIONS;
 
+// ---------------------------------------------------------------------------
+// Sensitivity classification
+// ---------------------------------------------------------------------------
+
+export type PermissionSensitivity = 'read' | 'sensitive-read' | 'write';
+
+/**
+ * Every company permission, classified.
+ *
+ * `Record<CompanyPermission, …>` is the point: adding a key to the catalog
+ * without classifying it here is a TYPE ERROR, not a silent grant. That is a
+ * stronger guarantee than any test, and it is what this table exists to buy.
+ *
+ * It replaces `ALL_COMPANY_PERMISSIONS.filter(p => p.includes(':read'))`, which
+ * handed private customer notes, billing figures, revenue reports and the audit
+ * trail to the most restricted role — purely because those keys happen to
+ * contain the substring ":read". The blast radius was two-wide: the READ_ONLY
+ * system role, and, through `MembershipService.authorizePlatformOperator`,
+ * every platform operator holding `data:read` but not `data:write`.
+ *
+ * 'sensitive-read' means a read that must be granted deliberately and never by
+ * pattern. The test is not "how secret is it" but "would someone be surprised
+ * to learn the most restricted role could see this".
+ */
+export const COMPANY_PERMISSION_SENSITIVITY: Record<CompanyPermission, PermissionSensitivity> = {
+  // company administration
+  [C.COMPANY_READ]: 'read',
+  [C.COMPANY_WRITE]: 'write',
+  [C.SETTINGS_READ]: 'read',
+  [C.SETTINGS_WRITE]: 'write',
+  [C.BRANDING_WRITE]: 'write',
+  // What the company pays and owes. Not a general read.
+  [C.BILLING_READ]: 'sensitive-read',
+  [C.BILLING_WRITE]: 'write',
+  [C.DOMAIN_WRITE]: 'write',
+
+  // people
+  [C.MEMBER_READ]: 'read',
+  [C.MEMBER_INVITE]: 'write',
+  [C.MEMBER_WRITE]: 'write',
+  [C.MEMBER_REMOVE]: 'write',
+  [C.ROLE_READ]: 'read',
+  [C.ROLE_WRITE]: 'write',
+
+  [C.BRANCH_READ]: 'read',
+  [C.BRANCH_WRITE]: 'write',
+
+  [C.EMPLOYEE_READ]: 'read',
+  [C.EMPLOYEE_WRITE]: 'write',
+  [C.SCHEDULE_READ]: 'read',
+  [C.SCHEDULE_WRITE_OWN]: 'write',
+  [C.SCHEDULE_WRITE_ANY]: 'write',
+  [C.TIME_OFF_REQUEST]: 'write',
+  [C.TIME_OFF_APPROVE]: 'write',
+
+  // catalog
+  [C.SERVICE_READ]: 'read',
+  [C.SERVICE_WRITE]: 'write',
+  [C.RESOURCE_READ]: 'read',
+  [C.RESOURCE_WRITE]: 'write',
+
+  // customers
+  [C.CUSTOMER_READ]: 'read',
+  [C.CUSTOMER_WRITE]: 'write',
+  // Notes staff write about a person, expecting them to stay with the people
+  // who need them.
+  [C.CUSTOMER_NOTE_READ_PRIVATE]: 'sensitive-read',
+  // Bulk exfiltration. A read in name only.
+  [C.CUSTOMER_EXPORT]: 'sensitive-read',
+
+  // bookings
+  [C.APPOINTMENT_READ_OWN]: 'read',
+  [C.APPOINTMENT_READ_ANY]: 'read',
+  [C.APPOINTMENT_WRITE]: 'write',
+  [C.APPOINTMENT_CANCEL_OWN]: 'write',
+  [C.APPOINTMENT_CANCEL_ANY]: 'write',
+
+  // money
+  [C.PAYMENT_READ]: 'read',
+  [C.PAYMENT_WRITE]: 'write',
+  [C.PAYMENT_REFUND]: 'write',
+  [C.INVOICE_READ]: 'read',
+  [C.PROMOTION_READ]: 'read',
+  [C.PROMOTION_WRITE]: 'write',
+  [C.GIFTCARD_READ]: 'read',
+  [C.GIFTCARD_ISSUE]: 'write',
+  [C.GIFTCARD_ADJUST]: 'write',
+
+  // reporting
+  [C.REPORT_READ]: 'read',
+  // Company-wide revenue. The single most commercially sensitive read there is.
+  [C.REPORT_REVENUE_READ]: 'sensitive-read',
+  [C.REPORT_EXPORT]: 'sensitive-read',
+
+  // audit
+  // Who did what, including every platform-operator access. Handing this to the
+  // most restricted role also hands over the record of who has been looking.
+  [C.AUDIT_READ]: 'sensitive-read',
+};
+
+/**
+ * The read-only subset. Used by the READ_ONLY system role and by a platform
+ * operator holding `platform:company:data:read` but not `:write`.
+ *
+ * Both consumers currently want exactly this set. If they ever diverge — an
+ * operator keeping `audit:read` for incident work, say — split a separate
+ * `PLATFORM_READ_ONLY_COMPANY_PERMISSIONS` here rather than widening this one.
+ * Today that would be indirection with one caller, and an operator
+ * investigating an incident already holds `platform:audit:read`.
+ */
+export const READ_ONLY_COMPANY_PERMISSIONS: readonly CompanyPermission[] =
+  ALL_COMPANY_PERMISSIONS.filter((p) => COMPANY_PERMISSION_SENSITIVITY[p] === 'read');
+
+/** Reads that must be granted deliberately. Never folded into a derived set. */
+export const SENSITIVE_READ_PERMISSIONS: readonly CompanyPermission[] =
+  ALL_COMPANY_PERMISSIONS.filter((p) => COMPANY_PERMISSION_SENSITIVITY[p] === 'sensitive-read');
+
+// ---------------------------------------------------------------------------
+// Seeded system roles
+// ---------------------------------------------------------------------------
+
+/**
+ * A company may clone one of these into a custom role; the system roles
+ * themselves are immutable, so a tenant cannot edit `OWNER` to grant itself
+ * something the platform did not intend.
+ */
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPermission[]> = {
   // OWNER is granted everything at resolution time rather than from this map,
   // so a permission added later is never silently missing from the owner.
@@ -217,3 +238,6 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
 
   READ_ONLY: READ_ONLY_COMPANY_PERMISSIONS,
 };
+
+/** Re-exported for callers that only need the role key list. */
+export const SYSTEM_ROLE_KEYS: readonly SystemRoleKey[] = Object.values(SYSTEM_ROLES);

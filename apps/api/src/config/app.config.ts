@@ -3,88 +3,173 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from './env.schema';
 
 /**
- * Typed accessor over validated env. Nothing in the codebase reads
- * `process.env` directly — that is what lets `validateEnv` be the single place
- * a misconfiguration is caught.
+ * Typed, validated configuration, grouped by concern.
+ *
+ * Nothing in the codebase reads `process.env` directly. That is what lets
+ * `validateEnv` be the single place a misconfiguration is caught — at boot,
+ * with a message naming the variable, rather than as `undefined` reaching a
+ * connection string at 3am.
+ *
+ * Grouped rather than flat so that "what does auth need?" is answerable by
+ * looking at one object, and so a new area (email, payments) arrives as a new
+ * group rather than another dozen loose getters.
  */
 @Injectable()
 export class AppConfig {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   private get<K extends keyof Env>(key: K): Env[K] {
-    return this.config.get(key, { infer: true }) as Env[K];
+    return this.config.get(key, { infer: true });
   }
 
-  get nodeEnv() {
-    return this.get('NODE_ENV');
-  }
-  get isProduction() {
-    return this.get('NODE_ENV') === 'production';
-  }
-  get isTest() {
-    return this.get('NODE_ENV') === 'test';
-  }
-  get port() {
-    return this.get('PORT');
-  }
-  get apiPrefix() {
-    return this.get('API_PREFIX');
-  }
-  get logLevel() {
-    return this.get('LOG_LEVEL');
-  }
-
-  get databaseUrl() {
-    return this.get('DATABASE_URL');
-  }
-  get platformDatabaseUrl() {
-    return this.get('PLATFORM_DATABASE_URL');
-  }
-  get poolingMode() {
-    return this.get('DB_POOLING_MODE');
-  }
-
-  get jwtAccessSecret() {
-    return this.get('JWT_ACCESS_SECRET');
-  }
-  get jwtAccessTtlSeconds() {
-    return this.get('JWT_ACCESS_TTL_SECONDS');
-  }
-  get refreshTokenTtlDays() {
-    return this.get('REFRESH_TOKEN_TTL_DAYS');
-  }
-  get tokenHashPepper() {
-    return this.get('TOKEN_HASH_PEPPER');
-  }
-
-  get argon2Options() {
+  // ---------------------------------------------------------------------------
+  // app
+  // ---------------------------------------------------------------------------
+  get app() {
+    const nodeEnv = this.get('NODE_ENV');
     return {
-      memoryCost: this.get('ARGON2_MEMORY_KIB'),
-      timeCost: this.get('ARGON2_TIME_COST'),
-      parallelism: this.get('ARGON2_PARALLELISM'),
+      nodeEnv,
+      isProduction: nodeEnv === 'production',
+      isTest: nodeEnv === 'test',
+      isDevelopment: nodeEnv === 'development',
+      port: this.get('PORT'),
+      apiPrefix: this.get('API_PREFIX'),
+      logLevel: this.get('LOG_LEVEL'),
+      swaggerEnabled: this.get('SWAGGER_ENABLED'),
+      /**
+       * Where apps/web lives. Configured, never taken from the request Host
+       * header — see the note in env.schema.ts. Empty means "return the bare
+       * token, build no link".
+       */
+      webAppUrl: this.get('WEB_APP_URL'),
     };
   }
 
-  get tenantResolvers() {
+  // ---------------------------------------------------------------------------
+  // cors
+  // ---------------------------------------------------------------------------
+  get cors() {
+    const raw = this.get('CORS_ORIGINS').trim();
+    const origins = raw === '' ? [] : raw.split(',').map((o) => o.trim()).filter(Boolean);
     return {
-      routeParam: this.get('TENANT_RESOLVER_ROUTE_PARAM'),
-      activeCompany: this.get('TENANT_RESOLVER_ACTIVE_COMPANY'),
-      header: this.get('TENANT_RESOLVER_HEADER'),
-      customDomain: this.get('TENANT_RESOLVER_CUSTOM_DOMAIN'),
-      subdomain: this.get('TENANT_RESOLVER_SUBDOMAIN'),
+      origins,
+      /**
+       * No wildcard, ever. An empty list means same-origin only, which is the
+       * correct default for an API that will later serve per-tenant custom
+       * domains: those origins get added explicitly once domain verification
+       * exists, not blanket-allowed now.
+       */
+      enabled: origins.length > 0,
     };
   }
 
-  get subdomainRoot() {
-    return this.get('TENANT_SUBDOMAIN_ROOT');
+  // ---------------------------------------------------------------------------
+  // database
+  // ---------------------------------------------------------------------------
+  get database() {
+    return {
+      /** app_tenant. RLS enforced. */
+      url: this.get('DATABASE_URL'),
+      /** app_platform. BYPASSRLS. Four allowlisted consumers only. */
+      platformUrl: this.get('PLATFORM_DATABASE_URL'),
+      poolingMode: this.get('DB_POOLING_MODE'),
+    };
   }
-  get tenantCacheTtlSeconds() {
-    return this.get('TENANT_CACHE_TTL_SECONDS');
+
+  // ---------------------------------------------------------------------------
+  // redis
+  // ---------------------------------------------------------------------------
+  get redis() {
+    return {
+      url: this.get('REDIS_URL'),
+      keyPrefix: this.get('REDIS_KEY_PREFIX'),
+      required: this.get('REDIS_REQUIRED'),
+    };
   }
-  get auditHashChain() {
-    return this.get('AUDIT_HASH_CHAIN');
+
+  // ---------------------------------------------------------------------------
+  // auth
+  // ---------------------------------------------------------------------------
+  get auth() {
+    return {
+      jwtAccessSecret: this.get('JWT_ACCESS_SECRET'),
+      jwtAccessTtlSeconds: this.get('JWT_ACCESS_TTL_SECONDS'),
+      refreshTokenTtlDays: this.get('REFRESH_TOKEN_TTL_DAYS'),
+      /** Refresh tokens are opaque + HMAC'd, not JWTs. This is the HMAC key. */
+      tokenHashPepper: this.get('TOKEN_HASH_PEPPER'),
+      /** Lifetime of an invitation link. */
+      invitationTtlDays: this.get('INVITATION_TTL_DAYS'),
+      argon2: {
+        memoryCost: this.get('ARGON2_MEMORY_KIB'),
+        timeCost: this.get('ARGON2_TIME_COST'),
+        parallelism: this.get('ARGON2_PARALLELISM'),
+      },
+    };
   }
-  get redisUrl() {
-    return this.get('REDIS_URL');
+
+  // ---------------------------------------------------------------------------
+  // tenancy
+  // ---------------------------------------------------------------------------
+  get tenancy() {
+    return {
+      resolvers: {
+        routeParam: this.get('TENANT_RESOLVER_ROUTE_PARAM'),
+        activeCompany: this.get('TENANT_RESOLVER_ACTIVE_COMPANY'),
+        header: this.get('TENANT_RESOLVER_HEADER'),
+        customDomain: this.get('TENANT_RESOLVER_CUSTOM_DOMAIN'),
+        subdomain: this.get('TENANT_RESOLVER_SUBDOMAIN'),
+      },
+      subdomainRoot: this.get('TENANT_SUBDOMAIN_ROOT'),
+      cacheTtlSeconds: this.get('TENANT_CACHE_TTL_SECONDS'),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // audit
+  // ---------------------------------------------------------------------------
+  get audit() {
+    return { hashChain: this.get('AUDIT_HASH_CHAIN') };
+  }
+
+  // ---------------------------------------------------------------------------
+  // email — placeholder. Nothing sends mail yet.
+  // ---------------------------------------------------------------------------
+  get email() {
+    const host = this.get('SMTP_HOST');
+    return {
+      configured: Boolean(host),
+      host,
+      port: this.get('SMTP_PORT'),
+      user: this.get('SMTP_USER'),
+      password: this.get('SMTP_PASSWORD'),
+      from: this.get('SMTP_FROM'),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // storage — placeholder. Nothing uploads yet.
+  // ---------------------------------------------------------------------------
+  get storage() {
+    const bucket = this.get('S3_BUCKET');
+    return {
+      configured: Boolean(bucket),
+      endpoint: this.get('S3_ENDPOINT'),
+      region: this.get('S3_REGION'),
+      bucket,
+      accessKey: this.get('S3_ACCESS_KEY'),
+      secretKey: this.get('S3_SECRET_KEY'),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // payments — placeholder. Nothing charges yet.
+  // ---------------------------------------------------------------------------
+  get payments() {
+    const provider = this.get('PAYMENT_PROVIDER');
+    return {
+      configured: provider !== 'none',
+      provider,
+      apiKey: this.get('PAYMENT_API_KEY'),
+    };
   }
 }

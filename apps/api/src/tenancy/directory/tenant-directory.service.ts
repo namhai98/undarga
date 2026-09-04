@@ -53,7 +53,7 @@ export class TenantDirectoryService implements OnModuleInit {
     private readonly prisma: PlatformPrismaService,
     config: AppConfig,
   ) {
-    const ttlMs = config.tenantCacheTtlSeconds * 1000;
+    const ttlMs = config.tenancy.cacheTtlSeconds * 1000;
     this.bySlug = new TtlCache(ttlMs, 20_000);
     this.byHostname = new TtlCache(ttlMs, 20_000);
     this.byId = new TtlCache(ttlMs, 20_000);

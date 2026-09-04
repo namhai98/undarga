@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Undarga base",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "moduleDetection": "force",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    // --- strictness -------------------------------------------------------
+    // `strict` alone is not enough. The three below are the ones that catch
+    // real bugs in this codebase specifically:
+    //
+    //   noUncheckedIndexedAccess  — `arr[0]` is `T | undefined`. Half the
+    //     tenant-resolution code indexes arrays of candidates.
+    //   exactOptionalPropertyTypes — stops `{ companyId: undefined }` from
+    //     satisfying `{ companyId?: string }`, which is how an "optional"
+    //     tenant filter silently becomes no filter.
+    //   noImplicitOverride — a renamed base method in a repository subclass
+    //     otherwise fails silently.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "allowUnreachableCode": false
+  }
+}

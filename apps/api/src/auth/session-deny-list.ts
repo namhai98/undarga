@@ -30,7 +30,7 @@ export class SessionDenyList {
 
   constructor(config: AppConfig) {
     // Entries only need to outlive the longest access token.
-    this.revoked = new TtlCache<true>((config.jwtAccessTtlSeconds + 60) * 1000, 100_000);
+    this.revoked = new TtlCache<true>((config.auth.jwtAccessTtlSeconds + 60) * 1000, 100_000);
   }
 
   revoke(sessionId: string): void {

@@ -547,9 +547,9 @@ model PlatformUser {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  roles                PlatformUserRole[]
-  impersonationGrants  ImpersonationGrant[]
-  sessions             PlatformSession[]
+  roles               PlatformUserRole[]
+  impersonationGrants ImpersonationGrant[]
+  sessions            PlatformSession[]
 
   @@index([status])
   @@map("platform_user")
@@ -564,11 +564,11 @@ model PlatformUser {
 /// user_session; kept as its own table because the two realms must not share a
 /// session namespace.
 model PlatformSession {
-  id             String    @id @default(uuid(7)) @db.Uuid
-  platformUserId String    @map("platform_user_id") @db.Uuid
-  tokenHash      String    @unique @map("token_hash") @db.VarChar(88)
-  familyId       String    @map("family_id") @db.Uuid
-  replacedById   String?   @map("replaced_by_id") @db.Uuid
+  id             String  @id @default(uuid(7)) @db.Uuid
+  platformUserId String  @map("platform_user_id") @db.Uuid
+  tokenHash      String  @unique @map("token_hash") @db.VarChar(88)
+  familyId       String  @map("family_id") @db.Uuid
+  replacedById   String? @map("replaced_by_id") @db.Uuid
 
   ipAddress String?   @map("ip_address") @db.Inet
   userAgent String?   @map("user_agent") @db.VarChar(512)
@@ -724,12 +724,12 @@ model Subscription {
 /// Bespoke enterprise limits. Without this table, negotiated deals end up
 /// hardcoded against customer names.
 model SubscriptionEntitlementOverride {
-  id         String   @id @default(uuid(7)) @db.Uuid
-  companyId  String   @map("company_id") @db.Uuid
-  featureKey String   @map("feature_key") @db.VarChar(64)
-  limitInt   Int?     @map("limit_int")
-  limitBool  Boolean? @map("limit_bool")
-  reason     String   @db.VarChar(512)
+  id         String    @id @default(uuid(7)) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  featureKey String    @map("feature_key") @db.VarChar(64)
+  limitInt   Int?      @map("limit_int")
+  limitBool  Boolean?  @map("limit_bool")
+  reason     String    @db.VarChar(512)
   expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -750,11 +750,11 @@ model SubscriptionInvoice {
   number         String                    @db.VarChar(32)
   status         SubscriptionInvoiceStatus @default(DRAFT)
 
-  amountMinor    BigInt @map("amount_minor")
-  taxMinor       BigInt @default(0) @map("tax_minor")
-  totalMinor     BigInt @map("total_minor")
+  amountMinor     BigInt @map("amount_minor")
+  taxMinor        BigInt @default(0) @map("tax_minor")
+  totalMinor      BigInt @map("total_minor")
   amountPaidMinor BigInt @default(0) @map("amount_paid_minor")
-  currencyCode   String @map("currency_code") @db.Char(3)
+  currencyCode    String @map("currency_code") @db.Char(3)
 
   periodStart DateTime  @map("period_start") @db.Timestamptz(3)
   periodEnd   DateTime  @map("period_end") @db.Timestamptz(3)
@@ -849,11 +849,11 @@ model UsageCounter {
 
 /// The tenant. Its `id` IS the `company_id` every other tenant table carries.
 model Company {
-  id           String        @id @default(uuid(7)) @db.Uuid
-  slug         String        @unique @db.VarChar(64)
-  legalName    String        @map("legal_name") @db.VarChar(160)
-  displayName  String        @map("display_name") @db.VarChar(160)
-  status       CompanyStatus @default(PENDING_SETUP)
+  id          String        @id @default(uuid(7)) @db.Uuid
+  slug        String        @unique @db.VarChar(64)
+  legalName   String        @map("legal_name") @db.VarChar(160)
+  displayName String        @map("display_name") @db.VarChar(160)
+  status      CompanyStatus @default(PENDING_SETUP)
 
   /// Pre-fills a new branch. The BRANCH timezone is authoritative for bookings.
   defaultTimezoneName String @map("default_timezone_name") @db.VarChar(64)
@@ -880,6 +880,7 @@ model Company {
   domains                 CompanyDomain[]
   roles                   CompanyRole[]
   users                   CompanyUser[]
+  invitations             CompanyInvitation[]
   branches                Branch[]
   employees               Employee[]
   serviceCategories       ServiceCategory[]
@@ -927,13 +928,13 @@ model CompanySettings {
   allowCustomerCancel     Boolean @default(true) @map("allow_customer_cancel")
   allowCustomerReschedule Boolean @default(true) @map("allow_customer_reschedule")
 
-  requireDeposit         Boolean @default(false) @map("require_deposit")
-  depositPercentBps      Int     @default(0) @map("deposit_percent_bps")
-  noShowFeePercentBps    Int     @default(0) @map("no_show_fee_percent_bps")
-  lateCancelFeePercentBps Int    @default(0) @map("late_cancel_fee_percent_bps")
+  requireDeposit          Boolean @default(false) @map("require_deposit")
+  depositPercentBps       Int     @default(0) @map("deposit_percent_bps")
+  noShowFeePercentBps     Int     @default(0) @map("no_show_fee_percent_bps")
+  lateCancelFeePercentBps Int     @default(0) @map("late_cancel_fee_percent_bps")
 
-  reminderOffsetsMinutes Int[]   @default([1440, 120]) @map("reminder_offsets_minutes")
-  defaultLocale          String  @default("en-US") @map("default_locale") @db.VarChar(12)
+  reminderOffsetsMinutes Int[]  @default([1440, 120]) @map("reminder_offsets_minutes")
+  defaultLocale          String @default("en-US") @map("default_locale") @db.VarChar(12)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -952,11 +953,11 @@ model CompanyBranding {
   faviconFileId     String? @map("favicon_file_id") @db.Uuid
   emailHeaderFileId String? @map("email_header_file_id") @db.Uuid
 
-  primaryColor   String  @default("#0F6B63") @map("primary_color") @db.VarChar(9)
-  accentColor    String  @default("#8A5A12") @map("accent_color") @db.VarChar(9)
-  backgroundColor String @default("#FFFFFF") @map("background_color") @db.VarChar(9)
-  fontFamily     String? @map("font_family") @db.VarChar(96)
-  customCss      String? @map("custom_css") @db.VarChar(8000)
+  primaryColor    String  @default("#0F6B63") @map("primary_color") @db.VarChar(9)
+  accentColor     String  @default("#8A5A12") @map("accent_color") @db.VarChar(9)
+  backgroundColor String  @default("#FFFFFF") @map("background_color") @db.VarChar(9)
+  fontFamily      String? @map("font_family") @db.VarChar(96)
+  customCss       String? @map("custom_css") @db.VarChar(8000)
 
   bookingPageHeadline String? @map("booking_page_headline") @db.VarChar(160)
   bookingPageBlurb    String? @map("booking_page_blurb") @db.VarChar(1000)
@@ -1008,12 +1009,12 @@ model UserAccount {
   locale       String     @default("en-US") @db.VarChar(12)
   status       UserStatus @default(INVITED)
 
-  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
-  mfaSecret       String?   @map("mfa_secret") @db.VarChar(255)
-  mfaEnrolledAt   DateTime? @map("mfa_enrolled_at") @db.Timestamptz(3)
-  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(3)
-  failedLoginCount Int      @default(0) @map("failed_login_count") @db.SmallInt
-  lockedUntil     DateTime? @map("locked_until") @db.Timestamptz(3)
+  emailVerifiedAt  DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  mfaSecret        String?   @map("mfa_secret") @db.VarChar(255)
+  mfaEnrolledAt    DateTime? @map("mfa_enrolled_at") @db.Timestamptz(3)
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
+  failedLoginCount Int       @default(0) @map("failed_login_count") @db.SmallInt
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(3)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1030,11 +1031,26 @@ model UserAccount {
 /// Hashed refresh token with family-based reuse detection: presenting a rotated
 /// token revokes the whole family and raises a security event.
 model UserSession {
-  id            String    @id @default(uuid(7)) @db.Uuid
-  userAccountId String    @map("user_account_id") @db.Uuid
-  tokenHash     String    @unique @map("token_hash") @db.VarChar(88)
-  familyId      String    @map("family_id") @db.Uuid
-  replacedById  String?   @map("replaced_by_id") @db.Uuid
+  id            String  @id @default(uuid(7)) @db.Uuid
+  userAccountId String  @map("user_account_id") @db.Uuid
+  tokenHash     String  @unique @map("token_hash") @db.VarChar(88)
+  familyId      String  @map("family_id") @db.Uuid
+  replacedById  String? @map("replaced_by_id") @db.Uuid
+
+  /// Which company this session is currently working in.
+  ///
+  /// A HINT, not an authorization fact. It exists because a refresh presents
+  /// only the refresh token — the expiring access token, which carried the
+  /// active company, is not sent. Without somewhere to remember it, every
+  /// refresh reset the user to their first membership, so switching company and
+  /// then waiting fifteen minutes silently moved you back.
+  ///
+  /// Deliberately no foreign key. It is re-validated against live memberships
+  /// on every refresh, so a revoked membership cannot survive one; a dangling
+  /// value simply falls back to the default. An FK would add a Company
+  /// back-relation and a delete-time coupling that buys nothing the
+  /// re-validation does not already guarantee.
+  activeCompanyId String? @map("active_company_id") @db.Uuid
 
   ipAddress String?   @map("ip_address") @db.Inet
   userAgent String?   @map("user_agent") @db.VarChar(512)
@@ -1070,9 +1086,11 @@ model CompanyUser {
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   userAccount UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  roles          CompanyUserRole[]
-  branchScopes   CompanyUserBranch[]
-  authoredNotes  CompanyCustomerNote[]
+  roles            CompanyUserRole[]
+  branchScopes     CompanyUserBranch[]
+  sentInvitations  CompanyInvitation[]   @relation("InvitationInvitedBy")
+  invitation       CompanyInvitation[]   @relation("InvitationMembership")
+  authoredNotes    CompanyCustomerNote[]
   receivedPayments Payment[]
   approvedTimeOff  EmployeeTimeOff[]
 
@@ -1099,6 +1117,7 @@ model CompanyRole {
   company     Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   permissions CompanyRolePermission[]
   assignments CompanyUserRole[]
+  invitations CompanyInvitationRole[]
 
   // NOTE: uniqueness of (companyId, key) is PARTIAL (WHERE deleted_at IS NULL)
   //       and is created in 001_hardening.sql, not here.
@@ -1145,6 +1164,84 @@ model CompanyUserBranch {
   @@map("company_user_branch")
 }
 
+/// A link-based invitation to join a company.
+///
+/// No email is sent. The admin receives the one-time token in the create or
+/// rotate response and distributes the link however they like. Email delivery
+/// arrives with the notification outbox in phase 6.
+///
+/// The plaintext token appears in exactly one response and is never stored —
+/// only its HMAC, produced by the same TokenHashService that hashes refresh
+/// tokens, so there is one keyed-hashing scheme in the codebase and not two.
+///
+/// `token_hash` is GLOBALLY unique rather than unique per company, because the
+/// accept path looks a token up before any company is known. An HMAC-SHA256
+/// collision across tenants would be a cross-tenant read, which is why this is
+/// worth stating: it is not an oversight to be "fixed" into a composite unique.
+///
+/// Status is DERIVED from the three timestamps rather than stored alongside
+/// them, so status and timestamps cannot disagree. A CHECK constraint in
+/// 001_hardening.sql forbids the one impossible combination (accepted AND
+/// revoked).
+model CompanyInvitation {
+  id        String @id @default(uuid(7)) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+
+  email     String @db.Citext
+  tokenHash String @unique @map("token_hash") @db.VarChar(88)
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  /// Null when the platform created it during provisioning, and null when a
+  /// platform operator created it from inside the tenant — an operator holds
+  /// no membership.
+  invitedByCompanyUserId String? @map("invited_by_company_user_id") @db.Uuid
+
+  /// Provisioning pre-creates the owner membership (INVITED, isOwner) and
+  /// points this at it, so accepting ACTIVATES that row. A member invitation
+  /// leaves this null and accepting CREATES a membership with isOwner written
+  /// as a literal false. That is why isOwner is not reachable from any
+  /// invitation DTO.
+  companyUserId String? @map("company_user_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  invitedBy   CompanyUser? @relation("InvitationInvitedBy", fields: [companyId, invitedByCompanyUserId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  companyUser CompanyUser? @relation("InvitationMembership", fields: [companyId, companyUserId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  roles CompanyInvitationRole[]
+
+  // NOTE: uniqueness of (companyId, email) is PARTIAL
+  //       (WHERE accepted_at IS NULL AND revoked_at IS NULL) and is created in
+  //       001_hardening.sql, not here. Re-inviting after acceptance, revocation
+  //       or expiry must stay possible; two LIVE tokens for one address must
+  //       not.
+  @@unique([companyId, id])
+  @@index([companyId, createdAt(sort: Desc)])
+  @@map("company_invitation")
+}
+
+/// Roles the invitee receives on acceptance.
+///
+/// A join table rather than an array of ids on the invitation, so the composite
+/// FK makes granting another tenant's role unrepresentable — the same
+/// guarantee every other child table in the schema carries.
+model CompanyInvitationRole {
+  companyId    String @map("company_id") @db.Uuid
+  invitationId String @map("invitation_id") @db.Uuid
+  roleId       String @map("role_id") @db.Uuid
+
+  invitation CompanyInvitation @relation(fields: [companyId, invitationId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  role       CompanyRole       @relation(fields: [companyId, roleId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([companyId, invitationId, roleId])
+  @@map("company_invitation_role")
+}
+
 // =============================================================================
 //  04 · BRANCH
 // =============================================================================
@@ -1162,14 +1259,14 @@ model Branch {
   /// Nullable override for a genuinely cross-border company.
   currencyCode String? @map("currency_code") @db.Char(3)
 
-  phone        String? @db.VarChar(32)
-  email        String? @db.Citext
-  addressLine1 String? @map("address_line1") @db.VarChar(160)
-  addressLine2 String? @map("address_line2") @db.VarChar(160)
-  city         String? @db.VarChar(96)
-  district     String? @db.VarChar(96)
-  postalCode   String? @map("postal_code") @db.VarChar(24)
-  countryCode  String? @map("country_code") @db.Char(2)
+  phone        String?  @db.VarChar(32)
+  email        String?  @db.Citext
+  addressLine1 String?  @map("address_line1") @db.VarChar(160)
+  addressLine2 String?  @map("address_line2") @db.VarChar(160)
+  city         String?  @db.VarChar(96)
+  district     String?  @db.VarChar(96)
+  postalCode   String?  @map("postal_code") @db.VarChar(24)
+  countryCode  String?  @map("country_code") @db.Char(2)
   latitude     Decimal? @db.Decimal(9, 6)
   longitude    Decimal? @db.Decimal(9, 6)
 
@@ -1237,12 +1334,12 @@ model BusinessHours {
   companyId String @map("company_id") @db.Uuid
   branchId  String @map("branch_id") @db.Uuid
 
-  dayOfWeek Int      @map("day_of_week") @db.SmallInt // 0 = Sunday .. 6 = Saturday
-  isClosed  Boolean  @default(false) @map("is_closed")
-  opensAt   DateTime? @map("opens_at") @db.Time(0)
-  closesAt  DateTime? @map("closes_at") @db.Time(0)
+  dayOfWeek       Int       @map("day_of_week") @db.SmallInt // 0 = Sunday .. 6 = Saturday
+  isClosed        Boolean   @default(false) @map("is_closed")
+  opensAt         DateTime? @map("opens_at") @db.Time(0)
+  closesAt        DateTime? @map("closes_at") @db.Time(0)
   /// TRUE when closesAt <= opensAt (e.g. 22:00 -> 06:00). Maintained by trigger.
-  crossesMidnight Boolean @default(false) @map("crosses_midnight")
+  crossesMidnight Boolean   @default(false) @map("crosses_midnight")
 
   effectiveFrom DateTime  @map("effective_from") @db.Date
   effectiveTo   DateTime? @map("effective_to") @db.Date
@@ -1264,10 +1361,10 @@ model BranchClosure {
   companyId String @map("company_id") @db.Uuid
   branchId  String @map("branch_id") @db.Uuid
 
-  startsAt DateTime @map("starts_at") @db.Timestamptz(3)
-  endsAt   DateTime @map("ends_at") @db.Timestamptz(3)
-  reason   String   @db.VarChar(256)
-  isFullDay Boolean @default(true) @map("is_full_day")
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime @map("ends_at") @db.Timestamptz(3)
+  reason    String   @db.VarChar(256)
+  isFullDay Boolean  @default(true) @map("is_full_day")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1293,11 +1390,11 @@ model Employee {
   displayName   String         @map("display_name") @db.VarChar(128)
   status        EmployeeStatus @default(ACTIVE)
 
-  isBookable       Boolean @default(true) @map("is_bookable")
-  acceptsWalkIns   Boolean @default(true) @map("accepts_walk_ins")
-  calendarColor    String? @map("calendar_color") @db.VarChar(9)
+  isBookable     Boolean @default(true) @map("is_bookable")
+  acceptsWalkIns Boolean @default(true) @map("accepts_walk_ins")
+  calendarColor  String? @map("calendar_color") @db.VarChar(9)
 
-  hiredOn      DateTime? @map("hired_on") @db.Date
+  hiredOn           DateTime? @map("hired_on") @db.Date
   employmentEndedOn DateTime? @map("employment_ended_on") @db.Date
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1307,16 +1404,16 @@ model Employee {
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   userAccount UserAccount? @relation(fields: [userAccountId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
-  profile             EmployeeProfile?
-  branches            EmployeeBranch[]
-  services            EmployeeService[]
-  schedules           EmployeeSchedule[]
-  scheduleExceptions  EmployeeScheduleException[]
-  timeOff             EmployeeTimeOff[]
-  appointmentItems    AppointmentItem[]
-  promotionEmployees  PromotionEmployee[]
+  profile              EmployeeProfile?
+  branches             EmployeeBranch[]
+  services             EmployeeService[]
+  schedules            EmployeeSchedule[]
+  scheduleExceptions   EmployeeScheduleException[]
+  timeOff              EmployeeTimeOff[]
+  appointmentItems     AppointmentItem[]
+  promotionEmployees   PromotionEmployee[]
   preferredByCustomers CompanyCustomer[]
-  waitlistEntries     WaitlistEntry[]
+  waitlistEntries      WaitlistEntry[]
 
   // NOTE: (companyId, employeeCode) uniqueness is PARTIAL — see 001_hardening.sql.
   @@unique([companyId, id])
@@ -1329,13 +1426,13 @@ model EmployeeProfile {
   employeeId String @id @map("employee_id") @db.Uuid
   companyId  String @map("company_id") @db.Uuid
 
-  jobTitle     String?  @map("job_title") @db.VarChar(96)
-  bio          String?  @db.VarChar(2000)
-  avatarFileId String?  @map("avatar_file_id") @db.Uuid
-  languages    String[] @default([])
-  specialties  String[] @default([])
-  phone        String?  @db.VarChar(32)
-  emergencyContact String? @map("emergency_contact") @db.VarChar(255)
+  jobTitle         String?  @map("job_title") @db.VarChar(96)
+  bio              String?  @db.VarChar(2000)
+  avatarFileId     String?  @map("avatar_file_id") @db.Uuid
+  languages        String[] @default([])
+  specialties      String[] @default([])
+  phone            String?  @db.VarChar(32)
+  emergencyContact String?  @map("emergency_contact") @db.VarChar(255)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1494,14 +1591,14 @@ model EmployeeTimeOff {
 // =============================================================================
 
 model ServiceCategory {
-  id        String        @id @default(uuid(7)) @db.Uuid
-  companyId String        @map("company_id") @db.Uuid
-  parentId  String?       @map("parent_id") @db.Uuid
-  name      String        @db.VarChar(128)
-  description String?     @db.VarChar(1000)
-  color     String?       @db.VarChar(9)
-  sortOrder Int           @default(0) @map("sort_order") @db.SmallInt
-  status    CatalogStatus @default(ACTIVE)
+  id          String        @id @default(uuid(7)) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  parentId    String?       @map("parent_id") @db.Uuid
+  name        String        @db.VarChar(128)
+  description String?       @db.VarChar(1000)
+  color       String?       @db.VarChar(9)
+  sortOrder   Int           @default(0) @map("sort_order") @db.SmallInt
+  status      CatalogStatus @default(ACTIVE)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1523,13 +1620,13 @@ model ServiceCategory {
 ///   false/true  -> car wash bay, equipment hire (resource only)
 ///   false/false -> unassigned consultation
 model Service {
-  id         String        @id @default(uuid(7)) @db.Uuid
-  companyId  String        @map("company_id") @db.Uuid
-  categoryId String?       @map("category_id") @db.Uuid
-  code       String?       @db.VarChar(24)
-  name       String        @db.VarChar(160)
-  description String?      @db.VarChar(2000)
-  status     CatalogStatus @default(ACTIVE)
+  id          String        @id @default(uuid(7)) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  categoryId  String?       @map("category_id") @db.Uuid
+  code        String?       @db.VarChar(24)
+  name        String        @db.VarChar(160)
+  description String?       @db.VarChar(2000)
+  status      CatalogStatus @default(ACTIVE)
 
   durationMin     Int @map("duration_min") @db.SmallInt
   bufferBeforeMin Int @default(0) @map("buffer_before_min") @db.SmallInt
@@ -1625,9 +1722,9 @@ model ServiceAvailabilityRule {
 }
 
 model TaxRate {
-  id        String @id @default(uuid(7)) @db.Uuid
-  companyId String @map("company_id") @db.Uuid
-  name      String @db.VarChar(96)
+  id          String  @id @default(uuid(7)) @db.Uuid
+  companyId   String  @map("company_id") @db.Uuid
+  name        String  @db.VarChar(96)
   /// Parts per million: 10% = 100000. Integer, never a float.
   ratePpm     Int     @map("rate_ppm")
   isInclusive Boolean @default(true) @map("is_inclusive")
@@ -1649,12 +1746,12 @@ model TaxRate {
 // =============================================================================
 
 model ResourceType {
-  id        String       @id @default(uuid(7)) @db.Uuid
-  companyId String       @map("company_id") @db.Uuid
-  key       String       @db.VarChar(48)
-  name      String       @db.VarChar(96)
-  kind      ResourceKind
-  description String?    @db.VarChar(512)
+  id          String       @id @default(uuid(7)) @db.Uuid
+  companyId   String       @map("company_id") @db.Uuid
+  key         String       @db.VarChar(48)
+  name        String       @db.VarChar(96)
+  kind        ResourceKind
+  description String?      @db.VarChar(512)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1762,10 +1859,10 @@ model CompanyCustomer {
   /// NULL until the person proves control of the email/phone in THIS flow.
   customerIdentityId String? @map("customer_identity_id") @db.Uuid
 
-  firstName String  @map("first_name") @db.VarChar(96)
-  lastName  String? @map("last_name") @db.VarChar(96)
-  email     String? @db.Citext
-  phone     String? @db.VarChar(32)
+  firstName String    @map("first_name") @db.VarChar(96)
+  lastName  String?   @map("last_name") @db.VarChar(96)
+  email     String?   @db.Citext
+  phone     String?   @db.VarChar(32)
   birthDate DateTime? @map("birth_date") @db.Date
   gender    String?   @db.VarChar(24)
   locale    String?   @db.VarChar(12)
@@ -1776,15 +1873,15 @@ model CompanyCustomer {
   notes               String?        @db.VarChar(4000)
 
   /// Denormalized statistics, recomputed on appointment/payment transitions.
-  loyaltyPoints    Int       @default(0) @map("loyalty_points")
-  totalVisits      Int       @default(0) @map("total_visits")
-  totalNoShows     Int       @default(0) @map("total_no_shows")
-  totalSpentMinor  BigInt    @default(0) @map("total_spent_minor")
-  firstVisitAt     DateTime? @map("first_visit_at") @db.Timestamptz(3)
-  lastVisitAt      DateTime? @map("last_visit_at") @db.Timestamptz(3)
+  loyaltyPoints   Int       @default(0) @map("loyalty_points")
+  totalVisits     Int       @default(0) @map("total_visits")
+  totalNoShows    Int       @default(0) @map("total_no_shows")
+  totalSpentMinor BigInt    @default(0) @map("total_spent_minor")
+  firstVisitAt    DateTime? @map("first_visit_at") @db.Timestamptz(3)
+  lastVisitAt     DateTime? @map("last_visit_at") @db.Timestamptz(3)
 
-  blockedAt     DateTime? @map("blocked_at") @db.Timestamptz(3)
-  blockedReason String?   @map("blocked_reason") @db.VarChar(512)
+  blockedAt     DateTime?     @map("blocked_at") @db.Timestamptz(3)
+  blockedReason String?       @map("blocked_reason") @db.VarChar(512)
   source        BookingSource @default(STAFF)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1795,15 +1892,15 @@ model CompanyCustomer {
   customerIdentity  CustomerIdentity? @relation(fields: [customerIdentityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   preferredEmployee Employee?         @relation(fields: [companyId, preferredEmployeeId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
 
-  appointments        Appointment[]
-  customerNotes       CompanyCustomerNote[]
-  consents            CustomerConsent[]
-  payments            Payment[]
-  purchasedGiftCards  GiftCard[]            @relation("GiftCardPurchaser")
-  receivedGiftCards   GiftCard[]            @relation("GiftCardRecipient")
-  promotionTargets    PromotionCustomer[]
-  redemptions         PromotionRedemption[]
-  waitlistEntries     WaitlistEntry[]
+  appointments       Appointment[]
+  customerNotes      CompanyCustomerNote[]
+  consents           CustomerConsent[]
+  payments           Payment[]
+  purchasedGiftCards GiftCard[]            @relation("GiftCardPurchaser")
+  receivedGiftCards  GiftCard[]            @relation("GiftCardRecipient")
+  promotionTargets   PromotionCustomer[]
+  redemptions        PromotionRedemption[]
+  waitlistEntries    WaitlistEntry[]
 
   // NOTE: (companyId, email) and (companyId, phone) uniqueness are PARTIAL
   //       (WHERE deleted_at IS NULL AND value IS NOT NULL) — see 001_hardening.sql.
@@ -1817,9 +1914,9 @@ model CompanyCustomer {
 }
 
 model CompanyCustomerNote {
-  id         String  @id @default(uuid(7)) @db.Uuid
-  companyId  String  @map("company_id") @db.Uuid
-  customerId String  @map("customer_id") @db.Uuid
+  id                  String  @id @default(uuid(7)) @db.Uuid
+  companyId           String  @map("company_id") @db.Uuid
+  customerId          String  @map("customer_id") @db.Uuid
   authorCompanyUserId String? @map("author_company_user_id") @db.Uuid
 
   body      String  @db.VarChar(4000)
@@ -1878,11 +1975,11 @@ model Appointment {
   paymentStatus AppointmentPaymentStatus @default(UNPAID) @map("payment_status")
   source        BookingSource            @default(ONLINE)
 
-  startsAt DateTime @map("starts_at") @db.Timestamptz(3)
-  endsAt   DateTime @map("ends_at") @db.Timestamptz(3)
+  startsAt           DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt             DateTime @map("ends_at") @db.Timestamptz(3)
   /// The branch timezone AS IT WAS at booking time. tzdata changes; receipts
   /// must not silently shift.
-  bookedTimezoneName String @map("booked_timezone_name") @db.VarChar(64)
+  bookedTimezoneName String   @map("booked_timezone_name") @db.VarChar(64)
 
   subtotalMinor BigInt @default(0) @map("subtotal_minor")
   discountMinor BigInt @default(0) @map("discount_minor")
@@ -1903,16 +2000,16 @@ model Appointment {
   createdByType ActorType @default(CUSTOMER) @map("created_by_type")
   createdById   String?   @map("created_by_id") @db.Uuid
 
-  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz(3)
-  checkedInAt  DateTime? @map("checked_in_at") @db.Timestamptz(3)
-  completedAt  DateTime? @map("completed_at") @db.Timestamptz(3)
-  noShowAt     DateTime? @map("no_show_at") @db.Timestamptz(3)
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  checkedInAt DateTime? @map("checked_in_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  noShowAt    DateTime? @map("no_show_at") @db.Timestamptz(3)
 
-  cancelledAt        DateTime? @map("cancelled_at") @db.Timestamptz(3)
-  cancelledByType    ActorType? @map("cancelled_by_type")
-  cancelledById      String?    @map("cancelled_by_id") @db.Uuid
-  cancellationReason String?    @map("cancellation_reason") @db.VarChar(512)
-  cancellationFeeMinor BigInt   @default(0) @map("cancellation_fee_minor")
+  cancelledAt          DateTime?  @map("cancelled_at") @db.Timestamptz(3)
+  cancelledByType      ActorType? @map("cancelled_by_type")
+  cancelledById        String?    @map("cancelled_by_id") @db.Uuid
+  cancellationReason   String?    @map("cancellation_reason") @db.VarChar(512)
+  cancellationFeeMinor BigInt     @default(0) @map("cancellation_fee_minor")
 
   /// Reschedule is cancel-and-create, never an in-place time change.
   rescheduledFromId String? @map("rescheduled_from_id") @db.Uuid
@@ -1926,11 +2023,11 @@ model Appointment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company         Company         @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  branch          Branch          @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  customer        CompanyCustomer @relation(fields: [companyId, customerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  currency        Currency        @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
-  bookedTimezone  Timezone        @relation(fields: [bookedTimezoneName], references: [name], onDelete: Restrict, onUpdate: NoAction)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch         Branch          @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  customer       CompanyCustomer @relation(fields: [companyId, customerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  currency       Currency        @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  bookedTimezone Timezone        @relation(fields: [bookedTimezoneName], references: [name], onDelete: Restrict, onUpdate: NoAction)
 
   rescheduledFrom Appointment?  @relation("AppointmentReschedule", fields: [companyId, rescheduledFromId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
   rescheduledTo   Appointment[] @relation("AppointmentReschedule")
@@ -1957,11 +2054,11 @@ model Appointment {
 /// One row per service. Holds the employee assignment, the exact times, and
 /// the price snapshot. Created even for a single-service booking.
 model AppointmentItem {
-  id            String @id @default(uuid(7)) @db.Uuid
-  companyId     String @map("company_id") @db.Uuid
-  appointmentId String @map("appointment_id") @db.Uuid
-  branchId      String @map("branch_id") @db.Uuid
-  serviceId     String @map("service_id") @db.Uuid
+  id            String  @id @default(uuid(7)) @db.Uuid
+  companyId     String  @map("company_id") @db.Uuid
+  appointmentId String  @map("appointment_id") @db.Uuid
+  branchId      String  @map("branch_id") @db.Uuid
+  serviceId     String  @map("service_id") @db.Uuid
   /// NULLABLE: resource-only bookings (car wash bay, equipment hire) have no
   /// employee. The exclusion constraint is filtered on IS NOT NULL.
   employeeId    String? @map("employee_id") @db.Uuid
@@ -2072,8 +2169,8 @@ model WaitlistEntry {
   desiredTo   DateTime @map("desired_to") @db.Timestamptz(3)
   note        String?  @db.VarChar(512)
 
-  offeredAt  DateTime? @map("offered_at") @db.Timestamptz(3)
-  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
+  offeredAt DateTime? @map("offered_at") @db.Timestamptz(3)
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -2108,18 +2205,18 @@ model Payment {
   purpose PaymentPurpose @default(BOOKING)
   status  PaymentStatus  @default(PENDING)
 
-  amountMinor    BigInt @map("amount_minor")
-  feeMinor       BigInt @default(0) @map("fee_minor")
-  netMinor       BigInt @default(0) @map("net_minor")
-  refundedMinor  BigInt @default(0) @map("refunded_minor")
-  currencyCode   String @map("currency_code") @db.Char(3)
+  amountMinor   BigInt @map("amount_minor")
+  feeMinor      BigInt @default(0) @map("fee_minor")
+  netMinor      BigInt @default(0) @map("net_minor")
+  refundedMinor BigInt @default(0) @map("refunded_minor")
+  currencyCode  String @map("currency_code") @db.Char(3)
 
-  provider          String? @db.VarChar(32)
-  providerIntentId  String? @map("provider_intent_id") @db.VarChar(128)
-  providerChargeId  String? @map("provider_charge_id") @db.VarChar(128)
+  provider         String? @db.VarChar(32)
+  providerIntentId String? @map("provider_intent_id") @db.VarChar(128)
+  providerChargeId String? @map("provider_charge_id") @db.VarChar(128)
   /// Globally unique. A retried checkout returns the existing row rather than
   /// charging twice.
-  idempotencyKey    String? @unique @map("idempotency_key") @db.VarChar(128)
+  idempotencyKey   String? @unique @map("idempotency_key") @db.VarChar(128)
 
   receivedByCompanyUserId String? @map("received_by_company_user_id") @db.Uuid
   failureReason           String? @map("failure_reason") @db.VarChar(512)
@@ -2204,10 +2301,10 @@ model Invoice {
   totalMinor    BigInt @default(0) @map("total_minor")
   currencyCode  String @map("currency_code") @db.Char(3)
 
-  issuedAt  DateTime? @map("issued_at") @db.Timestamptz(3)
-  pdfFileId String?   @map("pdf_file_id") @db.Uuid
+  issuedAt        DateTime? @map("issued_at") @db.Timestamptz(3)
+  pdfFileId       String?   @map("pdf_file_id") @db.Uuid
   /// Placeholder for jurisdiction-specific fiscalization (e.g. ebarimt).
-  fiscalReference String? @map("fiscal_reference") @db.VarChar(128)
+  fiscalReference String?   @map("fiscal_reference") @db.VarChar(128)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -2232,14 +2329,14 @@ model InvoiceLine {
   companyId String @map("company_id") @db.Uuid
   invoiceId String @map("invoice_id") @db.Uuid
 
-  description   String @db.VarChar(256)
-  quantity      Int    @default(1) @db.SmallInt
+  description    String @db.VarChar(256)
+  quantity       Int    @default(1) @db.SmallInt
   unitPriceMinor BigInt @map("unit_price_minor")
-  discountMinor BigInt @default(0) @map("discount_minor")
-  taxRatePpm    Int    @default(0) @map("tax_rate_ppm")
-  taxMinor      BigInt @default(0) @map("tax_minor")
-  totalMinor    BigInt @map("total_minor")
-  sortOrder     Int    @default(0) @map("sort_order") @db.SmallInt
+  discountMinor  BigInt @default(0) @map("discount_minor")
+  taxRatePpm     Int    @default(0) @map("tax_rate_ppm")
+  taxMinor       BigInt @default(0) @map("tax_minor")
+  totalMinor     BigInt @map("total_minor")
+  sortOrder      Int    @default(0) @map("sort_order") @db.SmallInt
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -2298,14 +2395,14 @@ model Promotion {
   description String?         @db.VarChar(1000)
   status      PromotionStatus @default(DRAFT)
 
-  discountType DiscountType @map("discount_type")
+  discountType        DiscountType @map("discount_type")
   /// PERCENTAGE: basis points (15% = 1500). Integer, never a float.
-  discountValueBps    Int?    @map("discount_value_bps")
+  discountValueBps    Int?         @map("discount_value_bps")
   /// FIXED_AMOUNT: minor units.
-  discountAmountMinor BigInt? @map("discount_amount_minor")
+  discountAmountMinor BigInt?      @map("discount_amount_minor")
   /// Caps a percentage discount.
-  maxDiscountMinor    BigInt? @map("max_discount_minor")
-  currencyCode        String  @map("currency_code") @db.Char(3)
+  maxDiscountMinor    BigInt?      @map("max_discount_minor")
+  currencyCode        String       @map("currency_code") @db.Char(3)
 
   minPurchaseMinor BigInt? @map("min_purchase_minor")
 
@@ -2317,11 +2414,11 @@ model Promotion {
   startsAt DateTime  @map("starts_at") @db.Timestamptz(3)
   endsAt   DateTime? @map("ends_at") @db.Timestamptz(3)
 
-  newCustomersOnly Boolean @default(false) @map("new_customers_only")
-  requiresCoupon   Boolean @default(false) @map("requires_coupon")
-  isAutoApply      Boolean @default(false) @map("is_auto_apply")
-  isStackable      Boolean @default(false) @map("is_stackable")
-  priority         Int     @default(100) @db.SmallInt
+  newCustomersOnly  Boolean         @default(false) @map("new_customers_only")
+  requiresCoupon    Boolean         @default(false) @map("requires_coupon")
+  isAutoApply       Boolean         @default(false) @map("is_auto_apply")
+  isStackable       Boolean         @default(false) @map("is_stackable")
+  priority          Int             @default(100) @db.SmallInt
   appliesToChannels BookingSource[] @default([]) @map("applies_to_channels")
 
   maxRedemptions            Int? @map("max_redemptions")
@@ -2465,13 +2562,13 @@ model PromotionRedemption {
 // =============================================================================
 
 model GiftCard {
-  id        String @id @default(uuid(7)) @db.Uuid
-  companyId String @map("company_id") @db.Uuid
+  id        String  @id @default(uuid(7)) @db.Uuid
+  companyId String  @map("company_id") @db.Uuid
   /// GLOBALLY unique HMAC of the code. Global rather than per-company so a
   /// redemption lookup cannot match another tenant's card even before the
   /// company_id predicate applies. Plaintext is never stored or logged.
-  codeHash  String @unique @map("code_hash") @db.VarChar(88)
-  codeLast4 String @map("code_last4") @db.VarChar(4)
+  codeHash  String  @unique @map("code_hash") @db.VarChar(88)
+  codeLast4 String  @map("code_last4") @db.VarChar(4)
   pinHash   String? @map("pin_hash") @db.VarChar(88)
 
   status GiftCardStatus @default(PENDING_ACTIVATION)
@@ -2500,12 +2597,12 @@ model GiftCard {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company     Company          @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  currency    Currency         @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
-  branch      Branch?          @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  purchasedBy CompanyCustomer? @relation("GiftCardPurchaser", fields: [companyId, purchasedByCustomerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  issuedTo    CompanyCustomer? @relation("GiftCardRecipient", fields: [companyId, issuedToCustomerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  purchasePayment Payment?     @relation(fields: [companyId, purchasePaymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currency        Currency         @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  branch          Branch?          @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  purchasedBy     CompanyCustomer? @relation("GiftCardPurchaser", fields: [companyId, purchasedByCustomerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  issuedTo        CompanyCustomer? @relation("GiftCardRecipient", fields: [companyId, issuedToCustomerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  purchasePayment Payment?         @relation(fields: [companyId, purchasePaymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
 
   transactions GiftCardTransaction[]
 
@@ -2606,9 +2703,9 @@ model Notification {
   deliveredAt  DateTime? @map("delivered_at") @db.Timestamptz(3)
   failedAt     DateTime? @map("failed_at") @db.Timestamptz(3)
 
-  failureReason String? @map("failure_reason") @db.VarChar(1000)
-  retryCount    Int     @default(0) @map("retry_count") @db.SmallInt
-  maxRetries    Int     @default(3) @map("max_retries") @db.SmallInt
+  failureReason String?   @map("failure_reason") @db.VarChar(1000)
+  retryCount    Int       @default(0) @map("retry_count") @db.SmallInt
+  maxRetries    Int       @default(3) @map("max_retries") @db.SmallInt
   nextRetryAt   DateTime? @map("next_retry_at") @db.Timestamptz(3)
 
   provider          String? @db.VarChar(32)
@@ -2632,14 +2729,14 @@ model Notification {
 }
 
 model NotificationPreference {
-  id        String              @id @default(uuid(7)) @db.Uuid
-  companyId String              @map("company_id") @db.Uuid
-  subjectType RecipientType     @map("subject_type")
-  subjectId   String            @map("subject_id") @db.Uuid
+  id          String              @id @default(uuid(7)) @db.Uuid
+  companyId   String              @map("company_id") @db.Uuid
+  subjectType RecipientType       @map("subject_type")
+  subjectId   String              @map("subject_id") @db.Uuid
   channel     NotificationChannel
   /// NULL = applies to every notification type on this channel.
-  type        String?           @db.VarChar(64)
-  isEnabled   Boolean           @default(true) @map("is_enabled")
+  type        String?             @db.VarChar(64)
+  isEnabled   Boolean             @default(true) @map("is_enabled")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -2660,17 +2757,17 @@ model NotificationPreference {
 /// retention is DETACH PARTITION rather than a bloating DELETE.
 /// companyId is NULLABLE: platform-level actions have no tenant.
 model AuditLog {
-  id         String    @default(uuid(7)) @db.Uuid
-  companyId  String?   @map("company_id") @db.Uuid
-  occurredAt DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  id         String   @default(uuid(7)) @db.Uuid
+  companyId  String?  @map("company_id") @db.Uuid
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  actorType ActorType @map("actor_type")
-  actorId   String?   @map("actor_id") @db.Uuid
+  actorType            ActorType @map("actor_type")
+  actorId              String?   @map("actor_id") @db.Uuid
   /// Denormalized name/email AS AT the time. An audit log that depends on a
   /// join to mutable data is not an audit log.
-  actorLabel String   @map("actor_label") @db.VarChar(160)
+  actorLabel           String    @map("actor_label") @db.VarChar(160)
   /// Set when the action was taken under an impersonation grant.
-  impersonationGrantId String? @map("impersonation_grant_id") @db.Uuid
+  impersonationGrantId String?   @map("impersonation_grant_id") @db.Uuid
 
   action       String  @db.VarChar(96)
   resourceType String  @map("resource_type") @db.VarChar(48)
@@ -2728,9 +2825,9 @@ model IdempotencyKey {
   key       String @db.VarChar(160)
   endpoint  String @db.VarChar(160)
 
-  requestHash  String  @map("request_hash") @db.VarChar(88)
-  statusCode   Int?    @map("status_code") @db.SmallInt
-  responseBody Json?   @map("response_body") @db.JsonB
+  requestHash  String    @map("request_hash") @db.VarChar(88)
+  statusCode   Int?      @map("status_code") @db.SmallInt
+  responseBody Json?     @map("response_body") @db.JsonB
   lockedAt     DateTime? @map("locked_at") @db.Timestamptz(3)
 
   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Undarga library (framework-free package)",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "composite": false
+    // NOTE: rootDir and outDir are deliberately NOT set here. Path-valued
+    // options in an extended config resolve relative to the file that declares
+    // them, so putting "src" here would point every consumer at
+    // packages/tsconfig/src. Each package sets its own.
+  }
+}

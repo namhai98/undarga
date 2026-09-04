@@ -38,7 +38,7 @@ export class CustomDomainTenantResolver implements TenantResolver {
   ) {}
 
   isEnabled(): boolean {
-    return this.config.tenantResolvers.customDomain;
+    return this.config.tenancy.resolvers.customDomain;
   }
 
   async resolve(input: TenantResolutionInput): Promise<TenantCandidate | null> {
@@ -46,7 +46,7 @@ export class CustomDomainTenantResolver implements TenantResolver {
     if (!hostname) return null;
 
     // Ignore the platform's own apex: it is not a tenant domain.
-    if (hostname === this.config.subdomainRoot) return null;
+    if (hostname === this.config.tenancy.subdomainRoot) return null;
 
     const companyId = await this.directory.findCompanyIdByVerifiedHostname(hostname);
     if (!companyId) return null;

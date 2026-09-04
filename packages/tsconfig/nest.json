@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Undarga NestJS app",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    // Nest's DI reads parameter types at runtime from emitted metadata.
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    // Nest injects via the constructor, so a property is legitimately assigned
+    // after construction; the base strictness would flag every one.
+    "strictPropertyInitialization": false,
+    "incremental": true
+  }
+}

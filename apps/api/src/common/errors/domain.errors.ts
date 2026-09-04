@@ -6,38 +6,18 @@
  * once, here, rather than re-decided in every controller.
  */
 
-export type ErrorCode =
-  // authentication
-  | 'UNAUTHENTICATED'
-  | 'INVALID_CREDENTIALS'
-  | 'TOKEN_EXPIRED'
-  | 'TOKEN_AUDIENCE_MISMATCH'
-  | 'SESSION_REVOKED'
-  | 'REFRESH_TOKEN_REUSED'
-  // tenancy
-  | 'TENANT_CONTEXT_MISSING'
-  | 'TENANT_UNRESOLVED'
-  | 'TENANT_AMBIGUOUS'
-  | 'TENANT_NOT_FOUND'
-  | 'TENANT_SUSPENDED'
-  | 'TENANT_READ_ONLY'
-  | 'MEMBERSHIP_INACTIVE'
-  // authorization
-  | 'PERMISSION_DENIED'
-  | 'PLATFORM_ACCESS_REQUIRED'
-  | 'PLATFORM_ACCESS_NOT_TARGETED'
-  | 'BRANCH_OUT_OF_SCOPE'
-  // data access
-  | 'UNSCOPED_TENANT_QUERY'
-  | 'CROSS_TENANT_REFERENCE'
-  | 'RESOURCE_NOT_FOUND'
-  // jobs
-  | 'JOB_TENANT_MISSING'
-  | 'JOB_TENANT_MISMATCH'
-  // generic
-  | 'VALIDATION_FAILED'
-  | 'CONFLICT'
-  | 'INTERNAL_ERROR';
+import type { ApiErrorCode } from '@undarga/shared';
+
+/**
+ * The error vocabulary, re-exported from the shared wire contract.
+ *
+ * Declared in `@undarga/shared` rather than here because the web app branches
+ * on these codes — `TENANT_UNRESOLVED` opens the company picker,
+ * `SESSION_REVOKED` forces a sign-out. Single-sourcing them makes drift a
+ * compile error on whichever side falls behind, instead of a silent
+ * behavioural bug.
+ */
+export type ErrorCode = ApiErrorCode;
 
 export abstract class DomainError extends Error {
   abstract readonly code: ErrorCode;
@@ -120,7 +100,7 @@ export class RefreshTokenReusedError extends DomainError {
 export class MissingTenantContextError extends DomainError {
   readonly code = 'TENANT_CONTEXT_MISSING' as const;
   readonly status = 500;
-  readonly exposeMessage = false;
+  override readonly exposeMessage = false;
   constructor(operation?: string) {
     super(
       `Tenant context was requested${operation ? ` for "${operation}"` : ''} but none is set. ` +
@@ -255,7 +235,7 @@ export class BranchOutOfScopeError extends DomainError {
 export class UnscopedTenantQueryError extends DomainError {
   readonly code = 'UNSCOPED_TENANT_QUERY' as const;
   readonly status = 500;
-  readonly exposeMessage = false;
+  override readonly exposeMessage = false;
   constructor(model: string, operation: string) {
     super(
       `Refused an unscoped ${operation} on company-owned model "${model}": no companyId ` +
@@ -289,7 +269,7 @@ export class ResourceNotFoundError extends DomainError {
 export class JobTenantMissingError extends DomainError {
   readonly code = 'JOB_TENANT_MISSING' as const;
   readonly status = 500;
-  readonly exposeMessage = false;
+  override readonly exposeMessage = false;
   constructor(jobName: string) {
     super(
       `Job "${jobName}" was enqueued without companyId. Tenant-scoped jobs must carry ` +
@@ -301,7 +281,7 @@ export class JobTenantMissingError extends DomainError {
 export class JobTenantMismatchError extends DomainError {
   readonly code = 'JOB_TENANT_MISMATCH' as const;
   readonly status = 500;
-  readonly exposeMessage = false;
+  override readonly exposeMessage = false;
   constructor(jobName: string, expected: string, actual: string) {
     super(
       `Job "${jobName}" referenced an entity belonging to company ${actual} while running ` +

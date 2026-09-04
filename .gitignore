@@ -1,15 +1,72 @@
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
 node_modules/
+.pnpm-store/
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
 dist/
 build/
+out/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+generated/
+
+# ---------------------------------------------------------------------------
+# Caches
+# ---------------------------------------------------------------------------
+.turbo/
+.eslintcache
 coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Secrets — NEVER commit these
+#
+# .env holds real database passwords, the JWT signing secret and the token
+# pepper. Only .env.example, which contains placeholders, is tracked.
+# ---------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
-*.log
-.DS_Store
-.turbo/
-.pnpm-store/
-generated/
+.env.development
+.env.production
+.env.test
+!.env.example
+*.pem
+*.key
+!packages/**/*.key.ts
 
-# TypeScript incremental build metadata
-*.tsbuildinfo
+# ---------------------------------------------------------------------------
+# Local infrastructure state
+# Docker named volumes live outside the repo, but bind mounts and dumps land here.
+# ---------------------------------------------------------------------------
+infrastructure/docker/data/
+*.sql.gz
+*.dump
+
+# ---------------------------------------------------------------------------
+# Editors
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+*.swp
+*.swo
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Compiled output of prisma/seed.ts — ts-node runs the .ts directly.
+apps/api/prisma/*.js
+apps/api/prisma/*.d.ts

@@ -1,48 +1,61 @@
-# Local development stack.
+# Local development infrastructure.
 #
-# NOTE on pgbouncer: RLS relies on `SET LOCAL app.current_company_id`, which is
-# transaction-scoped. pgbouncer MUST run in transaction pooling mode. Session
-# mode would leak tenant context between requests — see docs/DATABASE.md 4.7.
+#   docker compose up -d
+#
+# Runs only the stateful services. The apps run on the host, because the
+# feedback loop matters more than parity here: `pnpm dev` gives sub-second HMR
+# and a debugger that attaches without extra plumbing, and neither survives
+# being containerised well. Production images live in infrastructure/docker/.
+#
+# NOTE ON POOLING: row-level security depends on `SET LOCAL
+# app.current_company_id`, which is transaction-scoped. If a pgbouncer is ever
+# put in front of Postgres it MUST run in transaction pooling mode — session
+# mode leaks tenant context between requests. See docs/DATABASE.md §4.7.
+
+name: undarga
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: undarga-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: undarga
       POSTGRES_PASSWORD: undarga_dev
       POSTGRES_DB: undarga
+      # Deterministic collation, so index ordering matches across machines.
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
     ports:
       - '5432:5432'
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Mounted at /var/lib/postgresql, NOT .../data.
+      #
+      # Postgres 18 changed the image's layout: PGDATA moved to a
+      # major-version-specific subdirectory (/var/lib/postgresql/18/docker) so
+      # that `pg_upgrade --link` can run without crossing a mount boundary. The
+      # entrypoint now treats a volume mounted at the old .../data path as a
+      # stray data directory and refuses to start — the container crash-loops
+      # with "unused mount/volume". Mounting one level up is the configuration
+      # upstream documents, and it keeps future major upgrades possible without
+      # relocating the volume.
+      - postgres-data:/var/lib/postgresql
+      # Creates the e2e database alongside the dev one on first start.
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U undarga -d undarga']
+      # `pg_isready` alone returns true while the init scripts are still
+      # running, so a real query is used instead.
+      test: ['CMD-SHELL', 'psql -U undarga -d undarga -c "SELECT 1" || exit 1']
       interval: 5s
       timeout: 5s
-      retries: 10
-
-  # Separate database for the e2e isolation suite so it can be truncated freely.
-  postgres-test:
-    image: postgres:16-alpine
-    container_name: undarga-postgres-test
-    environment:
-      POSTGRES_USER: undarga
-      POSTGRES_PASSWORD: undarga_dev
-      POSTGRES_DB: undarga_test
-    ports:
-      - '5433:5432'
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U undarga -d undarga_test']
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 20s
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: undarga-redis
-    command: ['redis-server', '--appendonly', 'yes']
+    restart: unless-stopped
+    # appendonly so booking holds and rate-limit counters survive a restart.
+    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1']
     ports:
       - '6379:6379'
     volumes:
@@ -55,4 +68,6 @@ services:
 
 volumes:
   postgres-data:
+    name: undarga-postgres-data
   redis-data:
+    name: undarga-redis-data

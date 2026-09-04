@@ -134,6 +134,7 @@ ALTER TABLE appointment_resource DROP CONSTRAINT IF EXISTS appointment_resource_
 ALTER TABLE appointment_resource DROP CONSTRAINT IF EXISTS appointment_resource_time_order;
 ALTER TABLE branch_closure DROP CONSTRAINT IF EXISTS branch_closure_time_order;
 ALTER TABLE business_hours DROP CONSTRAINT IF EXISTS business_hours_dow;
+ALTER TABLE company_invitation DROP CONSTRAINT IF EXISTS company_invitation_terminal_state;
 ALTER TABLE company_settings DROP CONSTRAINT IF EXISTS settings_bps_range;
 ALTER TABLE employee_schedule DROP CONSTRAINT IF EXISTS emp_schedule_dow;
 ALTER TABLE employee_time_off DROP CONSTRAINT IF EXISTS time_off_time_order;
@@ -272,6 +273,12 @@ ALTER TABLE branch_closure         ADD CONSTRAINT branch_closure_time_order     
 ALTER TABLE employee_time_off      ADD CONSTRAINT time_off_time_order           CHECK (ends_at > starts_at);
 ALTER TABLE waitlist_entry         ADD CONSTRAINT waitlist_time_order           CHECK (desired_to > desired_from);
 
+-- An invitation has one terminal state, not two. Status is derived from these
+-- timestamps, so a row that is both accepted and revoked has no meaning and
+-- would make the derivation ambiguous.
+ALTER TABLE company_invitation ADD CONSTRAINT company_invitation_terminal_state
+  CHECK (accepted_at IS NULL OR revoked_at IS NULL);
+
 -- Day-of-week domain
 ALTER TABLE business_hours              ADD CONSTRAINT business_hours_dow  CHECK (day_of_week BETWEEN 0 AND 6);
 ALTER TABLE employee_schedule           ADD CONSTRAINT emp_schedule_dow    CHECK (day_of_week BETWEEN 0 AND 6);
@@ -391,6 +398,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS company_role_company_key_uq
 CREATE UNIQUE INDEX IF NOT EXISTS tax_rate_company_name_uq
   ON tax_rate (company_id, name) WHERE deleted_at IS NULL;
 
+-- At most one LIVE invitation per address per company.
+--
+-- Filtered on the terminal states rather than on deleted_at (invitations are
+-- not soft-deleted): re-inviting someone after they accepted, or after the
+-- invitation was revoked or expired, must stay possible. Two simultaneously
+-- valid tokens for one address must not — an admin who "re-sends" would
+-- otherwise leave the earlier link working, and revoking the visible one would
+-- not close the door.
+CREATE UNIQUE INDEX IF NOT EXISTS company_invitation_live_email_uq
+  ON company_invitation (company_id, email)
+  WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
 -- Customer contact uniqueness within a tenant, ignoring soft-deleted rows.
 CREATE UNIQUE INDEX IF NOT EXISTS company_customer_email_uq
   ON company_customer (company_id, email)
@@ -502,7 +521,7 @@ DECLARE
   tenant_tables text[] := ARRAY[
     'company_settings','company_branding','company_domain',
     'company_role','company_role_permission','company_user','company_user_role',
-    'company_user_branch',
+    'company_user_branch','company_invitation','company_invitation_role',
     'branch','branch_settings','business_hours','branch_closure',
     'employee','employee_profile','employee_branch','employee_service',
     'employee_schedule','employee_schedule_break','employee_schedule_exception',

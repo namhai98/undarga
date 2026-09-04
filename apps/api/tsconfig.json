@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@undarga/tsconfig/nest.json",
   "compilerOptions": {
     "baseUrl": ".",
     "outDir": "./dist",
@@ -15,6 +15,6 @@
     "compilerOptions": { "module": "commonjs" },
     "transpileOnly": false
   },
-  "include": ["src/**/*", "test/**/*", "prisma/**/*.ts", "scripts/**/*.ts"],
+  "include": ["src/**/*", "test/**/*", "prisma/**/*.ts", "scripts/**/*.ts", "eslint.config.js"],
   "exclude": ["node_modules", "dist"]
 }

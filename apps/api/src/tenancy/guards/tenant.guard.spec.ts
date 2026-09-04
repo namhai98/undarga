@@ -145,7 +145,7 @@ describe('TenantGuard', () => {
     });
 
     it('fails when nothing resolves a company', async () => {
-      const guard = build({}, (async () => null) as never, jest.fn() as never);
+      const guard = build({}, (async () => null), jest.fn() as never);
       await withActor(userA, async () => {
         await expect(guard.canActivate(executionContext())).rejects.toThrow(TenantUnresolvedError);
       });
@@ -167,7 +167,7 @@ describe('TenantGuard', () => {
           source: 'ROUTE_PARAM' as const,
           explicit: true,
           matchedBy: ['route-param'],
-        })) as never,
+        })),
         authorize as never,
       );
 
@@ -191,10 +191,10 @@ describe('TenantGuard', () => {
           source: 'ROUTE_PARAM' as const,
           explicit: true,
           matchedBy: [],
-        })) as never,
+        })),
         (async () => {
           throw new TenantNotFoundError();
-        }) as never,
+        }),
       );
 
       await withActor(userA, async () => {
@@ -213,8 +213,8 @@ describe('TenantGuard', () => {
           source: 'ACTIVE_COMPANY_CLAIM' as const,
           explicit: false,
           matchedBy: ['active-company-claim'],
-        })) as never,
-        (async () => tenantFor(COMPANY_A)) as never,
+        })),
+        (async () => tenantFor(COMPANY_A)),
       );
 
       await withActor(userA, async () => {
@@ -222,7 +222,7 @@ describe('TenantGuard', () => {
         await expect(guard.canActivate(ctx)).resolves.toBe(true);
         expect(context.requireCompanyId()).toBe(COMPANY_A);
 
-        const request = ctx.switchToHttp().getRequest() as Record<string, unknown>;
+        const request = ctx.switchToHttp().getRequest();
         expect((request[REQUEST_CONTEXT_KEY] as { tenant: TenantContext }).tenant.company.id).toBe(
           COMPANY_A,
         );
@@ -236,7 +236,7 @@ describe('TenantGuard', () => {
         explicit: false,
         matchedBy: [],
       }));
-      const guard = build({}, resolve as never, (async () => tenantFor(COMPANY_A)) as never);
+      const guard = build({}, resolve as never, (async () => tenantFor(COMPANY_A)));
 
       await withActor(userA, async () => {
         await guard.canActivate(
@@ -271,7 +271,7 @@ describe('TenantGuard', () => {
           source: 'ACTIVE_COMPANY_CLAIM' as const,
           explicit: false,
           matchedBy: [],
-        })) as never,
+        })),
         jest.fn() as never,
       );
 
@@ -290,8 +290,8 @@ describe('TenantGuard', () => {
           source: 'HEADER' as const,
           explicit: true,
           matchedBy: ['header'],
-        })) as never,
-        (async () => tenantFor(COMPANY_A, true)) as never,
+        })),
+        (async () => tenantFor(COMPANY_A, true)),
       );
 
       await withActor(operator, async () => {

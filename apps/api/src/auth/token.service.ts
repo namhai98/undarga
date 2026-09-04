@@ -28,7 +28,7 @@ export class TokenService {
   ) {}
 
   get accessTtlSeconds(): number {
-    return this.config.jwtAccessTtlSeconds;
+    return this.config.auth.jwtAccessTtlSeconds;
   }
 
   signStaffAccess(input: {
@@ -128,7 +128,7 @@ export class TokenService {
 
     try {
       claims = this.jwt.verify<AccessClaims>(token, {
-        secret: this.config.jwtAccessSecret,
+        secret: this.config.auth.jwtAccessSecret,
         issuer: ISSUER,
         // Checked explicitly below so the failure is a typed domain error
         // rather than a generic jsonwebtoken message.
@@ -147,9 +147,9 @@ export class TokenService {
 
   private sign(claims: Record<string, unknown>): string {
     return this.jwt.sign(claims, {
-      secret: this.config.jwtAccessSecret,
+      secret: this.config.auth.jwtAccessSecret,
       issuer: ISSUER,
-      expiresIn: this.config.jwtAccessTtlSeconds,
+      expiresIn: this.config.auth.jwtAccessTtlSeconds,
     });
   }
 }

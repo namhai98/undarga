@@ -145,7 +145,7 @@ describe('RequestContextService', () => {
               observed.push(`${companyId}:${service.requireCompanyId()}`);
               resolve();
             } catch (error) {
-              reject(error);
+              reject(error instanceof Error ? error : new Error(String(error)));
             }
           });
         });

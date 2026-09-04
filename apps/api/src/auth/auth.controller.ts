@@ -1,20 +1,20 @@
-import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
-import { UnauthenticatedError } from '../common/errors';
+import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import { SessionRevokedError, UnauthenticatedError } from '../common/errors';
 import { ZodValidationPipe } from '../common/pipes';
 import { NoTenant } from '../tenancy/decorators/tenant.decorators';
 import { isCompanyUser, isPlatformUser, type Actor } from '../tenancy/context/context.types';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public, Realm } from './decorators/public.decorator';
+import { SessionCookieService } from './session-cookie.service';
 import {
   loginSchema,
-  refreshSchema,
   switchCompanySchema,
   type LoginDto,
-  type RefreshDto,
   type SwitchCompanyDto,
 } from './dto/auth.dto';
+import type { AuthenticatedSession } from './auth.service';
 
 /**
  * Identity endpoints.
@@ -27,33 +27,80 @@ import {
 @Controller({ path: 'auth', version: '1' })
 @NoTenant()
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly cookies: SessionCookieService,
+  ) {}
 
   @Post('login')
   @Public()
   @HttpCode(200)
-  async login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto, @Req() req: Request) {
-    return this.auth.loginStaff(dto.email, dto.password, {
+  async login(
+    @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.auth.loginStaff(dto.email, dto.password, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
+
+    return this.issue(res, session);
   }
 
+  /**
+   * Mint a new access token from the refresh cookie.
+   *
+   * Public because the access token is, by definition, expired by the time
+   * anyone calls this. The refresh cookie is the credential, and the browser
+   * supplies it — the request body is ignored entirely.
+   */
   @Post('refresh')
   @Public()
   @HttpCode(200)
-  async refresh(@Body(new ZodValidationPipe(refreshSchema)) dto: RefreshDto, @Req() req: Request) {
-    return this.auth.refreshStaff(dto.refreshToken, {
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = this.cookies.read(req);
+
+    if (!refreshToken) {
+      // No cookie means no session to refresh. Same error as a revoked one:
+      // there is nothing to distinguish for a caller who holds neither.
+      throw new SessionRevokedError();
+    }
+
+    const session = await this.auth.refreshStaff(refreshToken, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
+
+    return this.issue(res, session);
   }
 
   @Post('logout')
   @HttpCode(204)
-  async logout(@CurrentUser() actor: Actor | null): Promise<void> {
+  async logout(
+    @CurrentUser() actor: Actor | null,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    // Clear the cookie before the authentication check. A caller whose access
+    // token has already expired still wants the browser to stop holding a
+    // refresh token, and leaving it in place would make "sign out" quietly
+    // depend on how recently you had signed in.
+    this.cookies.clear(res);
+
     if (!actor || !isCompanyUser(actor)) throw new UnauthenticatedError();
     await this.auth.logoutStaff(actor.sessionId);
+  }
+
+  /**
+   * Move the refresh token out of the response body and into the cookie.
+   *
+   * Every path that mints a session goes through here, so there is one place
+   * to check that the long-lived credential never reaches JavaScript.
+   */
+  private issue(res: Response, session: AuthenticatedSession) {
+    const { refreshToken, ...body } = session;
+    this.cookies.set(res, refreshToken);
+    return body;
   }
 
   /**
@@ -102,9 +149,20 @@ export class AuthController {
   async switchCompany(
     @Body(new ZodValidationPipe(switchCompanySchema)) dto: SwitchCompanyDto,
     @CurrentUser() actor: Actor | null,
+    @Res({ passthrough: true }) res: Response,
   ) {
     if (!actor || !isCompanyUser(actor)) throw new UnauthenticatedError();
-    return this.auth.switchCompany(actor.userAccountId, actor.sessionId, dto.companyId);
+
+    const session = await this.auth.switchCompany(
+      actor.userAccountId,
+      actor.sessionId,
+      dto.companyId,
+    );
+
+    // The old session was retired, so the old refresh cookie is dead. Replacing
+    // it here is what keeps a reload after a switch landing in the new company
+    // rather than signing the user out.
+    return this.issue(res, session);
   }
 }
 

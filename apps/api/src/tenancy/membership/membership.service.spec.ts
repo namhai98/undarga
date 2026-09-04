@@ -92,7 +92,7 @@ function fakeDirectory(companies: Record<string, { status: string; deletedAt?: D
 }
 
 // Caching off, so each test observes a fresh lookup.
-const config = { tenantCacheTtlSeconds: 0 } as AppConfig;
+const config = { tenancy: { cacheTtlSeconds: 0 } } as AppConfig;
 
 describe('MembershipService', () => {
   describe('company users', () => {

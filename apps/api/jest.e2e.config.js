@@ -3,7 +3,7 @@
  * migrated AND 001_hardening.sql applied — the isolation suite asserts on RLS
  * behaviour, so a database without the hardening SQL will produce false passes.
  *
- *   docker compose up -d postgres-test
+ *   docker compose up -d postgres
  *   pnpm db:deploy          # migrate + harden
  *   pnpm test:e2e
  *
@@ -20,6 +20,7 @@ module.exports = {
     '^@test/(.*)$': '<rootDir>/test/$1',
   },
   globalSetup: '<rootDir>/test/support/global-setup.ts',
+  setupFiles: ['<rootDir>/test/support/setup-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/test/support/setup-after-env.ts'],
   testTimeout: 30000,
   maxWorkers: 1,

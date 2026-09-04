@@ -27,7 +27,7 @@ export class HeaderTenantResolver implements TenantResolver {
   constructor(private readonly config: AppConfig) {}
 
   isEnabled(): boolean {
-    return this.config.tenantResolvers.header;
+    return this.config.tenancy.resolvers.header;
   }
 
   resolve(input: TenantResolutionInput): TenantCandidate | null {

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { applyTestDatabaseEnv } from './test-env';
 
 /**
  * Refuses to run the isolation suite against a database that cannot prove
@@ -13,12 +14,15 @@ import { PrismaClient } from '@prisma/client';
  * is not.
  */
 export default async function globalSetup(): Promise<void> {
+  // Before anything else: never let this suite touch the development database.
+  applyTestDatabaseEnv();
+
   const url = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 
   if (!url) {
     throw new Error(
       'No database URL. Isolation tests need a real PostgreSQL:\n' +
-        '  docker compose up -d postgres-test\n' +
+        '  docker compose up -d postgres\n' +
         '  pnpm db:deploy\n' +
         '  pnpm test:e2e',
     );
@@ -31,7 +35,7 @@ export default async function globalSetup(): Promise<void> {
   } catch (error) {
     throw new Error(
       `Cannot reach the test database at ${redact(url)}.\n` +
-        'Start it with: docker compose up -d postgres-test\n' +
+        'Start it with: docker compose up -d postgres\n' +
         `Underlying error: ${(error as Error).message}`,
     );
   }

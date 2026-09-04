@@ -7,8 +7,10 @@ import { TenancyModule } from '../tenancy/tenancy.module';
 import { AuthController, PlatformAuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { MeController } from './me.controller';
 import { IdentityRepository } from './identity.repository';
 import { PasswordService } from './password.service';
+import { SessionCookieService } from './session-cookie.service';
 import { SessionDenyList } from './session-deny-list';
 import { TokenHashService } from './token-hash.service';
 import { TokenService } from './token.service';
@@ -22,12 +24,12 @@ import { TokenService } from './token.service';
     JwtModule.registerAsync({
       inject: [AppConfig],
       useFactory: (config: AppConfig) => ({
-        secret: config.jwtAccessSecret,
-        signOptions: { expiresIn: config.jwtAccessTtlSeconds },
+        secret: config.auth.jwtAccessSecret,
+        signOptions: { expiresIn: config.auth.jwtAccessTtlSeconds },
       }),
     }),
   ],
-  controllers: [AuthController, PlatformAuthController],
+  controllers: [AuthController, PlatformAuthController, MeController],
   providers: [
     AuthService,
     IdentityRepository,
@@ -35,6 +37,7 @@ import { TokenService } from './token.service';
     TokenService,
     TokenHashService,
     SessionDenyList,
+    SessionCookieService,
     JwtAuthGuard,
   ],
   exports: [AuthService, TokenService, TokenHashService, SessionDenyList, JwtAuthGuard],

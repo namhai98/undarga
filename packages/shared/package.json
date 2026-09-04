@@ -1,0 +1,30 @@
+{
+  "name": "@undarga/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wire contract shared by apps/api and apps/web",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "echo \"@undarga/shared has no runtime behaviour beyond formatting; covered by apps/web unit tests\" && exit 0",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@undarga/eslint-config": "workspace:*",
+    "@undarga/tsconfig": "workspace:*",
+    "eslint": "9.39.5",
+    "rimraf": "6.0.1",
+    "typescript": "5.6.3"
+  }
+}

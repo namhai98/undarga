@@ -1,0 +1,13 @@
+{
+  "name": "@undarga/tsconfig",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript configurations",
+  "files": ["*.json"],
+  "scripts": {
+    "lint": "echo 'config package: nothing to lint' && exit 0",
+    "typecheck": "echo 'config package: no TypeScript' && exit 0",
+    "test": "echo 'config package: no tests' && exit 0",
+    "clean": "echo 'config package: nothing to clean' && exit 0"
+  }
+}

@@ -27,7 +27,7 @@ export class ActiveCompanyTenantResolver implements TenantResolver {
   constructor(private readonly config: AppConfig) {}
 
   isEnabled(): boolean {
-    return this.config.tenantResolvers.activeCompany;
+    return this.config.tenancy.resolvers.activeCompany;
   }
 
   resolve(input: TenantResolutionInput): TenantCandidate | null {

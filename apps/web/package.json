@@ -1,0 +1,53 @@
+{
+  "name": "@undarga/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Booking platform web client (Next.js App Router)",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- next dev --port 3001",
+    "build": "dotenv -e ../../.env -- next build",
+    "start": "dotenv -e ../../.env -- next start --port 3001",
+    "lint": "eslint",
+    "typecheck": "dotenv -e ../../.env -- next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf .next coverage"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@tanstack/react-query": "5.102.8",
+    "@undarga/shared": "workspace:*",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.469.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "shadcn": "^4.20.1",
+    "tailwind-merge": "2.6.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@tanstack/react-query-devtools": "5.102.8",
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@testing-library/user-event": "14.5.2",
+    "@types/node": "20.17.6",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "@undarga/eslint-config": "workspace:*",
+    "@undarga/tsconfig": "workspace:*",
+    "@vitejs/plugin-react": "4.3.4",
+    "dotenv-cli": "7.4.2",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.4",
+    "jsdom": "25.0.1",
+    "rimraf": "6.0.1",
+    "tailwindcss": "4.3.3",
+    "tw-animate-css": "1.3.0",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}

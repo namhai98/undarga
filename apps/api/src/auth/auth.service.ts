@@ -202,7 +202,28 @@ export class AuthService {
     }
 
     const memberships = await this.directory.listMembershipsForUser(user.id);
-    const active = memberships[0];
+
+    // Carry the session's active company across the rotation.
+    //
+    // A refresh presents only the refresh token, so the expiring access token —
+    // which held the active company — is not available here. Reading it back
+    // from the session is what stops a rotation from silently returning the
+    // user to their first membership fifteen minutes after they switched.
+    //
+    // The stored value is a hint and is re-validated: if the membership behind
+    // it was revoked, or the row is stale, it is dropped and the default
+    // applies. Nothing is authorized on the strength of the hint alone.
+    const remembered = session.activeCompanyId
+      ? memberships.find((m) => m.companyId === session.activeCompanyId)
+      : undefined;
+    const active = remembered ?? memberships[0];
+
+    if (session.activeCompanyId && !remembered) {
+      this.logger.log(
+        `Session ${session.id} pointed at company ${session.activeCompanyId}, ` +
+          'which is no longer a live membership; falling back to the default.',
+      );
+    }
 
     const nextToken = this.hashes.generate();
     const next = await this.identity.rotateStaffSession({
@@ -211,6 +232,7 @@ export class AuthService {
       tokenHash: this.hashes.hash(nextToken),
       familyId: session.familyId,
       expiresAt: this.refreshExpiry(),
+      activeCompanyId: active?.companyId,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
@@ -332,6 +354,9 @@ export class AuthService {
       tokenHash: this.hashes.hash(refreshToken),
       familyId: randomUUID(),
       expiresAt: this.refreshExpiry(),
+      // Remembered so a refresh can restore it. Re-validated against live
+      // memberships every time it is read back.
+      activeCompanyId: input.activeCompanyId,
       ipAddress: input.meta.ipAddress,
       userAgent: input.meta.userAgent,
     });
@@ -353,7 +378,7 @@ export class AuthService {
   }
 
   private refreshExpiry(): Date {
-    return new Date(Date.now() + this.config.refreshTokenTtlDays * 86_400_000);
+    return new Date(Date.now() + this.config.auth.refreshTokenTtlDays * 86_400_000);
   }
 }
 

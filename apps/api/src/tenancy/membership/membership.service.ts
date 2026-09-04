@@ -74,7 +74,7 @@ export class MembershipService {
     private readonly directory: TenantDirectoryService,
     private readonly config: AppConfig,
   ) {
-    this.cache = new TtlCache(config.tenantCacheTtlSeconds * 1000, 50_000);
+    this.cache = new TtlCache(config.tenancy.cacheTtlSeconds * 1000, 50_000);
   }
 
   /**

@@ -32,22 +32,22 @@ function fakeDelegate(rows: Row[]) {
     calls,
     async findFirst(args) {
       const a = args as { where?: Record<string, unknown> };
-      calls.push({ op: 'findFirst', args: a as Record<string, unknown> });
+      calls.push({ op: 'findFirst', args: a });
       return rows.find((r) => matches(r, a.where)) ?? null;
     },
     async findMany(args) {
       const a = args as { where?: Record<string, unknown> };
-      calls.push({ op: 'findMany', args: a as Record<string, unknown> });
+      calls.push({ op: 'findMany', args: a });
       return rows.filter((r) => matches(r, a.where));
     },
     async count(args) {
       const a = args as { where?: Record<string, unknown> };
-      calls.push({ op: 'count', args: a as Record<string, unknown> });
+      calls.push({ op: 'count', args: a });
       return rows.filter((r) => matches(r, a.where)).length;
     },
     async create(args) {
       const a = args as { data: Row };
-      calls.push({ op: 'create', args: a as unknown as Record<string, unknown> });
+      calls.push({ op: 'create', args: a });
       const created = { ...a.data, id: a.data.id ?? 'new-id' };
       rows.push(created);
       return created;
@@ -58,7 +58,7 @@ function fakeDelegate(rows: Row[]) {
     },
     async updateMany(args) {
       const a = args as { where?: Record<string, unknown>; data: Record<string, unknown> };
-      calls.push({ op: 'updateMany', args: a as Record<string, unknown> });
+      calls.push({ op: 'updateMany', args: a });
       const hits = rows.filter((r) => matches(r, a.where));
       hits.forEach((r) => Object.assign(r, a.data));
       return { count: hits.length };
@@ -69,7 +69,7 @@ function fakeDelegate(rows: Row[]) {
     },
     async deleteMany(args) {
       const a = args as { where?: Record<string, unknown> };
-      calls.push({ op: 'deleteMany', args: a as Record<string, unknown> });
+      calls.push({ op: 'deleteMany', args: a });
       const hits = rows.filter((r) => matches(r, a.where));
       hits.forEach((r) => rows.splice(rows.indexOf(r), 1));
       return { count: hits.length };
@@ -172,7 +172,7 @@ describe('TenantScopedRepository', () => {
 
     it('cannot be tricked into widening by a caller-supplied companyId', async () => {
       // companyId is merged last, so a caller passing their own is overwritten.
-      await asCompanyA(() => repo.findMany({ companyId: COMPANY_B } as never));
+      await asCompanyA(() => repo.findMany({ companyId: COMPANY_B }));
       expect((delegate.calls[0]?.args.where as Record<string, unknown>).companyId).toBe(COMPANY_A);
     });
 

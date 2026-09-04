@@ -14,7 +14,7 @@ export class PasswordService {
   constructor(private readonly config: AppConfig) {}
 
   async hash(plain: string): Promise<string> {
-    const { memoryCost, timeCost, parallelism } = this.config.argon2Options;
+    const { memoryCost, timeCost, parallelism } = this.config.auth.argon2;
     return argon2.hash(plain, { type: argon2.argon2id, memoryCost, timeCost, parallelism });
   }
 
@@ -37,7 +37,7 @@ export class PasswordService {
 
   /** Whether the stored hash was produced with weaker parameters than current. */
   needsRehash(hash: string): boolean {
-    const { memoryCost, timeCost, parallelism } = this.config.argon2Options;
+    const { memoryCost, timeCost, parallelism } = this.config.auth.argon2;
     try {
       // No `type` here: needsRehash only compares cost parameters, and the
       // variant is already encoded in the stored hash string.
@@ -48,7 +48,7 @@ export class PasswordService {
   }
 
   private async burnTime(plain: string): Promise<void> {
-    const { memoryCost, timeCost, parallelism } = this.config.argon2Options;
+    const { memoryCost, timeCost, parallelism } = this.config.auth.argon2;
     await argon2.hash(plain, { type: argon2.argon2id, memoryCost, timeCost, parallelism });
   }
 }

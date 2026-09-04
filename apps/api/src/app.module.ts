@@ -4,18 +4,23 @@
 import './common/json/bigint-serialization';
 
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionGuard } from './authz/guards/permission.guard';
 import { DomainExceptionFilter } from './common/filters';
+import {
+  RequestLoggingInterceptor,
+  ResponseEnvelopeInterceptor,
+} from './common/interceptors';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { ConfigModule } from './config';
 import { DatabaseModule } from './database/database.module';
-import { HealthController } from './health/health.controller';
+import { HealthModule } from './health/health.module';
 import { JobsModule } from './jobs/jobs.module';
 import { PlatformModule } from './platform/platform.module';
+import { RedisModule } from './redis/redis.module';
 import { TenantGuard } from './tenancy/guards/tenant.guard';
 import { TenancyModule } from './tenancy/tenancy.module';
 
@@ -41,20 +46,33 @@ import { TenancyModule } from './tenancy/tenancy.module';
  * All three DENY BY DEFAULT. An endpoint with no decorators requires
  * authentication, requires a company, and is reachable. Opting out is explicit:
  * `@Public()`, `@NoTenant()`, `@PlatformOnly()`.
+ *
+ * ---------------------------------------------------------------------------
+ * INTERCEPTOR ORDER
+ * ---------------------------------------------------------------------------
+ *
+ * Interceptors wrap outward-in on the way down and inward-out on the way back,
+ * so logging is registered first to measure the whole handler including the
+ * envelope, and the envelope runs closest to the controller's return value.
  */
 @Module({
   imports: [
     ConfigModule,
     DatabaseModule,
+    RedisModule,
     TenancyModule,
     PlatformModule,
     AuthModule,
     AuditModule,
     JobsModule,
+    HealthModule,
   ],
-  controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
+
+    { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
+
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
@@ -65,6 +83,9 @@ export class AppModule implements NestModule {
     // Must cover every route, including public ones: the context carries the
     // request id that appears in error responses and log lines, and a 401
     // should still be correlatable.
-    consumer.apply(RequestContextMiddleware).forRoutes('*');
+    //
+    // `{*path}` rather than `*` — Express 5 (NestJS 11) uses path-to-regexp v8,
+    // where a bare `*` is no longer a valid wildcard.
+    consumer.apply(RequestContextMiddleware).forRoutes('{*path}');
   }
 }

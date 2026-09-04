@@ -53,14 +53,14 @@ export class SubdomainTenantResolver implements TenantResolver {
   constructor(private readonly config: AppConfig) {}
 
   isEnabled(): boolean {
-    return this.config.tenantResolvers.subdomain;
+    return this.config.tenancy.resolvers.subdomain;
   }
 
   resolve(input: TenantResolutionInput): TenantCandidate | null {
     const hostname = normaliseHost(input.host);
     if (!hostname) return null;
 
-    const root = this.config.subdomainRoot.toLowerCase();
+    const root = this.config.tenancy.subdomainRoot.toLowerCase();
     if (hostname === root || !hostname.endsWith(`.${root}`)) return null;
 
     const label = hostname.slice(0, -(root.length + 1));

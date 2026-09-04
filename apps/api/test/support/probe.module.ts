@@ -46,7 +46,7 @@ export class ProbeAppointmentRepository extends TenantScopedRepository<Appointme
   }
 
   protected delegate(tx: TenantTx): PrismaDelegateLike<AppointmentRow> {
-    return tx.appointment as unknown as PrismaDelegateLike<AppointmentRow>;
+    return tx.appointment;
   }
 }
 
@@ -65,7 +65,7 @@ export class ProbeCustomerRepository extends TenantScopedRepository<CustomerRow>
   }
 
   protected delegate(tx: TenantTx): PrismaDelegateLike<CustomerRow> {
-    return tx.companyCustomer as unknown as PrismaDelegateLike<CustomerRow>;
+    return tx.companyCustomer;
   }
 }
 
@@ -84,7 +84,7 @@ export class ProbePaymentRepository extends TenantScopedRepository<PaymentRow> {
   }
 
   protected delegate(tx: TenantTx): PrismaDelegateLike<PaymentRow> {
-    return tx.payment as unknown as PrismaDelegateLike<PaymentRow>;
+    return tx.payment;
   }
 }
 

@@ -9,6 +9,7 @@ import {
   UnauthenticatedError,
 } from '../common/errors';
 import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.service';
+import { normalizeEmail } from './normalize-email';
 import { IdentityRepository } from './identity.repository';
 import { PasswordService } from './password.service';
 import { SessionDenyList } from './session-deny-list';
@@ -74,7 +75,7 @@ export class AuthService {
     password: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<AuthenticatedSession> {
-    const user = await this.identity.findStaffByEmail(email.trim().toLowerCase());
+    const user = await this.identity.findStaffByEmail(normalizeEmail(email));
 
     // Every failure below raises the identical error. "No such user", "wrong
     // password", "account disabled" and "locked out" are indistinguishable to
@@ -285,7 +286,7 @@ export class AuthService {
     password: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<IssuedTokens> {
-    const user = await this.identity.findPlatformUserByEmail(email.trim().toLowerCase());
+    const user = await this.identity.findPlatformUserByEmail(normalizeEmail(email));
 
     if (!user) {
       await this.passwords.verify(null, password);

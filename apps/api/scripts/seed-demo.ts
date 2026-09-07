@@ -35,6 +35,9 @@ async function main(): Promise<void> {
     console.log(`  ${world.userB.email.padEnd(26)} member of Company B only`);
     console.log(`  ${world.userAB.email.padEnd(26)} member of BOTH — use this to test switching`);
     console.log(`  ${world.operator.email.padEnd(26)} platform operator (cross-company)`);
+    console.log(
+      `  ${world.provisioner.email.padEnd(26)} platform operator (may provision companies)`,
+    );
     console.log(`\n  password: ${TEST_PASSWORD}\n`);
   } finally {
     await prisma.$disconnect();

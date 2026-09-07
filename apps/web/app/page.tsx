@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { ApiConnectionCard } from '@/features/system-status';
 
 /**
@@ -17,8 +19,13 @@ export default function HomePage() {
         <h1 className="text-3xl font-semibold tracking-tight">Undarga Booking Platform</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
           Multi-tenant SaaS for companies with multiple branches. This page confirms the
-          frontend can reach the backend; no product features are implemented yet.
+          frontend can reach the backend.
         </p>
+        <div className="pt-1">
+          <Link href="/login" className={buttonVariants({ size: 'lg' })}>
+            Sign in
+          </Link>
+        </div>
       </header>
 
       <ApiConnectionCard />
@@ -31,15 +38,17 @@ export default function HomePage() {
           <Item>PostgreSQL via Prisma, with row-level security enforcing tenant isolation</Item>
           <Item>Redis wired for caching, locks and queues</Item>
           <Item>Typed API client with token refresh, retries and cancellation</Item>
+          <Item>Sign-in, session restore across reloads, and company switching</Item>
+          <Item>Company provisioning and invitations, accepted at <Code>/invitations/accept</Code></Item>
         </ul>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Not built yet</h2>
         <p className="text-muted-foreground max-w-prose text-sm">
-          Authentication UI, appointments, availability, payments, promotions, gift cards and
-          notifications. The feature directories under <Code>features/</Code> are placeholders
-          that mark where each will live.
+          Member and role administration, appointments, availability, payments, promotions, gift
+          cards and notifications. The feature directories under <Code>features/</Code> are
+          placeholders that mark where each will live.
         </p>
       </section>
     </main>

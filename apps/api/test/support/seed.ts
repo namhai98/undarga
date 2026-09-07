@@ -4,6 +4,8 @@ import {
   ALL_COMPANY_PERMISSIONS,
   ALL_PLATFORM_PERMISSIONS,
   PLATFORM_PERMISSIONS,
+  SYSTEM_ROLES,
+  SYSTEM_ROLE_PERMISSIONS,
 } from '../../src/authz/permissions';
 
 export const TEST_PASSWORD = 'correct-horse-battery-staple';
@@ -39,6 +41,8 @@ export interface SeededWorld {
   operator: { id: string; email: string };
   /** Platform operator with NO data permission. */
   weakOperator: { id: string; email: string };
+  /** Platform operator allowed to provision companies. */
+  provisioner: { id: string; email: string };
 }
 
 /**
@@ -121,7 +125,21 @@ export async function seedWorld(prisma: PrismaClient): Promise<SeededWorld> {
     [PLATFORM_PERMISSIONS.BILLING_MANAGE],
   );
 
-  return { companyA, companyB, userA, userB, userAB, operator, weakOperator };
+  // Deliberately a THIRD operator rather than widening `operator`.
+  //
+  // Provisioning is a different job from tenant support, and keeping the
+  // permissions apart is what lets a test assert that a support operator — who
+  // can already read every company's data — still cannot create one.
+  const provisioner = await seedPlatformUser(
+    prisma,
+    'provisioning@platform.test',
+    'Provisioning Operator',
+    passwordHash,
+    'PROVISIONING',
+    [PLATFORM_PERMISSIONS.COMPANY_PROVISION, PLATFORM_PERMISSIONS.COMPANY_LIST],
+  );
+
+  return { companyA, companyB, userA, userB, userAB, operator, weakOperator, provisioner };
 }
 
 async function seedCompany(
@@ -153,6 +171,32 @@ async function seedCompany(
       permissionKey,
     })),
   });
+
+  // Settings, exactly as CompanyProvisioningService creates them. Without this
+  // the fixture builds a company that provisioning could never produce, and
+  // every booking-policy read returns null.
+  await prisma.companySettings.create({ data: { companyId: company.id } });
+
+  // The six system roles, exactly as CompanyProvisioningService creates them.
+  //
+  // Without these the fixture builds a company that provisioning could never
+  // produce, and anything that names a role by key — inviting someone as a
+  // RECEPTIONIST, say — has nothing to resolve. FULL stays alongside them
+  // because the isolation suite relies on a role that holds everything, so a
+  // permission check can never be what makes a cross-tenant read fail.
+  for (const key of Object.values(SYSTEM_ROLES)) {
+    const systemRole = await prisma.companyRole.create({
+      data: { companyId: company.id, key, name: key, isSystem: true },
+    });
+
+    await prisma.companyRolePermission.createMany({
+      data: SYSTEM_ROLE_PERMISSIONS[key].map((permissionKey) => ({
+        companyId: company.id,
+        roleId: systemRole.id,
+        permissionKey,
+      })),
+    });
+  }
 
   const branch = await prisma.branch.create({
     data: {

@@ -48,6 +48,21 @@ export class IdentityRepository {
     });
   }
 
+  /**
+   * The password hash for an already-authenticated caller.
+   *
+   * Separate from `findStaffById`, which deliberately does not select a
+   * credential, so that the ordinary lookup used on every refresh cannot pull
+   * a hash into memory it has no use for. Reached only by the change-password
+   * flow, which must verify the current password.
+   */
+  async findStaffCredentialsById(userAccountId: string) {
+    return this.prisma.userAccount.findFirst({
+      where: { id: userAccountId, deletedAt: null },
+      select: { id: true, email: true, passwordHash: true, status: true },
+    });
+  }
+
   async findStaffById(userAccountId: string) {
     return this.prisma.userAccount.findFirst({
       where: { id: userAccountId, deletedAt: null },
@@ -141,6 +156,37 @@ export class IdentityRepository {
   }
 
   /**
+   * Give a placeholder account its password and activate it.
+   *
+   * A placeholder is what provisioning leaves for an owner: a row with no
+   * password, `INVITED`, that cannot be signed into. Completing it is not a
+   * password reset — there was never a password to reset and no session was
+   * ever possible — which is why this is safe to reach from the invitation
+   * flow while `updateStaffPassword` is not.
+   *
+   * The `passwordHash: null` predicate is what keeps that true: if the account
+   * has since acquired a password, this matches nothing and the caller is
+   * routed down the sign-in-first path instead of silently overwriting a live
+   * credential.
+   */
+  async activateStaffAccountWithPassword(
+    userAccountId: string,
+    passwordHash: string,
+    fullName?: string,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.userAccount.updateMany({
+      where: { id: userAccountId, passwordHash: null, deletedAt: null },
+      data: {
+        passwordHash,
+        status: 'ACTIVE',
+        ...(fullName ? { fullName } : {}),
+      },
+    });
+
+    return count > 0;
+  }
+
+  /**
    * Find or create the placeholder account a provisioned company's owner will
    * accept into.
    *
@@ -164,6 +210,86 @@ export class IdentityRepository {
     });
 
     return { account, created: true };
+  }
+
+  // -------------------------------------------------------------------------
+  // Passwords and account state
+  // -------------------------------------------------------------------------
+
+  /**
+   * Replace the password on an ACTIVE account.
+   *
+   * Distinct from `activateStaffAccountWithPassword`, which only fills in a
+   * blank. This one overwrites a live credential, so it is reachable from
+   * exactly two places — an authenticated change, and a reset that presented a
+   * valid one-time token — and from nowhere else.
+   */
+  async updateStaffPassword(userAccountId: string, passwordHash: string): Promise<void> {
+    await this.prisma.userAccount.update({
+      where: { id: userAccountId },
+      data: {
+        passwordHash,
+        // A successful reset also clears a lockout: the person has just proved
+        // control of the address, and leaving them locked out would punish the
+        // victim of the brute-force rather than the attacker.
+        failedLoginCount: 0,
+        lockedUntil: null,
+      },
+    });
+  }
+
+  async markEmailVerified(userAccountId: string): Promise<void> {
+    await this.prisma.userAccount.update({
+      where: { id: userAccountId },
+      data: { emailVerifiedAt: new Date() },
+    });
+  }
+
+  /** Profile fields the owner of the account may change about themselves. */
+  async updateStaffProfile(
+    userAccountId: string,
+    data: { fullName?: string; phone?: string | null; locale?: string },
+  ) {
+    return this.prisma.userAccount.update({
+      where: { id: userAccountId },
+      // Field-by-field, never a spread of the request body: `status`,
+      // `emailVerifiedAt` and `passwordHash` all live on this table, and a
+      // spread is how one of them ends up settable from a PATCH.
+      data: {
+        ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.locale !== undefined ? { locale: data.locale } : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        phone: true,
+        locale: true,
+        status: true,
+        emailVerifiedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  /** The full profile for `/users/me`. Never selects credential columns. */
+  async findStaffProfile(userAccountId: string) {
+    return this.prisma.userAccount.findFirst({
+      where: { id: userAccountId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        phone: true,
+        locale: true,
+        status: true,
+        emailVerifiedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -259,6 +385,35 @@ export class IdentityRepository {
       where: { familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+
+    return sessions.map((s) => s.id);
+  }
+
+  /**
+   * Kill every live session for an account.
+   *
+   * Used by "sign out everywhere", by a password change, and by a password
+   * reset. In the latter two the reason is the same: if the old password was
+   * compromised, so is every session it created — changing the credential
+   * without ending those sessions leaves the attacker exactly where they were.
+   *
+   * `except` keeps the caller's own session alive on a deliberate change, so
+   * the ordinary case is not "you changed your password, now sign in again on
+   * this device too".
+   *
+   * Returns the revoked ids so the caller can push them into the in-process
+   * deny list — the database revocation only takes effect at the next refresh,
+   * while an access token stays valid for its remaining minutes.
+   */
+  async revokeAllStaffSessions(userAccountId: string, except?: string): Promise<string[]> {
+    const where = {
+      userAccountId,
+      revokedAt: null,
+      ...(except ? { id: { not: except } } : {}),
+    };
+
+    const sessions = await this.prisma.userSession.findMany({ where, select: { id: true } });
+    await this.prisma.userSession.updateMany({ where, data: { revokedAt: new Date() } });
 
     return sessions.map((s) => s.id);
   }

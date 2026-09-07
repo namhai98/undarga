@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 export const loginSchema = z.object({
-  email: z.string().email().max(320),
+  // Normalised in the schema so every consumer of LoginDto sees one form; the
+  // service also calls normalizeEmail, because a DTO is not the only caller.
+  email: z.string().trim().toLowerCase().email().max(320),
   password: z.string().min(1).max(512),
 });
 export type LoginDto = z.infer<typeof loginSchema>;

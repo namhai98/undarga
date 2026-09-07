@@ -96,6 +96,25 @@ class ApiClient {
     return this.request<T>('DELETE', path, undefined, options);
   }
 
+  /**
+   * Restore a session from the refresh cookie, if there is one.
+   *
+   * Called once at startup. It delegates to the same single-flighted `refresh`
+   * that a 401 uses, and that sharing is the whole point rather than tidiness:
+   * `reactStrictMode` double-invokes effects in development, so a bootstrap
+   * that called the endpoint directly would fire two refreshes on every page
+   * load. Under refresh-token ROTATION the second one presents an
+   * already-rotated token, which the API correctly treats as theft and
+   * responds to by killing the entire session family. The symptom is "users
+   * get randomly logged out", and it is miserable to trace.
+   *
+   * Resolves false when there is no session to restore. Never throws — a
+   * failure to restore is an anonymous visitor, not an error.
+   */
+  async ensureSession(): Promise<boolean> {
+    return (await this.refresh()) !== null;
+  }
+
   // ---------------------------------------------------------------------------
 
   private async request<T>(
@@ -222,17 +241,14 @@ class ApiClient {
   }
 
   private async performRefresh(): Promise<AuthTokens | null> {
-    const current = tokenStore.get();
-    if (!current?.refreshToken) {
-      tokenStore.clear('signed-out');
-      return null;
-    }
-
     try {
+      // No body and no stored token: the refresh token lives in an HttpOnly
+      // cookie the browser attaches itself, and this client cannot read it.
+      // `credentials: 'include'` is what carries it — without that the request
+      // is anonymous and always 401s.
       const response = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ refreshToken: current.refreshToken }),
+        headers: { Accept: 'application/json' },
         credentials: 'include',
       });
 

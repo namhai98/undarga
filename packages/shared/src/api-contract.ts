@@ -122,6 +122,19 @@ export const API_ERROR_CODES = [
   'INVITATION_SIGN_IN_REQUIRED',
   /** You are signed in as someone else. */
   'INVITATION_EMAIL_MISMATCH',
+  // one-time account links (email verification, password reset)
+  //
+  // Distinct from TOKEN_EXPIRED above, which is about an access token. These
+  // are about a link somebody clicked, and the client's response is different:
+  // one triggers a silent refresh, the other asks for a new link.
+  'ACCOUNT_TOKEN_INVALID',
+  'ACCOUNT_TOKEN_EXPIRED',
+  // assignment
+  //
+  // A distinct code from CONFLICT because the client's response differs: an
+  // already-assigned branch is a no-op the UI can simply reflect, while a
+  // generic conflict usually needs a human.
+  'ALREADY_ASSIGNED',
   // identity administration
   /** `details.permissions` lists the keys the actor lacks. */
   'PRIVILEGE_ESCALATION_BLOCKED',

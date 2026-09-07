@@ -71,6 +71,19 @@ enum UserStatus {
   @@map("user_status")
 }
 
+/// Why a one-time account token was issued.
+///
+/// One enum and one table rather than two near-identical tables: the lifecycle
+/// is byte-for-byte the same — issue, hash, expire, consume once — and the only
+/// thing that differs is what consuming it does. Two tables would be two places
+/// to get expiry or single-use wrong.
+enum UserTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+
+  @@map("user_token_purpose")
+}
+
 enum CompanyStatus {
   PENDING_SETUP
   ACTIVE
@@ -1022,6 +1035,7 @@ model UserAccount {
 
   memberships CompanyUser[]
   sessions    UserSession[]
+  tokens      UserToken[]
   employees   Employee[]
 
   @@index([status])
@@ -1030,6 +1044,42 @@ model UserAccount {
 
 /// Hashed refresh token with family-based reuse detection: presenting a rotated
 /// token revokes the whole family and raises a security event.
+/// A one-time token sent to an address: verify this email, reset this password.
+///
+/// ---------------------------------------------------------------------------
+/// GLOBAL, NOT TENANT-SCOPED
+/// ---------------------------------------------------------------------------
+///
+/// Deliberately carries no `company_id`. An account exists independently of any
+/// company, and both flows run before a tenant is resolved — a password reset
+/// belongs to the person, not to whichever company they happen to work in. RLS
+/// closes this table to the tenant connection entirely (001_hardening.sql 8d),
+/// the same as `user_session`.
+///
+/// Only the HMAC is stored, produced by the same TokenHashService that hashes
+/// refresh tokens and invitations. A database dump yields no usable links.
+model UserToken {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  userAccountId String           @map("user_account_id") @db.Uuid
+  purpose       UserTokenPurpose
+  tokenHash     String           @unique @map("token_hash") @db.VarChar(88)
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// Set the moment it is used. Single-use is enforced by a compare-and-swap
+  /// on this column, not by deleting the row — a consumed token must stay
+  /// distinguishable from one that never existed for as long as the audit
+  /// trail cares.
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  userAccount UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  /// Finds the live token for a purpose, and drives expiry cleanup.
+  @@index([userAccountId, purpose, expiresAt])
+  @@map("user_token")
+}
+
 model UserSession {
   id            String  @id @default(uuid(7)) @db.Uuid
   userAccountId String  @map("user_account_id") @db.Uuid

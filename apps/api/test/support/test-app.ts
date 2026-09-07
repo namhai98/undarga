@@ -27,7 +27,29 @@ export interface TestHarness {
  * overridden except the addition of ProbeModule, which contributes controllers
  * and no behaviour.
  */
-export async function createTestHarness(): Promise<TestHarness> {
+export interface HarnessOptions {
+  /**
+   * Enforce the real rate limits. Off by default.
+   *
+   * The limits are deliberately low — three password-reset requests a minute —
+   * and every request in this suite comes from the same address, so leaving the
+   * limiter on would make a test's outcome depend on how many tests ran before
+   * it. That is the classic flaky suite, and it hides real failures behind 429s.
+   *
+   * So it is overridden by default and turned on for the one block that exists
+   * to prove it is wired. Everything the limiter protects is ALSO covered by a
+   * per-account ceiling in AccountService, which is exercised normally.
+   */
+  throttling?: boolean;
+}
+
+export async function createTestHarness(options: HarnessOptions = {}): Promise<TestHarness> {
+  // Read at module init by ThrottlerModule.forRootAsync, so it must be set
+  // BEFORE the module compiles. An APP_GUARD cannot be swapped with
+  // `overrideGuard`, and an override that silently does nothing is worse than
+  // none — hence a config flag rather than a test-module override.
+  process.env.THROTTLE_ENABLED = options.throttling ? 'true' : 'false';
+
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule, ProbeModule],
   }).compile();

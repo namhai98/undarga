@@ -68,3 +68,28 @@ function stripLeadingZeros(value: string): string {
   const trimmed = value.replace(/^0+/, '');
   return trimmed === '' ? '0' : trimmed;
 }
+
+/**
+ * The inverse: a typed decimal amount to minor units. `("500.5", 2)` -> `"50050"`.
+ *
+ * Lives here rather than in the form that needs it, because this and
+ * `minorToDecimalString` must agree about where the decimal point goes. Two
+ * copies in two packages is precisely how a price ends up wrong by a factor of
+ * a hundred in one direction only.
+ *
+ * Returns `null` for anything that is not a plain amount — an empty box, a
+ * thousands separator, a second decimal point, more decimal places than the
+ * currency has. A caller shows a validation message; nothing here guesses.
+ */
+export function decimalToMinorString(value: string, minorUnit: number): string | null {
+  const trimmed = value.trim();
+  if (!/^-?\d*(\.\d*)?$/.test(trimmed) || trimmed === '' || trimmed === '-') return null;
+
+  const negative = trimmed.startsWith('-');
+  const [whole = '', fraction = ''] = (negative ? trimmed.slice(1) : trimmed).split('.');
+  if (whole === '' && fraction === '') return null;
+  if (fraction.length > minorUnit) return null;
+
+  const digits = stripLeadingZeros(`${whole || '0'}${fraction.padEnd(minorUnit, '0')}`);
+  return `${negative && digits !== '0' ? '-' : ''}${digits}`;
+}

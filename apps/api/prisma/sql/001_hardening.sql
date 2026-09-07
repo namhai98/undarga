@@ -597,13 +597,17 @@ CREATE POLICY audit_log_insert ON audit_log FOR INSERT
 --     Authentication touches them on the directory/auth connection, before any
 --     tenant exists. Without this, a tenant connection could enumerate every
 --     session hash on the platform.
+--
+--     `user_token` is here for the same reason and is worse if omitted: it
+--     holds password-reset and email-verification tokens. A tenant connection
+--     able to read it could reset any account on the platform.
 DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['platform_user','platform_role',
                            'platform_role_permission','platform_user_role',
                            'impersonation_grant','platform_session',
-                           'user_session'] LOOP
+                           'user_session','user_token'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('CREATE POLICY %1$I_deny_tenants ON %1$I USING (false)', t);

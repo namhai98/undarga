@@ -36,6 +36,7 @@ export class AppConfig {
       apiPrefix: this.get('API_PREFIX'),
       logLevel: this.get('LOG_LEVEL'),
       swaggerEnabled: this.get('SWAGGER_ENABLED'),
+      throttleEnabled: this.get('THROTTLE_ENABLED'),
       /**
        * Where apps/web lives. Configured, never taken from the request Host
        * header — see the note in env.schema.ts. Empty means "return the bare
@@ -99,6 +100,9 @@ export class AppConfig {
       tokenHashPepper: this.get('TOKEN_HASH_PEPPER'),
       /** Lifetime of an invitation link. */
       invitationTtlDays: this.get('INVITATION_TTL_DAYS'),
+      passwordMinLength: this.get('PASSWORD_MIN_LENGTH'),
+      emailVerificationTtlHours: this.get('EMAIL_VERIFICATION_TTL_HOURS'),
+      passwordResetTtlMinutes: this.get('PASSWORD_RESET_TTL_MINUTES'),
       argon2: {
         memoryCost: this.get('ARGON2_MEMORY_KIB'),
         timeCost: this.get('ARGON2_TIME_COST'),

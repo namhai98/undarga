@@ -64,7 +64,7 @@ describe('apiClient', () => {
     });
 
     it('attaches the bearer token when signed in', async () => {
-      tokenStore.set({ accessToken: 'tok-123', refreshToken: 'r', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'tok-123', expiresIn: 900 });
       fetchMock.mockResolvedValue(jsonResponse(200, envelope({})));
 
       await (await client()).get('/auth/me');
@@ -74,7 +74,7 @@ describe('apiClient', () => {
     });
 
     it('omits the token when the caller asks for an anonymous request', async () => {
-      tokenStore.set({ accessToken: 'tok-123', refreshToken: 'r', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'tok-123', expiresIn: 900 });
       fetchMock.mockResolvedValue(jsonResponse(200, envelope({})));
 
       await (await client()).get('/health', { anonymous: true });
@@ -84,7 +84,7 @@ describe('apiClient', () => {
     });
 
     it('cannot have Authorization overridden by a caller header', async () => {
-      tokenStore.set({ accessToken: 'real', refreshToken: 'r', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'real', expiresIn: 900 });
       fetchMock.mockResolvedValue(jsonResponse(200, envelope({})));
 
       await (await client()).get('/auth/me', { headers: { Authorization: 'Bearer forged' } });
@@ -96,12 +96,12 @@ describe('apiClient', () => {
 
   describe('token refresh', () => {
     it('refreshes once on 401 and replays the original request', async () => {
-      tokenStore.set({ accessToken: 'old', refreshToken: 'r-old', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'old', expiresIn: 900 });
 
       fetchMock
         .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }))
         .mockResolvedValueOnce(
-          jsonResponse(200, envelope({ accessToken: 'new', refreshToken: 'r-new', expiresIn: 900 })),
+          jsonResponse(200, envelope({ accessToken: 'new', expiresIn: 900 })),
         )
         .mockResolvedValueOnce(jsonResponse(200, envelope({ id: 'me' })));
 
@@ -120,12 +120,12 @@ describe('apiClient', () => {
       // refreshes mean the second presents an already-rotated token, which the
       // API treats as theft and kills the whole session family. The symptom is
       // "users randomly logged out".
-      tokenStore.set({ accessToken: 'old', refreshToken: 'r-old', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'old', expiresIn: 900 });
 
       fetchMock.mockImplementation((url: string) => {
         if (String(url).endsWith('/auth/refresh')) {
           return Promise.resolve(
-            jsonResponse(200, envelope({ accessToken: 'new', refreshToken: 'r-new', expiresIn: 900 })),
+            jsonResponse(200, envelope({ accessToken: 'new', expiresIn: 900 })),
           );
         }
         const auth = 'Bearer new';
@@ -147,7 +147,7 @@ describe('apiClient', () => {
     });
 
     it('clears the session when refresh is rejected', async () => {
-      tokenStore.set({ accessToken: 'old', refreshToken: 'r-old', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'old', expiresIn: 900 });
 
       fetchMock
         .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }))
@@ -161,12 +161,12 @@ describe('apiClient', () => {
     });
 
     it('does not loop when the refreshed token is also rejected', async () => {
-      tokenStore.set({ accessToken: 'old', refreshToken: 'r-old', expiresIn: 900 });
+      tokenStore.set({ accessToken: 'old', expiresIn: 900 });
 
       fetchMock
         .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }))
         .mockResolvedValueOnce(
-          jsonResponse(200, envelope({ accessToken: 'new', refreshToken: 'r-new', expiresIn: 900 })),
+          jsonResponse(200, envelope({ accessToken: 'new', expiresIn: 900 })),
         )
         .mockResolvedValue(jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'x' } }));
 

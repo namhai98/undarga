@@ -49,6 +49,17 @@ export const envSchema = z.object({
   CORS_ORIGINS: z.string().default(''),
   SWAGGER_ENABLED: bool(true),
   /**
+   * Edge rate limiting.
+   *
+   * On by default and expected to stay on in production. It exists to be
+   * switchable in tests: the limits are deliberately low and every request in a
+   * suite comes from one address, so leaving it on would make each test's
+   * outcome depend on how many ran before it — a flaky suite that hides real
+   * failures behind 429s. One e2e block turns it back on to prove the guard is
+   * wired.
+   */
+  THROTTLE_ENABLED: bool(true),
+  /**
    * Origin of apps/web, used to build the invitation accept link.
    *
    * MUST be configured rather than derived from the request `Host` header.
@@ -98,6 +109,26 @@ export const envSchema = z.object({
    * holiday.
    */
   INVITATION_TTL_DAYS: int(7, 1),
+
+  /**
+   * Minimum password length.
+   *
+   * Twelve, with no composition rules. Length is the property that actually
+   * resists guessing; forced symbol classes mostly produce `Password1!` and
+   * push people towards reuse. NIST 800-63B says the same. Configurable
+   * because a customer's own policy may demand more — never less, which the
+   * floor below enforces.
+   */
+  PASSWORD_MIN_LENGTH: int(12, 12),
+
+  /** Email verification links. Short: they are re-issuable on demand. */
+  EMAIL_VERIFICATION_TTL_HOURS: int(24, 1),
+  /**
+   * Password reset links. Deliberately much shorter than verification — this
+   * one takes over an account, and the window in which a leaked inbox is
+   * dangerous should be measured in minutes.
+   */
+  PASSWORD_RESET_TTL_MINUTES: int(30, 5),
 
   ARGON2_MEMORY_KIB: int(19456, 8192),
   ARGON2_TIME_COST: int(2, 1),

@@ -309,3 +309,122 @@ export class ConflictError extends DomainError {
     super(message, details);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Identity administration
+// ---------------------------------------------------------------------------
+
+/**
+ * Refused because the actor tried to hand out more than they hold.
+ *
+ * Separate from PermissionDeniedError, which means "you may not do this".
+ * This one means "you may do this, but not with these contents" — the actor
+ * legitimately holds `member:invite` or `member:write`; what they cannot do is
+ * use it to manufacture an owner. Distinct codes because the UI response
+ * differs: one hides the control, the other explains which permissions to drop.
+ */
+export class PrivilegeEscalationError extends DomainError {
+  readonly code = 'PRIVILEGE_ESCALATION_BLOCKED' as const;
+  readonly status = 403;
+  constructor(permissions: string[]) {
+    super('You cannot grant permissions you do not hold yourself.', { permissions });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Invitations
+// ---------------------------------------------------------------------------
+
+/**
+ * Unknown, revoked and already-accepted all land here, deliberately.
+ *
+ * Whoever holds a token that does not work must not be able to tell WHY. If
+ * "revoked" were distinguishable from "never existed", a stolen link would
+ * confirm that an invitation for that address had once been issued — which
+ * confirms the address, the company, and that someone thought they belonged
+ * there. One answer for every dead token.
+ */
+export class InvitationNotFoundError extends DomainError {
+  readonly code = 'INVITATION_NOT_FOUND' as const;
+  readonly status = 404;
+  constructor() {
+    super('That invitation link is not valid.');
+  }
+}
+
+/**
+ * The one distinction worth drawing.
+ *
+ * Expiry is the only failure a legitimate recipient can act on — "ask for a
+ * fresh link" is useful advice, and unlike revocation it leaks nothing an
+ * attacker could not learn by waiting.
+ */
+export class InvitationExpiredError extends DomainError {
+  readonly code = 'INVITATION_EXPIRED' as const;
+  readonly status = 410;
+  constructor() {
+    super('That invitation has expired. Ask for a new link.');
+  }
+}
+
+/** An account already exists for this address; sign in before accepting. */
+export class InvitationSignInRequiredError extends DomainError {
+  readonly code = 'INVITATION_SIGN_IN_REQUIRED' as const;
+  readonly status = 401;
+  constructor() {
+    super('An account already exists for this address. Sign in, then accept the invitation.');
+  }
+}
+
+/**
+ * The link already exists.
+ *
+ * Separate from ConflictError because the client's response differs: assigning
+ * a branch that is already assigned is a no-op the UI can simply reflect,
+ * whereas a generic conflict usually needs a human to resolve.
+ */
+export class AlreadyAssignedError extends DomainError {
+  readonly code = 'ALREADY_ASSIGNED' as const;
+  readonly status = 409;
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, details);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// One-time account links
+// ---------------------------------------------------------------------------
+
+/**
+ * Unknown, already used, or presented for the wrong purpose.
+ *
+ * All three collapse into one answer. The wrong-purpose case is the one worth
+ * spelling out: if a verification token could be told apart from a reset token,
+ * somebody holding the weaker link would learn that the stronger one exists for
+ * that account.
+ */
+export class AccountTokenInvalidError extends DomainError {
+  readonly code = 'ACCOUNT_TOKEN_INVALID' as const;
+  readonly status = 400;
+  constructor() {
+    super('That link is not valid. It may have been used already.');
+  }
+}
+
+/** Distinguished from invalid because it is the one the user can act on. */
+export class AccountTokenExpiredError extends DomainError {
+  readonly code = 'ACCOUNT_TOKEN_EXPIRED' as const;
+  readonly status = 410;
+  constructor() {
+    super('That link has expired. Request a new one.');
+  }
+}
+
+/** Signed in, but as somebody else. */
+export class InvitationEmailMismatchError extends DomainError {
+  readonly code = 'INVITATION_EMAIL_MISMATCH' as const;
+  readonly status = 403;
+  constructor() {
+    super('This invitation was sent to a different address than the one you are signed in as.');
+  }
+}

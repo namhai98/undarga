@@ -1,7 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { SessionProvider } from '@/features/auth';
 import { QueryProvider } from './query-provider';
+import { SessionCacheBridge } from './session-cache-bridge';
 
 /**
  * Every client-side provider, composed once.
@@ -10,9 +12,17 @@ import { QueryProvider } from './query-provider';
  * `'use client'`. Marking the layout itself would opt the entire application
  * out of Server Components.
  *
- * Auth and tenant providers will join this list; they are not here yet because
- * this phase ships no authentication UI.
+ * Order is load-bearing. SessionProvider runs its queries through TanStack
+ * Query, and SessionCacheBridge needs `useQueryClient()`, so both must be
+ * INSIDE QueryProvider. The bridge sits above SessionProvider so it is
+ * subscribed before the bootstrap refresh can fire.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  return <QueryProvider>{children}</QueryProvider>;
+  return (
+    <QueryProvider>
+      <SessionCacheBridge>
+        <SessionProvider>{children}</SessionProvider>
+      </SessionCacheBridge>
+    </QueryProvider>
+  );
 }

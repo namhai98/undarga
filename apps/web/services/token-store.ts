@@ -2,7 +2,6 @@ import type { ApiErrorCode } from '@undarga/shared';
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
   expiresIn: number;
   activeCompanyId?: string;
 }
@@ -15,24 +14,24 @@ type Listener = (tokens: AuthTokens | null, reason: AuthChangeReason) => void;
  * Where the session lives in the browser.
  *
  * ---------------------------------------------------------------------------
- * IN MEMORY, DELIBERATELY — AND WHY THAT MEANS A RELOAD SIGNS YOU OUT
+ * THE ACCESS TOKEN IS IN MEMORY; THE REFRESH TOKEN IS NOT HERE AT ALL
  * ---------------------------------------------------------------------------
  *
- * Tokens are held in a module-level variable. Nothing is written to
- * `localStorage` or `sessionStorage`, because both are readable by any script
- * on the page: one XSS — in our code or in any dependency — and an attacker
- * walks away with a 30-day refresh token. Access tokens expire in 15 minutes;
- * refresh tokens are the valuable ones.
+ * The access token is held in a module-level variable, never in `localStorage`
+ * or `sessionStorage` — both are readable by any script on the page, so one XSS
+ * anywhere in the dependency tree would hand it over.
  *
- * The cost is real and visible: refreshing the page loses the session. That is
- * a deliberate placeholder, not an oversight.
+ * The refresh token, which is the valuable one, is not reachable from
+ * JavaScript at all. The API sets it as an `HttpOnly; SameSite=Lax` cookie
+ * scoped to `/api/v1/auth` and never returns it in a response body
+ * (`SessionCookieService` on the API side has the full reasoning). So this
+ * class has no `refreshToken` field to leak, and `AuthTokens` has no property
+ * for one.
  *
- * THE FIX, WHICH IS AN API CHANGE AND IS NOT DONE YET:
- * the API should set the refresh token as an `HttpOnly; Secure; SameSite=Lax`
- * cookie instead of returning it in the JSON body, and `/auth/refresh` should
- * read it from there. JavaScript then cannot read it at all, and the session
- * survives a reload. That is listed as a blocking decision in the report —
- * shipping persistence via localStorage first would be the wrong order.
+ * That is what makes a page reload survivable: on startup the client holds
+ * nothing, calls `/auth/refresh`, and the browser supplies the cookie. What an
+ * XSS can still steal is fifteen minutes, one company and one session — which
+ * is the trade this design makes deliberately.
  */
 class TokenStore {
   private tokens: AuthTokens | null = null;

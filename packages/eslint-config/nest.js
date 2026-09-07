@@ -55,6 +55,15 @@ module.exports = function nest({ tsconfigRootDir, project = true } = {}) {
         // Authentication runs before a company is known, and RLS denies the
         // tenant connection any access to credential tables.
         'src/auth/identity.repository.ts',
+        // One-time email-verification and password-reset tokens. Same reason:
+        // both flows run before a company is known, and `user_token` is closed
+        // to tenant connections outright.
+        'src/auth/user-token.repository.ts',
+        // Looks an invitation up by token hash — a lookup that by definition
+        // precedes knowing the company, since the invitation is what names it.
+        // One method, filtered on a 256-bit HMAC the caller had to present, and
+        // the company it yields is then entered through runInCompany().
+        'src/members/invitation-token.repository.ts',
         // Writes platform-level rows (company_id NULL), which RLS hides from
         // the tenant connection, and takes an advisory lock for the hash chain.
         'src/audit/audit.service.ts',

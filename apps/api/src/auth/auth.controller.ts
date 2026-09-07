@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { SessionRevokedError, UnauthenticatedError } from '../common/errors';
 import { ZodValidationPipe } from '../common/pipes';
@@ -32,9 +33,23 @@ export class AuthController {
     private readonly cookies: SessionCookieService,
   ) {}
 
+  /**
+   * `10 per minute per IP`, on top of the existing per-ACCOUNT lockout
+   * (10 failures -> 15 minutes, in IdentityRepository).
+   *
+   * The two cover different attacks and neither is sufficient alone. Account
+   * lockout stops a password being guessed against one address, but does
+   * nothing about credential stuffing — one attempt each against ten thousand
+   * addresses never trips it. The IP limit is what makes that expensive.
+   *
+   * Conversely the IP limit alone is defeated by a botnet, which the account
+   * lockout still catches. Being per-replica, the IP limit is approximate; the
+   * account lockout is exact because it lives in the database.
+   */
   @Post('login')
   @Public()
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async login(
     @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,
     @Req() req: Request,

@@ -4,10 +4,13 @@ A SaaS booking platform where many independent companies each run multiple
 branches, staff, services and appointments, with strict data isolation between
 them.
 
-**Status: foundation.** The monorepo, the API, the database with tenant
-isolation, and the web shell are in place and verified. No booking features are
-built yet — no appointments, availability, payments, promotions, gift cards or
-notifications.
+**Status: identity.** The monorepo, the API, the database with tenant isolation
+and the web shell are in place, and on top of them: company provisioning,
+invitations, and a working sign-in that survives a reload and resolves which
+company you are in.
+
+No booking features yet — no appointments, availability, payments, promotions,
+gift cards or notifications. Member and role administration is next.
 
 ---
 
@@ -224,6 +227,11 @@ Full detail in [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 | [docs/DATABASE.md](docs/DATABASE.md) | 78-table schema, ERD, isolation strategy |
 | [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md) | How isolation is implemented and enforced |
 | [docs/ARCHITECTURE-RULES.md](docs/ARCHITECTURE-RULES.md) | Ten rules, why each exists, how each is checked |
+| [docs/PROVISIONING.md](docs/PROVISIONING.md) | How a company is created, and why an operator does it |
+| [docs/INVITATIONS.md](docs/INVITATIONS.md) | How somebody joins a company, and what a leaked link is worth |
+| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Signing in, staying signed in, and resolving the company |
+| [docs/COMPANY-BRANCHES.md](docs/COMPANY-BRANCHES.md) | Administering a company and its branches |
+| [docs/EMPLOYEES.md](docs/EMPLOYEES.md) | Staff, their branches and services, and why an employee is not a user |
 
 ---
 

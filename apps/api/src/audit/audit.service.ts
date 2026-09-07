@@ -78,13 +78,41 @@ export class AuditService {
    * follow-up.
    */
   async record(event: AuditEvent): Promise<void> {
+    return this.write(event, undefined);
+  }
+
+  /**
+   * Record an event against a named company, for flows that legitimately act on
+   * one before a tenant context exists.
+   *
+   * There is exactly one such flow today: accepting an invitation. That route is
+   * `@Public()` and `@NoTenant()` — it must be, because the caller has no
+   * session and no company yet — so `record()` would file "someone joined" as a
+   * platform row with `company_id` NULL, which RLS then hides from the very
+   * company it happened to. The company would never see its own membership
+   * changes.
+   *
+   * `companyId` is the FIRST parameter so it cannot be missed in review. This
+   * is deliberately NOT a general escape from the rule that tenant information
+   * is never passed in: the id must come from a server-side lookup the caller
+   * cannot influence — the invitation row, here — never from a request body,
+   * a header or a route parameter.
+   */
+  async recordForCompany(companyId: string, event: AuditEvent): Promise<void> {
+    return this.write(event, companyId);
+  }
+
+  private async write(event: AuditEvent, forCompanyId: string | undefined): Promise<void> {
     try {
       const ctx = this.context.peek();
       const actor = ctx?.actor ?? { kind: 'SYSTEM' as const, name: 'unknown' };
       const tenant = event.platformLevel ? null : (ctx?.tenant ?? null);
 
       const row = {
-        companyId: tenant?.company.id ?? null,
+        // An explicit company wins over the ambient one; `platformLevel` still
+        // wins over both, so "this is about the company, not within it" stays
+        // expressible.
+        companyId: event.platformLevel ? null : (forCompanyId ?? tenant?.company.id ?? null),
         occurredAt: new Date(),
         actorType: actor.kind,
         actorId: actorId(actor),
@@ -166,7 +194,17 @@ export class AuditService {
    * with no possibility of leaking.
    */
   private async lockAndReadPreviousHash(tx: TenantTx, companyId: string): Promise<Buffer | null> {
-    await tx.$queryRaw<unknown>(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`);
+    // `$executeRaw`, not `$queryRaw`.
+    //
+    // `pg_advisory_xact_lock` returns `void`, and Prisma 5's $queryRaw tries to
+    // deserialize every returned column — it has no mapping for void and throws
+    // "Failed to deserialize column of type 'void'". Because AuditService
+    // swallows its own failures by design (an audit write must not roll back
+    // the business action that succeeded), that error surfaced only as an
+    // ERROR log line, and every hash-chained company audit row was silently
+    // being dropped. $executeRaw takes the same lock and returns a row count,
+    // which needs no deserialization.
+    await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${companyId}))`);
 
     const rows = await tx.$queryRaw<Array<{ row_hash: Buffer }>>(
       Prisma.sql`

@@ -4,16 +4,16 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { buttonVariants } from '@/components/ui/button';
+import { DashboardSummary } from '@/features/analytics';
 import { useSession } from '@/features/auth';
 
 /**
  * Where a signed-in user lands.
  *
- * Deliberately thin: the product surface behind it — appointments, customers,
- * the calendar — is not built. What it does do is prove the session resolved
- * correctly, by showing the company and the permissions the SERVER says this
- * user holds. That is the useful thing to see at this stage, and it is the
- * fastest way to spot a tenant-resolution bug by eye.
+ * The business figures come first, because they are what somebody opens this
+ * screen for in the morning. The access card below them stays: it is still the
+ * fastest way to spot a tenant-resolution bug by eye, and it proves the session
+ * resolved to the company the header claims.
  */
 export default function DashboardPage() {
   const { user, activeCompany, memberships, permissions, isOwner, isLoadingCompany } = useSession();
@@ -39,6 +39,35 @@ export default function DashboardPage() {
           {isOwner ? ' · owner' : ''}
         </p>
       </div>
+
+      <DashboardSummary />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Money and messages</CardTitle>
+          <CardDescription>Payments, gift cards, promotions and what went out.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/payments" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Payments
+          </Link>
+          <Link href="/gift-cards" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Gift cards
+          </Link>
+          <Link href="/promotions" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Promotions
+          </Link>
+          <Link href="/subscription" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Subscription
+          </Link>
+          <Link href="/reports" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Reports
+          </Link>
+          <Link href="/notifications" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            Notifications
+          </Link>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -66,6 +95,21 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Appointments</CardTitle>
+          <CardDescription>The appointment book: book, move, cancel and progress.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/appointments" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Open appointments
+          </Link>
+          <Link href="/appointments/new" className={buttonVariants({ size: 'sm' })}>
+            New appointment
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Staff</CardTitle>
           <CardDescription>The people customers can book with.</CardDescription>
         </CardHeader>
@@ -78,10 +122,50 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Availability</CardTitle>
+          <CardDescription>Check what the engine says is bookable.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/availability" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Open availability
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Services</CardTitle>
+          <CardDescription>What customers can book, and how it is grouped.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/services" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Manage services
+          </Link>
+          <Link
+            href="/services/categories"
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+          >
+            Categories
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Customers</CardTitle>
+          <CardDescription>The people you book work for.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/customers" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Manage customers
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Not built yet</CardTitle>
-          <CardDescription>
-            Members and roles, then the catalog, scheduling and booking.
-          </CardDescription>
+          <CardDescription>Members and roles, then scheduling and booking.</CardDescription>
         </CardHeader>
       </Card>
     </div>

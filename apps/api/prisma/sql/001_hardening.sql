@@ -321,15 +321,15 @@ ALTER TABLE promotion ADD CONSTRAINT promotion_discount_shape CHECK (
 ALTER TABLE promotion ADD CONSTRAINT promotion_date_order
   CHECK (ends_at IS NULL OR ends_at > starts_at);
 
--- Gift card ADJUST must carry a reason
+-- Gift card ADJUSTMENT must carry a reason
 ALTER TABLE gift_card_transaction ADD CONSTRAINT gift_card_adjust_reason
-  CHECK (type <> 'ADJUST' OR reason IS NOT NULL);
+  CHECK (type <> 'ADJUSTMENT' OR reason IS NOT NULL);
 
 -- Transaction sign must match its type
 ALTER TABLE gift_card_transaction ADD CONSTRAINT gift_card_txn_sign CHECK (
   (type IN ('ISSUE', 'REFUND')            AND amount_minor > 0)
   OR (type IN ('REDEEM', 'EXPIRE', 'VOID') AND amount_minor < 0)
-  OR (type = 'ADJUST')
+  OR (type = 'ADJUSTMENT')
 );
 
 -- One appointment, one currency (v1 constraint — see docs/DATABASE.md §16.2)
@@ -536,7 +536,7 @@ DECLARE
     'promotion','promotion_service','promotion_branch','promotion_employee',
     'promotion_customer','coupon','promotion_redemption',
     'gift_card','gift_card_transaction',
-    'notification','notification_preference',
+    'notification','notification_preference','appointment_reminder',
     'subscription','subscription_entitlement_override','subscription_invoice',
     'subscription_payment','usage_record','usage_counter',
     'outbox_event','idempotency_key','file'

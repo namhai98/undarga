@@ -13,7 +13,8 @@ import {
   READ_ONLY_COMPANY_PERMISSIONS,
 } from '../../authz/permissions';
 import { TenantPrismaService } from '../../database/tenant-prisma.service';
-import { TenantDirectoryService } from '../directory/tenant-directory.service';
+import { TenantDirectoryService, type CompanySummary } from '../directory/tenant-directory.service';
+import { effectiveStatus, grantsAccess } from '../../subscriptions/subscription-state';
 import {
   isCompanyUser,
   isCustomerActor,
@@ -138,6 +139,33 @@ export class MembershipService {
       membership: resolved.membership,
       permissions: new Set(resolved.permissions),
       source,
+      viaPlatformAccess: false,
+    };
+  }
+
+  /**
+   * The tenant context for an anonymous visitor on a company's public booking
+   * page.
+   *
+   * Still built here, so "only MembershipService creates a TenantContext"
+   * stays true. It carries NO permissions and no membership: the public
+   * booking module decides for itself what an anonymous visitor may see, and
+   * nothing reachable through the permission guard is opened by it. The
+   * database scope is the company named in the URL — every query still runs
+   * under RLS for exactly that tenant.
+   *
+   * Only an ACTIVE company is public. A company still being set up, suspended
+   * or cancelled answers exactly like one that does not exist.
+   */
+  async authorizePublic(companyId: string): Promise<TenantContext> {
+    const company = await this.loadCompany(companyId);
+    if (company.status !== 'ACTIVE') throw new TenantNotFoundError();
+
+    return {
+      company,
+      membership: null,
+      permissions: new Set<string>(),
+      source: 'ROUTE_PARAM',
       viaPlatformAccess: false,
     };
   }
@@ -301,7 +329,7 @@ export class MembershipService {
       id: summary.id,
       slug: summary.slug,
       status: summary.status,
-      operationalStatus: operationalStatusFor(summary.status),
+      ...operationalStatusFor(summary),
       defaultTimezoneName: summary.defaultTimezoneName,
       currencyCode: summary.currencyCode,
     };
@@ -329,20 +357,26 @@ export class MembershipService {
 }
 
 /**
- * Maps company status to what the request may do.
+ * What the request may do, from the company's status and its subscription.
  *
- * READ_ONLY is wired but not yet reachable: the grace period that produces it
- * is driven by `subscription.status`, and the billing module does not exist.
- * Reading the subscription on every request would add a query to the hot path
- * for a state nothing can currently enter, so it is deferred — the enum value
- * and the guard hook are here so that turning it on is a one-line change.
+ * READ_ONLY means every `@RequiresWrite` route is refused with 402
+ * TENANT_READ_ONLY; reads, and the subscription endpoints themselves, still
+ * work. An expired subscription never deletes anything — this is what
+ * "expired" means.
+ *
+ * The subscription comes from the cached directory summary, so this adds no
+ * query to the request path. A company with no subscription row (provisioned
+ * before billing existed) is not restricted by it.
  */
-function operationalStatusFor(status: string): CompanyOperationalStatus {
-  switch (status) {
-    case 'ACTIVE':
-    case 'PENDING_SETUP':
-      return 'ACTIVE';
-    default:
-      return 'READ_ONLY';
+export function operationalStatusFor(summary: CompanySummary): {
+  operationalStatus: CompanyOperationalStatus;
+  readOnlyReason: 'SUBSCRIPTION_EXPIRED' | 'COMPANY_INACTIVE' | null;
+} {
+  if (summary.status !== 'ACTIVE' && summary.status !== 'PENDING_SETUP') {
+    return { operationalStatus: 'READ_ONLY', readOnlyReason: 'COMPANY_INACTIVE' };
   }
+  if (summary.subscription && !grantsAccess(effectiveStatus(summary.subscription))) {
+    return { operationalStatus: 'READ_ONLY', readOnlyReason: 'SUBSCRIPTION_EXPIRED' };
+  }
+  return { operationalStatus: 'ACTIVE', readOnlyReason: null };
 }

@@ -66,6 +66,14 @@ export const COMPANY_PERMISSIONS = {
   RESOURCE_READ: 'resource:read',
   RESOURCE_WRITE: 'resource:write',
 
+  // availability
+  //
+  // A read of computed bookable slots. Its own key rather than folding into
+  // `appointment:read:*`: reception and (later) the public booking page need
+  // availability without necessarily seeing the appointment book, and a
+  // narrower grant is the safer default.
+  AVAILABILITY_READ: 'availability:read',
+
   // customers
   CUSTOMER_READ: 'customer:read',
   CUSTOMER_WRITE: 'customer:write',
@@ -90,6 +98,8 @@ export const COMPANY_PERMISSIONS = {
   GIFTCARD_READ: 'giftcard:read',
   GIFTCARD_ISSUE: 'giftcard:issue',
   GIFTCARD_ADJUST: 'giftcard:adjust',
+  /** Draw a card down, or give back part of a redemption. Never creates value. */
+  GIFTCARD_REDEEM: 'giftcard:redeem',
 
   // reporting
   REPORT_READ: 'report:read',

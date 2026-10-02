@@ -18,6 +18,7 @@ import type {
   LinkEmployeeAccountDto,
   UpdateEmployeeDto,
 } from './dto/employee.dto';
+import { EntitlementsService } from '../subscriptions/entitlements.service';
 
 /**
  * Employees: the people a company books work against.
@@ -71,6 +72,7 @@ export class EmployeesService {
     private readonly identity: IdentityRepository,
     private readonly invitations: InvitationsService,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -186,6 +188,7 @@ export class EmployeesService {
       // Validated BEFORE the employee row exists, so a bad branch id produces a
       // 404 and no orphan.
       if (branchIds?.length) await this.assertBranchesExist(tx, companyId, branchIds);
+      await this.entitlements.assertCanAdd(tx, companyId, 'EMPLOYEE');
 
       const row = await tx.employee.create({
         data: {

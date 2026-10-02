@@ -50,8 +50,8 @@ export default function NoCompanyPage() {
         </CardHeader>
         <CardContent className="text-muted-foreground grid gap-2 text-sm">
           <p>
-            Companies are set up by the platform team, not self-serve. If you were expecting
-            access, ask whoever invited you to send a new invitation link.
+            Companies are set up by the platform team, not self-serve. If you were expecting access,
+            ask whoever invited you to send a new invitation link.
           </p>
           <p>If you have one already, opening it will bring you straight here.</p>
         </CardContent>

@@ -83,6 +83,22 @@ export const envSchema = z.object({
    */
   DB_POOLING_MODE: z.enum(['transaction', 'session', 'none']).default('transaction'),
 
+  // --- notifications -------------------------------------------------------
+  /**
+   * The in-process worker that turns outbox events into notifications, sends
+   * what is due and schedules reminders. Off in tests regardless (they drive
+   * each stage directly). Several API instances may all run it: every stage
+   * claims its work with a conditional UPDATE or a unique key.
+   */
+  NOTIFICATION_WORKER_ENABLED: bool(true),
+  /** How often the worker polls. Reminders are accurate to about this much. */
+  NOTIFICATION_WORKER_INTERVAL_MS: int(15_000, 1_000),
+
+  // --- subscriptions -------------------------------------------------------
+  /** The expiry / renewal sweep. Off in tests regardless. */
+  SUBSCRIPTION_SWEEP_ENABLED: bool(true),
+  SUBSCRIPTION_SWEEP_INTERVAL_MS: int(3_600_000, 60_000),
+
   // --- redis ---------------------------------------------------------------
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   REDIS_KEY_PREFIX: z.string().default('undarga:'),
@@ -147,6 +163,18 @@ export const envSchema = z.object({
 
   // --- audit ---------------------------------------------------------------
   AUDIT_HASH_CHAIN: bool(true),
+
+  // --- availability ------------------------------------------------------------
+  /**
+   * TTL for the advisory availability response cache, in seconds. `0` disables
+   * it entirely, which is the default: the engine loads a bounded set of rows
+   * and computes in memory, so caching is a benchmark-driven optimisation, not
+   * a correctness requirement. When enabled it must stay SHORT — a slot list
+   * goes stale the instant an appointment is created — and the endpoint is
+   * advisory regardless (docs/DATABASE.md §13.1): the Appointment Engine
+   * re-checks under a constraint.
+   */
+  AVAILABILITY_CACHE_TTL_SECONDS: int(0, 0),
 
   // --- email (placeholder; no mail is sent yet) -----------------------------
   SMTP_HOST: optionalString,

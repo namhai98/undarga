@@ -1,3 +1,4 @@
+import type { SubscriptionStatus } from '@prisma/client';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { AppConfig } from '../../config';
 import { TtlCache } from '../../common/cache';
@@ -10,6 +11,18 @@ export interface CompanySummary {
   readonly defaultTimezoneName: string;
   readonly currencyCode: string;
   readonly deletedAt: Date | null;
+  /**
+   * The subscription's state and the timestamps that move it, or null for a
+   * company provisioned before subscriptions. Cached with the rest of the
+   * summary; the EFFECTIVE status is worked out per request from these
+   * timestamps, so a trial ending is honoured to the second regardless.
+   */
+  readonly subscription: {
+    readonly status: SubscriptionStatus;
+    readonly trialEndsAt: Date | null;
+    readonly currentPeriodEnd: Date;
+    readonly graceEndsAt: Date | null;
+  } | null;
 }
 
 /**
@@ -100,6 +113,9 @@ export class TenantDirectoryService implements OnModuleInit {
           defaultTimezoneName: true,
           currencyCode: true,
           deletedAt: true,
+          subscription: {
+            select: { status: true, trialEndsAt: true, currentPeriodEnd: true, graceEndsAt: true },
+          },
         },
       });
       return row ?? null;

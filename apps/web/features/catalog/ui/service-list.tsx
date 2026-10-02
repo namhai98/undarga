@@ -2,10 +2,11 @@
 
 import { formatMoney } from '@undarga/shared';
 import { Loader2, Search } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -114,12 +115,20 @@ export function ServiceList() {
             {services.isPending ? 'Loading…' : `${total} ${total === 1 ? 'service' : 'services'}`}
           </p>
         </div>
-        {/* Hidden without the permission — the API refuses it regardless. */}
-        {canWrite ? (
-          <Button size="sm" onClick={() => setEditing('new')}>
-            Add service
-          </Button>
-        ) : null}
+        <div className="flex gap-2">
+          <Link
+            href="/services/categories"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            Categories
+          </Link>
+          {/* Hidden without the permission — the API refuses it regardless. */}
+          {canWrite ? (
+            <Button size="sm" onClick={() => setEditing('new')}>
+              Add service
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

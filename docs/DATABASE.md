@@ -751,8 +751,8 @@ Transaction types, all signed:
 |---|---|---|
 | `ISSUE` | + | Purchase payment succeeded |
 | `REDEEM` | − | Applied as tender on an appointment |
-| `REFUND` | + | A card-paid appointment was refunded to the card |
-| `ADJUST` | ± | Staff correction — requires `giftcard:adjust`, a reason, and an audit row |
+| `REFUND` | + | Value given back: a refunded card payment, or a manual refund pointing at the redemption it reverses (`reverses_transaction_id`, capped at what that redemption took) |
+| `ADJUSTMENT` | ± | Staff correction — requires `giftcard:adjust`, a reason, and an audit row |
 | `EXPIRE` | − | Remaining balance written off, where legally permitted |
 | `VOID` | − | Fraud or chargeback; card moved to `VOID` |
 

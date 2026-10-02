@@ -25,7 +25,15 @@ import { tokenStore } from '@/services/token-store';
  * `refreshed` is excluded: a routine token rotation is the same user in the
  * same company, and clearing there would throw away every cached query every
  * fifteen minutes.
+ *
+ * Queries under a SESSION_INDEPENDENT root key are kept. The public booking
+ * page's data is identical for every visitor and derives from no session — and
+ * an anonymous visitor's bootstrap refresh 401s moments after the page starts
+ * loading, so wiping here would remove its in-flight queries out from under the
+ * mounted components and leave them pending forever.
  */
+const SESSION_INDEPENDENT: ReadonlySet<unknown> = new Set(['public-booking']);
+
 export function SessionCacheBridge({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
@@ -33,7 +41,10 @@ export function SessionCacheBridge({ children }: { children: ReactNode }) {
     () =>
       tokenStore.subscribe((_tokens, reason) => {
         if (reason === 'refreshed') return;
-        queryClient.clear();
+        queryClient.removeQueries({
+          predicate: (query) => !SESSION_INDEPENDENT.has(query.queryKey[0]),
+        });
+        queryClient.getMutationCache().clear();
       }),
     [queryClient],
   );

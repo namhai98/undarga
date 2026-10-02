@@ -159,12 +159,49 @@ export class TenantSuspendedError extends DomainError {
 export class TenantReadOnlyError extends DomainError {
   readonly code = 'TENANT_READ_ONLY' as const;
   readonly status = 402;
-  constructor() {
+  constructor(reason: 'SUBSCRIPTION_EXPIRED' | 'COMPANY_INACTIVE' | null = null) {
     // 402 rather than 403: this is a billing state, not a permission problem,
     // and the client should surface an upgrade path rather than "access denied".
     super(
-      'This company is in a read-only grace period. Settle the outstanding invoice to resume changes.',
+      reason === 'SUBSCRIPTION_EXPIRED'
+        ? 'This company’s subscription has expired. Its data is kept and can be read; ' +
+            'reactivate or choose a plan to make changes again.'
+        : 'This company is in a read-only grace period. Settle the outstanding invoice to resume changes.',
+      reason ? { reason } : undefined,
     );
+  }
+}
+
+/**
+ * The company's plan does not allow one more of something. 403 with the
+ * numbers, so the screen can say "5 of 5 employees — upgrade to add more"
+ * rather than a bare refusal. Nothing was created.
+ */
+export class PlanLimitExceededError extends DomainError {
+  readonly code = 'PLAN_LIMIT_EXCEEDED' as const;
+  readonly status = 403;
+  constructor(details: {
+    limit: string;
+    max: number;
+    current: number;
+    planKey: string | null;
+    violations?: Array<{ limit: string; max: number; current: number }>;
+  }) {
+    super(
+      details.violations
+        ? 'Current usage is above what that plan allows. Reduce it, or choose a larger plan.'
+        : `This plan allows ${details.max} — ${details.current} already in use. Upgrade to add more.`,
+      details,
+    );
+  }
+}
+
+/** The company's plan does not include a feature. */
+export class FeatureNotAvailableError extends DomainError {
+  readonly code = 'FEATURE_NOT_AVAILABLE' as const;
+  readonly status = 403;
+  constructor(feature: string, planKey: string | null) {
+    super('Your plan does not include this feature. Upgrade to use it.', { feature, planKey });
   }
 }
 
@@ -259,6 +296,127 @@ export class ResourceNotFoundError extends DomainError {
   readonly status = 404;
   constructor(resource: string, id?: string) {
     super('Not found.', { resource, id });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Availability
+// ---------------------------------------------------------------------------
+
+/**
+ * The service exists and belongs to this company, but its status forbids
+ * booking it at all (DRAFT, INACTIVE, ARCHIVED).
+ *
+ * A hard 409 rather than an empty slot list: an empty list means "nothing free
+ * on that date", and a caller retrying tomorrow would be reasonable. A service
+ * that is not bookable is a different thing entirely, and the client should say
+ * so rather than invite a pointless retry. A branch that is simply closed on
+ * the requested date, or has nobody rostered, still returns 200 with an
+ * `unavailableReason`.
+ */
+export class ServiceNotBookableError extends DomainError {
+  readonly code = 'SERVICE_NOT_BOOKABLE' as const;
+  readonly status = 409;
+  constructor(status: string) {
+    super('This service cannot be booked.', { serviceStatus: status });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Appointments
+// ---------------------------------------------------------------------------
+
+/**
+ * The requested start time is not one the availability engine currently offers
+ * for that branch, service, employee and resource — outside hours, rostered
+ * off, already booked, too soon, or simply not on the slot grid.
+ *
+ * `details.reason` carries the engine's structural reason when there is one, so
+ * the client can say "the branch is closed that day" rather than a generic
+ * "pick another time".
+ */
+export class SlotUnavailableError extends DomainError {
+  readonly code = 'SLOT_UNAVAILABLE' as const;
+  readonly status = 409;
+  constructor(details: { reason: string; startsAt: string }) {
+    super('That time is no longer available. Choose another slot.', details);
+  }
+}
+
+/**
+ * The database exclusion constraint refused the write: another booking for the
+ * same employee or resource committed an overlapping reservation between our
+ * availability check and our insert.
+ *
+ * Distinct from SLOT_UNAVAILABLE because the client did nothing wrong — it read
+ * a slot that was genuinely free and lost a race. The right response is to
+ * refresh availability and try again.
+ */
+export class SlotTakenError extends DomainError {
+  readonly code = 'SLOT_TAKEN' as const;
+  readonly status = 409;
+  constructor(conflict: 'employee' | 'resource' | 'unknown') {
+    super('Someone just booked that slot. Refresh availability and choose another time.', {
+      conflict,
+    });
+  }
+}
+
+/**
+ * The public booking page cannot take this booking — today, because the
+ * customer record matching the contact details is blocked.
+ *
+ * Deliberately one vague answer for all of them. The caller is anonymous, and
+ * "your account is blocked" is not something to
+ * tell whoever happens to type a phone number into a form.
+ */
+export class OnlineBookingUnavailableError extends DomainError {
+  readonly code = 'ONLINE_BOOKING_UNAVAILABLE' as const;
+  readonly status = 409;
+  constructor() {
+    super('This booking cannot be made online. Please contact the business directly.');
+  }
+}
+
+/**
+ * A promotion code was offered with a booking and cannot be honoured — unknown,
+ * expired, paused, used up, or not valid for this service, branch, staff member
+ * or customer.
+ *
+ * The booking is refused rather than silently taken at full price: the customer
+ * was shown a discounted total, and charging something else is worse than
+ * asking them to retry. `details.reason` is the eligibility code
+ * (`INVALID_CODE`, `ENDED`, `LIMIT_REACHED`, `WRONG_BRANCH`, …).
+ */
+export class PromotionNotApplicableError extends DomainError {
+  readonly code = 'PROMOTION_NOT_APPLICABLE' as const;
+  readonly status = 400;
+  constructor(problem: { code: string; message: string }) {
+    super(problem.message, { reason: problem.code });
+  }
+}
+
+/**
+ * A gift card that cannot be spent (or credited) as asked.
+ *
+ * 400 rather than 409: the request, not the server's state, is what has to
+ * change — another card, a smaller amount. `details.reason` is a stable code
+ * (`DISABLED`, `EXPIRED`, `INSUFFICIENT_BALANCE`, …) for clients; the
+ * message is one sentence safe to show at the till.
+ */
+export class GiftCardNotUsableError extends DomainError {
+  readonly code = 'GIFT_CARD_NOT_USABLE' as const;
+  readonly status = 400;
+  constructor(problem: { code: string; message: string }) {
+    super(problem.message, { reason: problem.code });
+  }
+}
+
+export class InvalidStatusTransitionError extends DomainError {
+  readonly code = 'INVALID_STATUS_TRANSITION' as const;
+  readonly status = 409;
+  constructor(from: string, to: string) {
+    super(`An appointment cannot move from ${from} to ${to}.`, { from, to });
   }
 }
 

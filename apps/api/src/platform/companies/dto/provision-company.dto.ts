@@ -78,6 +78,18 @@ export const provisionCompanySchema = z.object({
   contactPhone: z.string().trim().max(32).optional(),
 
   /**
+   * The plan the company starts a trial of. Defaults to the catalog's trial
+   * plan (PRO). A plan with no trial days starts ACTIVE instead. Ignored, with
+   * a warning, when the plan catalog has not been seeded.
+   */
+  planKey: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9_]{2,48}$/)
+    .optional(),
+
+  /**
    * The first owner.
    *
    * Required: a company with no owner is unadministrable, and there is no

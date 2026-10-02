@@ -71,6 +71,45 @@ module.exports = function nest({ tsconfigRootDir, project = true } = {}) {
         'src/health/health.service.ts',
         // Claims pending work across tenants, then re-enters each one.
         'src/jobs/**/*.ts',
+        // Same shape as the job runner: the outbox and the notification queue
+        // are cross-tenant by nature — a dispatcher that had to be told which
+        // company to look at could not find work on its own. Both re-enter each
+        // row's company through runInCompany() before writing anything.
+        'src/notifications/notification-dispatcher.service.ts',
+        'src/notifications/notification-worker.service.ts',
+        // The reminder sweep: one cross-tenant query (unnest of each company's
+        // offsets against its live appointments) that Prisma cannot express;
+        // every write then re-enters the row's company via runInCompany().
+        'src/notifications/notification-reminder.service.ts',
+        // Subscriptions: a per-(company, limit) advisory lock so concurrent
+        // creates cannot overshoot a plan limit; a FOR UPDATE on the
+        // subscription row for plan changes; and the lifecycle sweep, which
+        // reads across tenants and re-enters each company to write.
+        'src/subscriptions/entitlements.service.ts',
+        'src/subscriptions/subscriptions.service.ts',
+        'src/subscriptions/subscription-lifecycle.service.ts',
+        // `SELECT … FOR UPDATE` on one gift card. Prisma has no row-lock API,
+        // and without the lock two tills redeeming the same card both see the
+        // old balance. The company_id predicate is still in the WHERE and RLS
+        // is still active: the lock narrows concurrency, not visibility.
+        'src/giftcards/giftcards.service.ts',
+        // Same, on a payment row before a refund, plus the ledger posting.
+        'src/payments/payments.service.ts',
+        // `SELECT … FOR UPDATE` on one appointment before a status change, and
+        // `pg_advisory_xact_lock` per employee/resource before a booking write,
+        // so concurrent requests for one slot serialise. Both carry company_id
+        // (in the WHERE, and in the lock key); RLS stays active. The exclusion
+        // constraint remains the guarantee — the locks make it fail politely.
+        'src/appointments/appointments.service.ts',
+        // Consumes a promotion's redemption counter with a conditional UPDATE:
+        //   SET redeemed_count = redeemed_count + 1 WHERE redeemed_count < max
+        // Read-then-write would let a promotion capped at 100 be redeemed 103
+        // times under load, and that cap is a promise with legal weight.
+        'src/promotions/promotions.service.ts',
+        // Date-truncated GROUP BY, which Prisma cannot express. The alternative
+        // is pulling every payment into memory to bucket it, which is the one
+        // thing a reporting layer must not do. Every value is parameterised.
+        'src/analytics/**/*.ts',
         'prisma/**/*.ts',
         'scripts/**/*.ts',
         'test/**/*.ts',

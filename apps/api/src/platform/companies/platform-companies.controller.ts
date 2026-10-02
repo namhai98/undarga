@@ -16,11 +16,11 @@ const uuidParam = new ZodValidationPipe(z.string().uuid());
  * WHY THERE IS NO SELF-SERVE SIGNUP
  * ---------------------------------------------------------------------------
  *
- * Creating a company means creating its billing relationship, and plans,
- * trials and entitlements are unresolved design decisions (ARCHITECTURE.md §16
- * #16 and #17). An operator-provisioned company sidesteps all of it: the
- * commercial terms are agreed out of band, and the platform records the result.
- * Self-serve can be added later as a second entry point into the same service.
+ * Creating a company means creating its billing relationship. Provisioning
+ * starts its subscription — a trial of `planKey` (default PRO) — in the same
+ * transaction (see docs/SUBSCRIPTIONS.md); the commercial terms beyond that are
+ * agreed out of band. Self-serve signup can be added later as a second entry
+ * point into the same service.
  *
  * ---------------------------------------------------------------------------
  * THE ROUTE PARAMETER IS `:id`, NOT `:companyId`

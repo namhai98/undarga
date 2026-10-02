@@ -80,6 +80,20 @@ export class AppConfig {
   // ---------------------------------------------------------------------------
   // redis
   // ---------------------------------------------------------------------------
+  get notifications() {
+    return {
+      workerEnabled: this.get('NOTIFICATION_WORKER_ENABLED'),
+      workerIntervalMs: this.get('NOTIFICATION_WORKER_INTERVAL_MS'),
+    };
+  }
+
+  get subscriptions() {
+    return {
+      sweepEnabled: this.get('SUBSCRIPTION_SWEEP_ENABLED'),
+      sweepIntervalMs: this.get('SUBSCRIPTION_SWEEP_INTERVAL_MS'),
+    };
+  }
+
   get redis() {
     return {
       url: this.get('REDIS_URL'),
@@ -133,6 +147,18 @@ export class AppConfig {
   // ---------------------------------------------------------------------------
   get audit() {
     return { hashChain: this.get('AUDIT_HASH_CHAIN') };
+  }
+
+  // ---------------------------------------------------------------------------
+  // availability
+  // ---------------------------------------------------------------------------
+  get availability() {
+    const cacheTtlSeconds = this.get('AVAILABILITY_CACHE_TTL_SECONDS');
+    return {
+      /** 0 disables the advisory response cache. Kept off until benchmarked. */
+      cacheTtlSeconds,
+      cacheEnabled: cacheTtlSeconds > 0,
+    };
   }
 
   // ---------------------------------------------------------------------------

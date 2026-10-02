@@ -232,6 +232,9 @@ Full detail in [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Signing in, staying signed in, and resolving the company |
 | [docs/COMPANY-BRANCHES.md](docs/COMPANY-BRANCHES.md) | Administering a company and its branches |
 | [docs/EMPLOYEES.md](docs/EMPLOYEES.md) | Staff, their branches and services, and why an employee is not a user |
+| [docs/CATALOG.md](docs/CATALOG.md) | Services and categories: pricing, buffers, and what "bookable" means |
+| [docs/CUSTOMERS.md](docs/CUSTOMERS.md) | Customer records, duplicate handling, and why they are per-company |
+| [docs/BILLING.md](docs/BILLING.md) | Payments, gift cards, promotions, notifications and reporting |
 
 ---
 

@@ -7,8 +7,17 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuditModule } from './audit/audit.module';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { AvailabilityModule } from './availability/availability.module';
 import { BranchesModule } from './branches/branches.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { CustomersModule } from './customers/customers.module';
+import { GiftCardsModule } from './giftcards/giftcards.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { PublicBookingModule } from './public-booking/public-booking.module';
 import { CompanyModule } from './company/company.module';
 import { EmployeesModule } from './employees/employees.module';
 import { AuthModule } from './auth/auth.module';
@@ -29,6 +38,8 @@ import { MembersModule } from './members/members.module';
 import { UsersModule } from './users/users.module';
 import { PlatformModule } from './platform/platform.module';
 import { RedisModule } from './redis/redis.module';
+import { FeatureGuard } from './subscriptions/feature.guard';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { TenantGuard } from './tenancy/guards/tenant.guard';
 import { TenancyModule } from './tenancy/tenancy.module';
 
@@ -68,6 +79,7 @@ import { TenancyModule } from './tenancy/tenancy.module';
     ConfigModule,
     DatabaseModule,
     RedisModule,
+    SubscriptionsModule,
     TenancyModule,
     PlatformModule,
     MailModule,
@@ -78,6 +90,15 @@ import { TenancyModule } from './tenancy/tenancy.module';
     BranchesModule,
     EmployeesModule,
     CatalogModule,
+    CustomersModule,
+    GiftCardsModule,
+    PromotionsModule,
+    NotificationsModule,
+    PaymentsModule,
+    AnalyticsModule,
+    AvailabilityModule,
+    AppointmentsModule,
+    PublicBookingModule,
     UsersModule,
     JobsModule,
     HealthModule,
@@ -132,6 +153,10 @@ import { TenancyModule } from './tenancy/tenancy.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionGuard },
+    // 5. FeatureGuard — whether the company's PLAN includes the feature a
+    //    route declares with @RequireFeature. After permissions: a role that
+    //    may not see gift cards is told so before being told to upgrade.
+    { provide: APP_GUARD, useClass: FeatureGuard },
   ],
 })
 export class AppModule implements NestModule {

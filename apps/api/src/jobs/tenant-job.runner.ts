@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { JobTenantMismatchError, JobTenantMissingError } from '../common/errors';
 import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.service';
+import { operationalStatusFor } from '../tenancy/membership/membership.service';
 import { RequestContextService } from '../tenancy/context/request-context.service';
 import type { TenantContext } from '../tenancy/context/context.types';
 import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.service';
@@ -99,7 +100,7 @@ export class TenantJobRunner {
         id: company.id,
         slug: company.slug,
         status: company.status,
-        operationalStatus: company.status === 'ACTIVE' ? 'ACTIVE' : 'READ_ONLY',
+        ...operationalStatusFor(company),
         defaultTimezoneName: company.defaultTimezoneName,
         currencyCode: company.currencyCode,
       },

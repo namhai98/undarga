@@ -62,7 +62,7 @@ export class PermissionGuard implements CanActivate {
       const tenant = this.context.tenantOrNull();
       // Tenant-less routes have nothing to be read-only about.
       if (tenant && tenant.company.operationalStatus === 'READ_ONLY') {
-        throw new TenantReadOnlyError();
+        throw new TenantReadOnlyError(tenant.company.readOnlyReason ?? null);
       }
     }
 

@@ -364,6 +364,9 @@ enum GiftCardStatus {
   DEPLETED
   EXPIRED
   VOID
+  /// Blocked from use, balance kept. Reversible — unlike VOID, which writes the
+  /// balance off for good.
+  DISABLED
 
   @@map("gift_card_status")
 }
@@ -372,7 +375,7 @@ enum GiftCardTransactionType {
   ISSUE
   REDEEM
   REFUND
-  ADJUST
+  ADJUSTMENT
   EXPIRE
   VOID
 
@@ -417,13 +420,18 @@ enum BillingInterval {
   @@map("billing_interval")
 }
 
+/// TRIAL → ACTIVE (paid) → PAST_DUE (renewal invoice unpaid) → EXPIRED.
+/// CANCELLED keeps access until the period ends, then EXPIRED. EXPIRED makes
+/// the company read-only; nothing is deleted. GRACE and SUSPENDED are reserved
+/// for a payment provider's dunning flow and are not entered today.
 enum SubscriptionStatus {
-  TRIALING
+  TRIAL
   ACTIVE
   PAST_DUE
   GRACE
   SUSPENDED
-  CANCELED
+  CANCELLED
+  EXPIRED
 
   @@map("subscription_status")
 }
@@ -679,9 +687,10 @@ model Plan {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  currency      Currency          @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  currency      Currency              @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
   entitlements  PlanEntitlement[]
   subscriptions Subscription[]
+  invoices      SubscriptionInvoice[]
 
   @@index([isPublic, sortOrder])
   @@map("plan")
@@ -708,7 +717,7 @@ model Subscription {
   companyId String @unique @map("company_id") @db.Uuid
   planId    String @map("plan_id") @db.Uuid
 
-  status   SubscriptionStatus @default(TRIALING)
+  status   SubscriptionStatus @default(TRIAL)
   quantity Int                @default(1) @db.SmallInt
 
   trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamptz(3)
@@ -717,6 +726,9 @@ model Subscription {
   graceEndsAt        DateTime? @map("grace_ends_at") @db.Timestamptz(3)
   cancelAtPeriodEnd  Boolean   @default(false) @map("cancel_at_period_end")
   canceledAt         DateTime? @map("canceled_at") @db.Timestamptz(3)
+  cancelReason       String?   @map("cancel_reason") @db.VarChar(512)
+  /// When the subscription last became EXPIRED (cleared on reactivation).
+  expiredAt          DateTime? @map("expired_at") @db.Timestamptz(3)
 
   provider               String? @map("provider") @db.VarChar(32)
   providerSubscriptionId String? @map("provider_subscription_id") @db.VarChar(128)
@@ -760,6 +772,10 @@ model SubscriptionInvoice {
   id             String                    @id @default(uuid(7)) @db.Uuid
   companyId      String                    @map("company_id") @db.Uuid
   subscriptionId String                    @map("subscription_id") @db.Uuid
+  /// The plan billed, and its name at the time — a later rename does not
+  /// rewrite an issued invoice.
+  planId         String?                   @map("plan_id") @db.Uuid
+  planName       String?                   @map("plan_name") @db.VarChar(96)
   number         String                    @db.VarChar(32)
   status         SubscriptionInvoiceStatus @default(DRAFT)
 
@@ -783,12 +799,14 @@ model SubscriptionInvoice {
 
   company      Company               @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subscription Subscription          @relation(fields: [companyId, subscriptionId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  plan         Plan?                 @relation(fields: [planId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   currency     Currency              @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
   payments     SubscriptionPayment[]
 
   @@unique([companyId, number])
   @@unique([companyId, id])
   @@index([companyId, status, dueAt])
+  @@index([companyId, createdAt(sort: Desc)])
   @@map("subscription_invoice")
 }
 
@@ -912,6 +930,7 @@ model Company {
   notificationTemplates   NotificationTemplate[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  appointmentReminders    AppointmentReminder[]
   subscription            Subscription?
   entitlementOverrides    SubscriptionEntitlementOverride[]
   subscriptionInvoices    SubscriptionInvoice[]
@@ -948,6 +967,18 @@ model CompanySettings {
 
   reminderOffsetsMinutes Int[]  @default([1440, 120]) @map("reminder_offsets_minutes")
   defaultLocale          String @default("en-US") @map("default_locale") @db.VarChar(12)
+
+  /// Company-wide channel switches. Off means no notification is created on
+  /// that channel, whatever a template or a customer preference says.
+  emailNotificationsEnabled Boolean @default(true) @map("email_notifications_enabled")
+  smsNotificationsEnabled   Boolean @default(true) @map("sms_notifications_enabled")
+  pushNotificationsEnabled  Boolean @default(true) @map("push_notifications_enabled")
+  /// Appointment reminders at `reminderOffsetsMinutes` before the start.
+  remindersEnabled          Boolean @default(true) @map("reminders_enabled")
+  /// Which channels each notification type goes out on, e.g.
+  /// `{"appointment.created": ["EMAIL", "SMS"]}`. NULL, or a missing type,
+  /// means the platform default for that type.
+  notificationEventChannels Json?   @map("notification_event_channels") @db.JsonB
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1916,6 +1947,13 @@ model CompanyCustomer {
   birthDate DateTime? @map("birth_date") @db.Date
   gender    String?   @db.VarChar(24)
   locale    String?   @db.VarChar(12)
+  /// One free-text line, not a structured address.
+  ///
+  /// A branch has `address_line1`/`city`/`postal_code` because it is geocoded
+  /// and shown on a map. A customer address is a note for the person driving
+  /// there — a home-visit hairdresser, a mobile valeter — and structuring it
+  /// would impose one country's postal shape on every tenant.
+  address   String?   @db.VarChar(512)
 
   status              CustomerStatus @default(ACTIVE)
   preferredEmployeeId String?        @map("preferred_employee_id") @db.Uuid
@@ -1960,6 +1998,8 @@ model CompanyCustomer {
   @@index([companyId, phone])
   @@index([companyId, email])
   @@index([companyId, lastVisitAt])
+  /// New-customer reports.
+  @@index([companyId, createdAt])
   @@map("company_customer")
 }
 
@@ -2090,10 +2130,15 @@ model Appointment {
   redemptions          PromotionRedemption[]
   giftCardTransactions GiftCardTransaction[]
   notifications        Notification[]
+  reminders            AppointmentReminder[]
 
   @@unique([companyId, appointmentNumber])
   @@unique([companyId, id])
   @@index([companyId, branchId, startsAt])
+  /// Reports over a date range with no branch filter.
+  @@index([companyId, startsAt])
+  /// Appointments created this month, for the plan's monthly limit.
+  @@index([companyId, createdAt])
   @@index([companyId, customerId, startsAt(sort: Desc)])
   @@index([companyId, status, startsAt])
   @@index([companyId, paymentStatus])
@@ -2602,6 +2647,8 @@ model PromotionRedemption {
   @@unique([companyId, promotionId, appointmentId])
   @@index([companyId, customerId])
   @@index([companyId, promotionId])
+  /// Promotion usage over a date range.
+  @@index([companyId, redeemedAt])
   @@map("promotion_redemption")
 }
 
@@ -2638,11 +2685,13 @@ model GiftCard {
   recipientEmail String? @map("recipient_email") @db.Citext
   message        String? @db.VarChar(1000)
 
-  issuedAt   DateTime? @map("issued_at") @db.Timestamptz(3)
+  issuedAt       DateTime? @map("issued_at") @db.Timestamptz(3)
   /// Defaults to NULL = never expires. Expiry is restricted or prohibited in
   /// many jurisdictions — see the open legal question in docs/DATABASE.md.
-  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
-  depletedAt DateTime? @map("depleted_at") @db.Timestamptz(3)
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(3)
+  depletedAt     DateTime? @map("depleted_at") @db.Timestamptz(3)
+  disabledAt     DateTime? @map("disabled_at") @db.Timestamptz(3)
+  disabledReason String?   @map("disabled_reason") @db.VarChar(512)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -2660,6 +2709,8 @@ model GiftCard {
   @@index([companyId, status])
   @@index([companyId, issuedToCustomerId])
   @@index([companyId, expiresAt])
+  /// Cards issued over a date range.
+  @@index([companyId, issuedAt])
   @@map("gift_card")
 }
 
@@ -2671,7 +2722,7 @@ model GiftCardTransaction {
   giftCardId String                  @map("gift_card_id") @db.Uuid
   type       GiftCardTransactionType
 
-  /// Signed: ISSUE/REFUND positive, REDEEM/EXPIRE/VOID negative, ADJUST either.
+  /// Signed: ISSUE/REFUND positive, REDEEM/EXPIRE/VOID negative, ADJUSTMENT either.
   amountMinor       BigInt @map("amount_minor")
   balanceAfterMinor BigInt @map("balance_after_minor")
   currencyCode      String @map("currency_code") @db.Char(3)
@@ -2681,16 +2732,30 @@ model GiftCardTransaction {
 
   performedByType ActorType @map("performed_by_type")
   performedById   String?   @map("performed_by_id") @db.Uuid
-  /// Required for ADJUST; enforced by CHECK in 001_hardening.sql.
+  /// Required for ADJUSTMENT; enforced by CHECK in 001_hardening.sql.
   reason          String?   @db.VarChar(512)
+
+  /// The REDEEM row a manual REFUND gives back. The refunds against one
+  /// redemption can never add up to more than it took.
+  reversesTransactionId String? @map("reverses_transaction_id") @db.Uuid
+  /// A client retry of the same redemption or refund returns the first result
+  /// instead of moving money twice.
+  idempotencyKey        String? @map("idempotency_key") @db.VarChar(128)
 
   occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  giftCard    GiftCard     @relation(fields: [companyId, giftCardId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  appointment Appointment? @relation(fields: [companyId, appointmentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  payment     Payment?     @relation(fields: [companyId, paymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  giftCard    GiftCard              @relation(fields: [companyId, giftCardId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  appointment Appointment?          @relation(fields: [companyId, appointmentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  payment     Payment?              @relation(fields: [companyId, paymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  reverses    GiftCardTransaction?  @relation("GiftCardRefundOf", fields: [companyId, reversesTransactionId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  reversedBy  GiftCardTransaction[] @relation("GiftCardRefundOf")
 
+  @@unique([companyId, id])
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, reversesTransactionId])
   @@index([companyId, giftCardId, occurredAt])
+  /// Redemption activity over a date range.
+  @@index([companyId, type, occurredAt])
   @@index([companyId, appointmentId])
   @@map("gift_card_transaction")
 }
@@ -2744,6 +2809,9 @@ model Notification {
 
   subject     String? @db.VarChar(256)
   bodyPreview String? @map("body_preview") @db.VarChar(512)
+  /// The full rendered message the provider is handed. Lists show only
+  /// `bodyPreview`.
+  body        String? @db.Text
   payload     Json?   @db.JsonB
 
   appointmentId String? @map("appointment_id") @db.Uuid
@@ -2776,6 +2844,26 @@ model Notification {
   @@index([companyId, appointmentId])
   @@index([companyId, recipientType, recipientId])
   @@map("notification")
+}
+
+/// One row per reminder that has been scheduled: (appointment, offset, start
+/// time). The unique key is what makes a reminder impossible to send twice —
+/// two sweeps racing both try to insert, one wins. `startsAt` is part of the
+/// key so a rescheduled booking (a new row anyway, here) is reminded afresh.
+model AppointmentReminder {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  appointmentId String   @map("appointment_id") @db.Uuid
+  offsetMinutes Int      @map("offset_minutes")
+  startsAt      DateTime @map("starts_at") @db.Timestamptz(3)
+  remindAt      DateTime @map("remind_at") @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  appointment Appointment @relation(fields: [companyId, appointmentId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([companyId, appointmentId, offsetMinutes, startsAt])
+  @@map("appointment_reminder")
 }
 
 model NotificationPreference {

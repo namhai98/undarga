@@ -11,6 +11,7 @@ import type {
   UpdateBranchDto,
   UpdateBranchSettingsDto,
 } from './dto/branch.dto';
+import { EntitlementsService } from '../subscriptions/entitlements.service';
 
 /**
  * Branches, and the two things hanging off them: per-branch policy overrides
@@ -38,6 +39,7 @@ export class BranchesService {
     private readonly branches: BranchRepository,
     private readonly db: TenantPrismaService,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -80,6 +82,8 @@ export class BranchesService {
       await assertTimezoneExists(tx, input.timezoneName);
       if (input.currencyCode) await assertCurrencyExists(tx, input.currencyCode);
       await this.assertCodeAvailable(tx, companyId, input.code);
+      // The plan's branch limit (and MULTI_BRANCH), counted under a lock.
+      await this.entitlements.assertCanAdd(tx, companyId, 'BRANCH');
 
       try {
         return await tx.branch.create({

@@ -96,6 +96,9 @@ export const COMPANY_PERMISSION_SENSITIVITY: Record<CompanyPermission, Permissio
   [C.RESOURCE_READ]: 'read',
   [C.RESOURCE_WRITE]: 'write',
 
+  // availability
+  [C.AVAILABILITY_READ]: 'read',
+
   // customers
   [C.CUSTOMER_READ]: 'read',
   [C.CUSTOMER_WRITE]: 'write',
@@ -122,6 +125,7 @@ export const COMPANY_PERMISSION_SENSITIVITY: Record<CompanyPermission, Permissio
   [C.GIFTCARD_READ]: 'read',
   [C.GIFTCARD_ISSUE]: 'write',
   [C.GIFTCARD_ADJUST]: 'write',
+  [C.GIFTCARD_REDEEM]: 'write',
 
   // reporting
   [C.REPORT_READ]: 'read',
@@ -187,6 +191,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
     C.SERVICE_READ,
     C.RESOURCE_READ,
     C.RESOURCE_WRITE,
+    C.AVAILABILITY_READ,
     C.CUSTOMER_READ,
     C.CUSTOMER_WRITE,
     C.APPOINTMENT_READ_ANY,
@@ -198,6 +203,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
     C.PROMOTION_READ,
     C.GIFTCARD_READ,
     C.GIFTCARD_ISSUE,
+    C.GIFTCARD_REDEEM,
     C.REPORT_READ,
   ],
 
@@ -208,6 +214,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
     C.SCHEDULE_READ,
     C.SERVICE_READ,
     C.RESOURCE_READ,
+    C.AVAILABILITY_READ,
     C.CUSTOMER_READ,
     C.CUSTOMER_WRITE,
     C.APPOINTMENT_READ_ANY,
@@ -217,6 +224,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
     C.PAYMENT_WRITE,
     C.GIFTCARD_READ,
     C.GIFTCARD_ISSUE,
+    C.GIFTCARD_REDEEM,
     C.PROMOTION_READ,
   ],
 
@@ -228,6 +236,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, readonly CompanyPerm
     C.BRANCH_READ,
     C.SERVICE_READ,
     C.RESOURCE_READ,
+    C.AVAILABILITY_READ,
     C.SCHEDULE_READ,
     C.SCHEDULE_WRITE_OWN,
     C.TIME_OFF_REQUEST,

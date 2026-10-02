@@ -20,6 +20,7 @@ import type {
   ServiceQueryDto,
   UpdateServiceDto,
 } from './dto/catalog.dto';
+import { EntitlementsService } from '../subscriptions/entitlements.service';
 
 interface ServiceRow {
   id: string;
@@ -86,6 +87,7 @@ export class ServicesService {
   constructor(
     private readonly services: ServiceRepository,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -217,6 +219,8 @@ export class ServicesService {
           resourceRequirements.map((r) => r.resourceTypeId),
         );
       }
+
+      await this.entitlements.assertCanAdd(tx, companyId, 'SERVICE');
 
       let row;
       try {

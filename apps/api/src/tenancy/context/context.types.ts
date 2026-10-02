@@ -88,6 +88,8 @@ export interface CurrentCompany {
   readonly slug: string;
   readonly status: string;
   readonly operationalStatus: CompanyOperationalStatus;
+  /** Why it is READ_ONLY, when it is. */
+  readonly readOnlyReason?: 'SUBSCRIPTION_EXPIRED' | 'COMPANY_INACTIVE' | null;
   readonly defaultTimezoneName: string;
   readonly currencyCode: string;
 }

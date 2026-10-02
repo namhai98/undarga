@@ -81,6 +81,7 @@ describe('permission classification', () => {
 [
   "appointment:read:any",
   "appointment:read:own",
+  "availability:read",
   "branch:read",
   "company:read",
   "customer:read",

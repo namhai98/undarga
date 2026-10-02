@@ -110,6 +110,27 @@ export const API_ERROR_CODES = [
   'UNSCOPED_TENANT_QUERY',
   'CROSS_TENANT_REFERENCE',
   'RESOURCE_NOT_FOUND',
+  // availability
+  //
+  // The service exists but its configuration forbids booking it at all —
+  // DRAFT, INACTIVE or ARCHIVED status. Distinct from a date-specific empty
+  // result (branch closed, nobody rostered), which is a 200 with a reason.
+  'SERVICE_NOT_BOOKABLE',
+  // appointments
+  //
+  // SLOT_UNAVAILABLE: the time was never on offer (or no longer is) — refresh
+  // availability. SLOT_TAKEN: it was on offer and another booking won the race
+  // at the database constraint — also refresh, but the user did nothing wrong.
+  'SLOT_UNAVAILABLE',
+  'SLOT_TAKEN',
+  'INVALID_STATUS_TRANSITION',
+  // public booking — one deliberately vague refusal for an anonymous caller
+  'ONLINE_BOOKING_UNAVAILABLE',
+  // promotions — `details.reason` says why (INVALID_CODE, ENDED, LIMIT_REACHED…)
+  'PROMOTION_NOT_APPLICABLE',
+  'GIFT_CARD_NOT_USABLE',
+  'PLAN_LIMIT_EXCEEDED',
+  'FEATURE_NOT_AVAILABLE',
   // invitations
   //
   // Unknown, revoked and already-accepted deliberately share one code. A

@@ -145,7 +145,7 @@ describe('TenantGuard', () => {
     });
 
     it('fails when nothing resolves a company', async () => {
-      const guard = build({}, (async () => null), jest.fn() as never);
+      const guard = build({}, async () => null, jest.fn() as never);
       await withActor(userA, async () => {
         await expect(guard.canActivate(executionContext())).rejects.toThrow(TenantUnresolvedError);
       });
@@ -162,12 +162,12 @@ describe('TenantGuard', () => {
       });
       const guard = build(
         {},
-        (async () => ({
+        async () => ({
           companyId: COMPANY_B,
           source: 'ROUTE_PARAM' as const,
           explicit: true,
           matchedBy: ['route-param'],
-        })),
+        }),
         authorize as never,
       );
 
@@ -186,15 +186,15 @@ describe('TenantGuard', () => {
     it('leaves no tenant attached when authorization fails', async () => {
       const guard = build(
         {},
-        (async () => ({
+        async () => ({
           companyId: COMPANY_B,
           source: 'ROUTE_PARAM' as const,
           explicit: true,
           matchedBy: [],
-        })),
-        (async () => {
-          throw new TenantNotFoundError();
         }),
+        async () => {
+          throw new TenantNotFoundError();
+        },
       );
 
       await withActor(userA, async () => {
@@ -208,13 +208,13 @@ describe('TenantGuard', () => {
     it('attaches the authorised tenant to the context and the request', async () => {
       const guard = build(
         {},
-        (async () => ({
+        async () => ({
           companyId: COMPANY_A,
           source: 'ACTIVE_COMPANY_CLAIM' as const,
           explicit: false,
           matchedBy: ['active-company-claim'],
-        })),
-        (async () => tenantFor(COMPANY_A)),
+        }),
+        async () => tenantFor(COMPANY_A),
       );
 
       await withActor(userA, async () => {
@@ -236,7 +236,7 @@ describe('TenantGuard', () => {
         explicit: false,
         matchedBy: [],
       }));
-      const guard = build({}, resolve as never, (async () => tenantFor(COMPANY_A)));
+      const guard = build({}, resolve as never, async () => tenantFor(COMPANY_A));
 
       await withActor(userA, async () => {
         await guard.canActivate(
@@ -266,12 +266,12 @@ describe('TenantGuard', () => {
     it('refuses an operator who did not name a company explicitly', async () => {
       const guard = build(
         { [META_ALLOW_PLATFORM_ACCESS]: true },
-        (async () => ({
+        async () => ({
           companyId: COMPANY_A,
           source: 'ACTIVE_COMPANY_CLAIM' as const,
           explicit: false,
           matchedBy: [],
-        })),
+        }),
         jest.fn() as never,
       );
 
@@ -285,13 +285,13 @@ describe('TenantGuard', () => {
     it('allows an explicitly targeted operator on an opted-in route', async () => {
       const guard = build(
         { [META_ALLOW_PLATFORM_ACCESS]: true },
-        (async () => ({
+        async () => ({
           companyId: COMPANY_A,
           source: 'HEADER' as const,
           explicit: true,
           matchedBy: ['header'],
-        })),
-        (async () => tenantFor(COMPANY_A, true)),
+        }),
+        async () => tenantFor(COMPANY_A, true),
       );
 
       await withActor(operator, async () => {

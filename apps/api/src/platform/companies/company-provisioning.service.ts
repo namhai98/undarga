@@ -6,6 +6,8 @@ import { PlatformPrismaService } from '../../database/platform-prisma.service';
 import { SYSTEM_ROLES, SYSTEM_ROLE_PERMISSIONS } from '../../authz/permissions';
 import { TenantDirectoryService } from '../../tenancy/directory/tenant-directory.service';
 import type { ProvisionCompanyDto } from './dto/provision-company.dto';
+import { DEFAULT_TRIAL_PLAN } from '../../subscriptions/plan-catalog';
+import { addDays, addInterval } from '../../subscriptions/subscription-state';
 
 export interface ProvisionedCompany {
   company: {
@@ -179,6 +181,9 @@ export class CompanyProvisioningService {
         // create. Tuning them is the company's job, not provisioning's.
         await tx.companySettings.create({ data: { companyId: company.id } });
 
+        // Its subscription: a trial of the chosen (or default) plan.
+        await this.startSubscription(tx, company.id, input.planKey);
+
         const roles = await this.createSystemRoles(tx, company.id);
 
         const ownerRole = roles.find((r) => r.key === SYSTEM_ROLES.OWNER);
@@ -255,6 +260,43 @@ export class CompanyProvisioningService {
   // ---------------------------------------------------------------------------
   // Transaction steps
   // ---------------------------------------------------------------------------
+
+  /**
+   * Start the company's subscription inside the provisioning transaction: a
+   * trial of `planKey` (default DEFAULT_TRIAL_PLAN), or ACTIVE straight away
+   * for a plan with no trial. An unknown key is a 400; an unseeded catalog is
+   * logged and skipped, leaving the company unrestricted as before billing.
+   */
+  private async startSubscription(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    planKey?: string,
+  ) {
+    const key = planKey ?? DEFAULT_TRIAL_PLAN;
+    const plan = await tx.plan.findFirst({
+      where: { key, deletedAt: null },
+      select: { id: true, trialDays: true, interval: true },
+    });
+    if (!plan) {
+      if (planKey) throw new ValidationFailedError({ planKey: 'Unknown plan.' });
+      this.logger.warn(
+        `Plan catalog not seeded; company ${companyId} provisioned without a subscription.`,
+      );
+      return;
+    }
+    const now = new Date();
+    const end = plan.trialDays > 0 ? addDays(now, plan.trialDays) : addInterval(now, plan.interval);
+    await tx.subscription.create({
+      data: {
+        companyId,
+        planId: plan.id,
+        status: plan.trialDays > 0 ? 'TRIAL' : 'ACTIVE',
+        trialEndsAt: plan.trialDays > 0 ? end : null,
+        currentPeriodStart: now,
+        currentPeriodEnd: end,
+      },
+    });
+  }
 
   private async createSystemRoles(tx: Prisma.TransactionClient, companyId: string) {
     // Every permission the roles reference must already exist in the catalog

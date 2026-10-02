@@ -5,6 +5,7 @@ import {
   SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
 } from '../src/authz/permissions';
+import { PLAN_DEFINITIONS, syncPlanCatalog } from '../src/subscriptions/plan-catalog';
 
 /**
  * Reference data the application cannot start without.
@@ -143,11 +144,13 @@ async function main(): Promise<void> {
   await seedCurrencies();
   await seedPermissions();
   await seedPlatformRoles();
+  // Plans, features and their entitlements (src/subscriptions/plan-catalog.ts).
+  await syncPlanCatalog(prisma);
 
   console.log(
     `Seeded ${zoneCount} timezones, 8 currencies, ` +
       `${ALL_COMPANY_PERMISSIONS.length + ALL_PLATFORM_PERMISSIONS.length} permissions, ` +
-      `3 platform roles.`,
+      `3 platform roles, ${PLAN_DEFINITIONS.length} plans.`,
   );
   console.log(`System role templates verified: ${Object.keys(SYSTEM_ROLES).length} roles.`);
 }

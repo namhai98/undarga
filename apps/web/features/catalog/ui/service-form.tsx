@@ -374,7 +374,7 @@ export function ServiceForm({
             type="button"
             variant="ghost"
             className="text-destructive ml-auto"
-            onClick={handleDelete}
+            onClick={() => void handleDelete()}
             disabled={pending}
           >
             {/* Soft delete: appointment history keeps resolving. */}

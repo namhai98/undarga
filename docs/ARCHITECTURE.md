@@ -261,7 +261,7 @@ Fields listed are the load-bearing ones, not exhaustive. Every tenant table carr
 
 ### Gift cards
 - **GiftCard** — `companyId, codeHash(unique), codeLast4, pinHash(nullable), initialAmountMinor, balanceMinor, currency, issuedToCustomerId, purchasedByCustomerId, purchasePaymentId, branchRestrictionIds[], serviceRestrictionIds[], issuedAt, expiresAt, status(ACTIVE|DEPLETED|EXPIRED|VOID)`
-- **GiftCardTransaction** (append-only) — `giftCardId, type(ISSUE|REDEEM|REFUND|ADJUST|EXPIRE|VOID), amountMinor, balanceAfterMinor, appointmentId, paymentId, actorId, occurredAt`
+- **GiftCardTransaction** (append-only) — `giftCardId, type(ISSUE|REDEEM|REFUND|ADJUSTMENT|EXPIRE|VOID), amountMinor, balanceAfterMinor, appointmentId, paymentId, actorId, occurredAt`
 
 ### Notifications
 - **NotificationTemplate** — `companyId(nullable = platform default), key(APPOINTMENT_CONFIRMED|REMINDER_24H|…), channel(EMAIL|SMS|PUSH|WEBHOOK), locale, subject, body(handlebars), isActive`
@@ -650,7 +650,7 @@ PURCHASE (payment succeeds)
 REDEEM  txn (−amount; may be partial, at booking or at checkout)
    └─► balance 0 → DEPLETED
 REFUND  txn (+amount, when an appointment paid by card is refunded)
-ADJUST  txn (±, staff correction; requires `giftcard:adjust` + reason + audit)
+ADJUSTMENT txn (±, staff correction; requires `giftcard:adjust` + reason + audit)
 EXPIRE  txn (−remaining, only where legally permitted) → EXPIRED
 VOID    txn (fraud / chargeback)                      → VOID
 ```

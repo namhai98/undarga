@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { RequireSession, SignOutButton, useSession } from '@/features/auth';
+import { ReadOnlyBanner } from '@/features/subscription';
 
 /**
  * Shell for everything behind a session.
@@ -18,6 +19,7 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
     <RequireSession>
       <div className="flex min-h-dvh flex-col">
         <AppBar />
+        <ReadOnlyBanner />
         <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">{children}</main>
       </div>
     </RequireSession>

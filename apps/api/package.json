@@ -43,9 +43,11 @@
     "argon2": "0.41.1",
     "helmet": "8.0.0",
     "ioredis": "5",
+    "multer": "2.2.0",
     "nestjs-zod": "5",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.1",
+    "sharp": "0.35.4",
     "zod": "3.25.76"
   },
   "devDependencies": {

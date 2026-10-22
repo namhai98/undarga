@@ -38,6 +38,9 @@ async function main(): Promise<void> {
     console.log(
       `  ${world.provisioner.email.padEnd(26)} platform operator (may provision companies)`,
     );
+    console.log(
+      `  ${world.platformAdmin.email.padEnd(26)} platform console at /platform (list, suspend, audit)`,
+    );
     console.log(`\n  password: ${TEST_PASSWORD}\n`);
   } finally {
     await prisma.$disconnect();

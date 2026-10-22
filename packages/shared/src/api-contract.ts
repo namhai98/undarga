@@ -167,6 +167,41 @@ export const API_ERROR_CODES = [
   // jobs
   'JOB_TENANT_MISSING',
   'JOB_TENANT_MISMATCH',
+  // customer portal
+  /** Wrong, expired or used-up sign-in code. One message for all three. */
+  'SIGN_IN_CODE_INVALID',
+  /**
+   * The business's rules do not allow this customer action (cancel or
+   * reschedule). `details.reason` says which rule; `details.deadline` when a
+   * deadline passed.
+   */
+  'CUSTOMER_ACTION_NOT_ALLOWED',
+  // online payments
+  /** No payment provider is configured, or it cannot take this currency. */
+  'PAYMENTS_UNAVAILABLE',
+  // notifications
+  /** Company provider settings need SECRETS_ENCRYPTION_KEY on the server. */
+  'NOTIFICATION_PROVIDERS_UNAVAILABLE',
+  // calendar integration
+  /** The provider has no OAuth credentials on this server, or no encryption key. */
+  'CALENDAR_PROVIDER_UNAVAILABLE',
+  /** The OAuth state is unknown, expired, used, or belongs to someone else. */
+  'CALENDAR_OAUTH_INVALID',
+  /** The calendar provider refused or failed the call. */
+  'CALENDAR_PROVIDER_ERROR',
+  // files and media
+  /** Over the configured size limit. */
+  'FILE_TOO_LARGE',
+  /** Not one of the accepted types (judged by content, not by name or claimed type). */
+  'FILE_TYPE_NOT_ALLOWED',
+  /** Claims to be an allowed type but is not a valid one, or its dimensions are out of range. */
+  'FILE_INVALID',
+  /** The storage backend failed. Nothing was saved. */
+  'STORAGE_UNAVAILABLE',
+  /** The provider refused or failed the call. No provider detail is exposed. */
+  'PAYMENT_PROVIDER_ERROR',
+  /** A webhook whose signature did not verify. */
+  'WEBHOOK_SIGNATURE_INVALID',
   // generic
   'VALIDATION_FAILED',
   'CONFLICT',

@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompanySwitcher, useSession } from '@/features/auth';
 
@@ -42,6 +44,13 @@ export default function SelectCompanyPage() {
       </div>
 
       <CompanySwitcher />
+
+      <Link
+        href="/onboarding?new=1"
+        className={`${buttonVariants({ variant: 'outline', size: 'sm' })} w-fit`}
+      >
+        Create another company
+      </Link>
     </div>
   );
 }

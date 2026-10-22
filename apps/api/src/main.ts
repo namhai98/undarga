@@ -7,7 +7,9 @@ import { AppConfig } from './config';
 import { setupSwagger } from './common/swagger/setup-swagger';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  // rawBody: webhook signatures are computed over the exact bytes received
+  // (req.rawBody); the parsed JSON is not the same thing.
+  const app = await NestFactory.create(AppModule, { bufferLogs: false, rawBody: true });
   const config = app.get(AppConfig);
   const logger = new Logger('bootstrap');
 
@@ -29,7 +31,14 @@ async function bootstrap(): Promise<void> {
       origin: config.cors.origins,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id', 'X-Company-Slug', 'X-Request-Id', 'Idempotency-Key'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Company-Id',
+        'X-Company-Slug',
+        'X-Request-Id',
+        'Idempotency-Key',
+      ],
       exposedHeaders: ['X-Request-Id'],
       maxAge: 600,
     });
@@ -51,7 +60,9 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(config.app.port);
 
-  logger.log(`API listening on :${config.app.port}/${config.app.apiPrefix}/v1 [${config.app.nodeEnv}]`);
+  logger.log(
+    `API listening on :${config.app.port}/${config.app.apiPrefix}/v1 [${config.app.nodeEnv}]`,
+  );
   if (docsPath) logger.log(`OpenAPI docs at :${config.app.port}/${docsPath}`);
 }
 

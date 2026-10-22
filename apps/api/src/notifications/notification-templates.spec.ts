@@ -4,6 +4,7 @@ import {
   SAMPLE_VARIABLES,
   defaultTemplate,
   effectiveEventChannels,
+  consentAllows,
   renderTemplate,
   variablesIn,
 } from './notification-templates';
@@ -39,7 +40,9 @@ describe('notification templates', () => {
   });
 
   it('tolerates spacing inside the braces', () => {
-    expect(renderTemplate({ body: 'Hi {{ customerName }}' }, { customerName: 'Sara' }).body).toBe('Hi Sara');
+    expect(renderTemplate({ body: 'Hi {{ customerName }}' }, { customerName: 'Sara' }).body).toBe(
+      'Hi Sara',
+    );
   });
 
   it('uses a readable fallback for a missing value, never the raw placeholder', () => {
@@ -56,7 +59,10 @@ describe('notification templates', () => {
   });
 
   it('does not interpret anything but variables — markup stays text', () => {
-    const { body } = renderTemplate({ body: '<b>{{customerName}}</b>' }, { customerName: '<script>' });
+    const { body } = renderTemplate(
+      { body: '<b>{{customerName}}</b>' },
+      { customerName: '<script>' },
+    );
     expect(body).toBe('<b><script></b>');
   });
 
@@ -79,7 +85,9 @@ describe('notification templates', () => {
     for (const type of ['gift_card.issued', 'gift_card.assigned'] as const) {
       for (const channel of ['EMAIL', 'SMS', 'PUSH'] as const) {
         const template = defaultTemplate(type, channel);
-        expect(`${template.subject ?? ''}${template.body}`.toLowerCase()).not.toMatch(/\{\{\s*\w*code/);
+        expect(`${template.subject ?? ''}${template.body}`.toLowerCase()).not.toMatch(
+          /\{\{\s*\w*code/,
+        );
       }
     }
   });
@@ -133,7 +141,10 @@ describe('channel providers', () => {
     const email = new EmailNotificationProvider(config);
     const message = { channel: 'EMAIL' as const, to: 'a@b.co', body: 'Hi', notificationId: 'n1' };
 
-    await expect(email.send(message)).resolves.toMatchObject({ status: 'SENT', provider: 'mock-email' });
+    await expect(email.send(message)).resolves.toMatchObject({
+      status: 'SENT',
+      provider: 'mock-email',
+    });
     expect(email.delivered).toHaveLength(1);
 
     email.failNext(1, { retryable: false, reason: 'Mailbox does not exist' });
@@ -153,8 +164,88 @@ describe('channel providers', () => {
       app: { isProduction: true, isDevelopment: false, isTest: false },
     } as AppConfig);
     prod.failNext(1);
-    const result = await prod.send({ channel: 'SMS', to: '+97699112233', body: 'x', notificationId: 'n' });
+    const result = await prod.send({
+      channel: 'SMS',
+      to: '+97699112233',
+      body: 'x',
+      notificationId: 'n',
+    });
     expect(result.status).toBe('SENT');
     expect(prod.delivered).toHaveLength(0);
+  });
+});
+
+describe('consent and categories', () => {
+  const granted = (type: string) => ({ type, revokedAt: null });
+  const revoked = (type: string) => ({ type, revokedAt: new Date() });
+
+  it('sends transactional and billing messages regardless of marketing consent', () => {
+    expect(consentAllows('TRANSACTIONAL', 'EMAIL', [])).toBe(true);
+    expect(consentAllows('BILLING', 'SMS', [revoked('MARKETING_SMS')])).toBe(true);
+  });
+
+  it('sends reminders by default and honours an explicit revocation', () => {
+    expect(consentAllows('REMINDER', 'SMS', [])).toBe(true);
+    expect(consentAllows('REMINDER', 'SMS', [granted('APPOINTMENT_REMINDERS')])).toBe(true);
+    // Newest first: the latest answer wins.
+    expect(
+      consentAllows('REMINDER', 'SMS', [
+        revoked('APPOINTMENT_REMINDERS'),
+        granted('APPOINTMENT_REMINDERS'),
+      ]),
+    ).toBe(false);
+    expect(
+      consentAllows('REMINDER', 'SMS', [
+        granted('APPOINTMENT_REMINDERS'),
+        revoked('APPOINTMENT_REMINDERS'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('never sends marketing without a live consent for that channel, and never on push', () => {
+    expect(consentAllows('MARKETING', 'EMAIL', [])).toBe(false);
+    expect(consentAllows('MARKETING', 'EMAIL', [granted('MARKETING_SMS')])).toBe(false);
+    expect(consentAllows('MARKETING', 'EMAIL', [granted('MARKETING_EMAIL')])).toBe(true);
+    expect(consentAllows('MARKETING', 'EMAIL', [revoked('MARKETING_EMAIL')])).toBe(false);
+    expect(
+      consentAllows('MARKETING', 'PUSH', [granted('MARKETING_EMAIL'), granted('MARKETING_SMS')]),
+    ).toBe(false);
+  });
+
+  it('marks reminders as REMINDER and billing types as owner-addressed', () => {
+    expect(NOTIFICATION_TYPES['appointment.reminder'].category).toBe('REMINDER');
+    expect(NOTIFICATION_TYPES['subscription.invoice_issued']).toMatchObject({
+      category: 'BILLING',
+      audience: 'COMPANY_OWNER',
+    });
+    expect(NOTIFICATION_TYPES['subscription.payment_failed']).toMatchObject({
+      category: 'BILLING',
+      audience: 'COMPANY_OWNER',
+    });
+    expect(NOTIFICATION_TYPES['payment.failed']).toMatchObject({
+      category: 'TRANSACTIONAL',
+      audience: 'CUSTOMER',
+    });
+  });
+
+  it('renders the new payment, invoice and gift card variables', () => {
+    const invoice = renderTemplate(
+      defaultTemplate('subscription.invoice_issued', 'EMAIL'),
+      SAMPLE_VARIABLES,
+    );
+    expect(invoice.subject).toBe('Invoice INV-202610-0001 for Lotus Spa');
+    expect(invoice.body).toContain('₮99,000.00');
+    expect(invoice.body).toContain('Fri, 30 Oct 2026');
+
+    const failed = renderTemplate(defaultTemplate('payment.failed', 'EMAIL'), SAMPLE_VARIABLES);
+    expect(failed.body).toContain('declined by the bank');
+
+    const gift = renderTemplate(defaultTemplate('gift_card.issued', 'EMAIL'), {
+      ...SAMPLE_VARIABLES,
+      giftCardExpiry: undefined,
+    });
+    expect(gift.body).toContain('ending 4821');
+    expect(gift.body).toContain('valid with no expiry date');
+    expect(gift.body).not.toContain('{{');
   });
 });

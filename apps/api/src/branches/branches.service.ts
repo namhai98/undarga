@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { ConflictError, ResourceNotFoundError, ValidationFailedError } from '../common/errors';
 import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.service';
 import { BranchRepository } from './branch.repository';
+import { businessWeekRows, effectiveFromDate } from './business-hours';
 import type {
   CreateBranchDto,
   ListBranchesDto,
@@ -273,7 +274,7 @@ export class BranchesService {
    * value forward would make the result depend on history nobody can see.
    */
   async putBusinessHours(branchId: string, input: PutBusinessHoursDto) {
-    const effectiveFrom = new Date(`${input.effectiveFrom ?? today()}T00:00:00.000Z`);
+    const effectiveFrom = effectiveFromDate(input.effectiveFrom);
 
     const days = await this.branches.transaction(async (tx, companyId) => {
       await this.assertBranchExists(tx, companyId, branchId);
@@ -282,27 +283,8 @@ export class BranchesService {
       // written, so a future-dated set is not destroyed by an edit to today's.
       await tx.businessHours.deleteMany({ where: { companyId, branchId, effectiveFrom } });
 
-      const supplied = new Map(input.days.map((d) => [d.dayOfWeek, d]));
-
       await tx.businessHours.createMany({
-        data: Array.from({ length: 7 }, (_, dayOfWeek) => {
-          const day = supplied.get(dayOfWeek);
-          const closed = !day || day.isClosed;
-
-          return {
-            companyId,
-            branchId,
-            dayOfWeek,
-            isClosed: closed,
-            // `@db.Time(0)` — Prisma takes a Date and keeps the time part. The
-            // date component is arbitrary and never read.
-            opensAt: closed ? null : new Date(`1970-01-01T${day.opensAt}:00.000Z`),
-            closesAt: closed ? null : new Date(`1970-01-01T${day.closesAt}:00.000Z`),
-            effectiveFrom,
-            // `crossesMidnight` is deliberately not set here: a trigger derives
-            // it from the times, so the flag cannot disagree with them.
-          };
-        }),
+        data: businessWeekRows(companyId, branchId, input.days, effectiveFrom),
       });
 
       return tx.businessHours.findMany({
@@ -390,12 +372,9 @@ interface BranchRecord {
   latitude?: Prisma.Decimal | null;
   longitude?: Prisma.Decimal | null;
   sortOrder: number;
+  imageFileId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -455,6 +434,8 @@ function toBranchResponse(branch: BranchRecord) {
     latitude: branch.latitude?.toString() ?? null,
     longitude: branch.longitude?.toString() ?? null,
     sortOrder: branch.sortOrder,
+    /** Public image, served at /public/files/:id. Changed through /files. */
+    imageFileId: branch.imageFileId ?? null,
     createdAt: branch.createdAt,
     updatedAt: branch.updatedAt,
     // `companyId` is omitted: the caller is already scoped to it, and echoing a

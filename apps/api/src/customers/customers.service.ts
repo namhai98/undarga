@@ -596,6 +596,7 @@ function toCustomerResponse(customer: {
   updatedAt: Date;
   preferredEmployee?: { id: string; displayName: string } | null;
   _count?: { appointments: number };
+  photoFileId?: string | null;
 }) {
   return {
     id: customer.id,
@@ -613,6 +614,8 @@ function toCustomerResponse(customer: {
     status: customer.status,
     tags: customer.tags,
     preferredEmployeeId: customer.preferredEmployeeId,
+    /** PRIVATE: fetch GET /files/:id for a short-lived signed URL. */
+    photoFileId: customer.photoFileId ?? null,
     preferredEmployeeName: customer.preferredEmployee?.displayName ?? null,
     loyaltyPoints: customer.loyaltyPoints,
     totalVisits: customer.totalVisits,

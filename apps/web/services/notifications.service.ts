@@ -9,7 +9,9 @@ export type NotificationStatus =
   | 'DELIVERED'
   | 'FAILED'
   | 'RETRYING'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  /** The provider never answered. Not retried automatically; a person may retry it. */
+  | 'UNKNOWN';
 
 export interface NotificationRow {
   id: string;
@@ -23,13 +25,21 @@ export interface NotificationRow {
   preview: string | null;
   appointmentId: string | null;
   scheduledFor: string;
+  /** When the provider accepted it. Accepted is not delivered. */
   sentAt: string | null;
+  /** Only set when the provider confirmed delivery. */
+  deliveredAt: string | null;
   failedAt: string | null;
   failureReason: string | null;
   retryCount: number;
   maxRetries: number;
   nextRetryAt: string | null;
   provider: string | null;
+  /** The provider's own word for the latest state: `accepted`, `delivered`, `bounce`… */
+  providerStatus: string | null;
+  providerEventAt: string | null;
+  /** FAILED and UNKNOWN can be sent again by hand. */
+  retryable: boolean;
   createdAt: string;
 }
 
@@ -52,6 +62,8 @@ export interface NotificationQuery {
 export interface NotificationTypeInfo {
   type: string;
   label: string;
+  category: 'TRANSACTIONAL' | 'REMINDER' | 'BILLING' | 'MARKETING';
+  audience: 'CUSTOMER' | 'COMPANY_OWNER';
   variables: string[];
   defaultChannels: NotificationChannel[];
   defaults: Record<NotificationChannel, { subject?: string; body: string }>;
@@ -105,6 +117,51 @@ export interface CustomerNotificationPreferences {
   reachable: { email: boolean; sms: boolean; push: boolean };
 }
 
+export type ProviderStatus = 'UNVERIFIED' | 'CONNECTED' | 'FAILED';
+
+/** One channel's sender. Secrets never come back: only `secretHint` (`••••abcd`). */
+export interface ProviderChannelView {
+  channel: NotificationChannel;
+  /** Who sends right now. `none`: nothing is sent on this channel. */
+  active: 'company' | 'platform' | 'none';
+  platformProvider: string | null;
+  supportedProviders: string[];
+  company: {
+    id: string;
+    provider: string;
+    isEnabled: boolean;
+    status: ProviderStatus;
+    lastCheckedAt: string | null;
+    lastError: string | null;
+    secretHint: string;
+    settings: Record<string, string>;
+    /** Paste into the provider's webhook settings (SendGrid). Null without a public base URL. */
+    receiptUrl: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+export interface NotificationProviders {
+  /** False when the server has no encryption key: own accounts cannot be saved. */
+  companyAccountsAvailable: boolean;
+  channels: ProviderChannelView[];
+}
+
+export type SaveProviderInput =
+  | {
+      provider: 'sendgrid';
+      isEnabled?: boolean;
+      /** Omit to keep the stored key. */
+      secrets?: { apiKey: string };
+      settings: { fromAddress: string; fromName?: string; webhookPublicKey?: string };
+    }
+  | {
+      provider: 'twilio';
+      isEnabled?: boolean;
+      secrets?: { authToken: string };
+      settings: { accountSid: string; fromNumber?: string; messagingServiceSid?: string };
+    };
+
 const base = (companyId: string) => `/companies/${companyId}`;
 
 export const notificationsService = {
@@ -118,6 +175,29 @@ export const notificationsService = {
     apiClient.get<NotificationDetail>(`${base(companyId)}/notifications/${notificationId}`, {
       signal,
     }),
+
+  /** Send a FAILED or UNKNOWN message again (`settings:write`). */
+  retry: (companyId: string, notificationId: string) =>
+    apiClient.post<NotificationRow>(`${base(companyId)}/notifications/${notificationId}/retry`, {}),
+
+  providers: (companyId: string, signal?: AbortSignal) =>
+    apiClient.get<NotificationProviders>(`${base(companyId)}/notification-providers`, { signal }),
+
+  /** Needs `settings:write` and `billing:write` (the owner, by default). */
+  saveProvider: (companyId: string, channel: 'EMAIL' | 'SMS', input: SaveProviderInput) =>
+    apiClient.put<ProviderChannelView>(
+      `${base(companyId)}/notification-providers/${channel}`,
+      input,
+    ),
+
+  removeProvider: (companyId: string, channel: 'EMAIL' | 'SMS') =>
+    apiClient.delete<ProviderChannelView>(`${base(companyId)}/notification-providers/${channel}`),
+
+  verifyProvider: (companyId: string, channel: 'EMAIL' | 'SMS') =>
+    apiClient.post<ProviderChannelView>(
+      `${base(companyId)}/notification-providers/${channel}/verify`,
+      {},
+    ),
 
   stats: (companyId: string, signal?: AbortSignal) =>
     apiClient.get<{

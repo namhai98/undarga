@@ -99,7 +99,7 @@ function fieldErrorsFromZod(error: z.ZodError): FieldErrors {
  *
  * Both are handled here rather than at five call sites.
  */
-function fieldErrorsFromApi(details: Record<string, unknown> | undefined): FieldErrors {
+export function fieldErrorsFromApi(details: Record<string, unknown> | undefined): FieldErrors {
   const issues = details?.issues;
   if (!issues) return {};
 

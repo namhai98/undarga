@@ -19,6 +19,7 @@ import type {
 } from './dto/public-booking.dto';
 import { PublicCatalogRepository } from './public-catalog.repository';
 import { EntitlementsService } from '../subscriptions/entitlements.service';
+import { PaymentTransactionsService } from '../payments/payment-transactions.service';
 
 /**
  * The public booking page's backend: a thin, anonymous front door onto the
@@ -64,6 +65,7 @@ export class PublicBookingService {
     private readonly appointments: AppointmentsService,
     private readonly promotions: PromotionsService,
     private readonly entitlements: EntitlementsService,
+    private readonly onlinePayments: PaymentTransactionsService,
   ) {}
 
   getCompany(slug: string) {
@@ -202,6 +204,13 @@ export class PublicBookingService {
         },
         promotion: booked.promotion,
         customer: { firstName: input.customer.firstName },
+        /**
+         * Pay online now, when the company can take it: the amount (what is
+         * owed, or its deposit) and a signed, expiring token for
+         * POST /public/companies/:slug/payments. null when online payment is
+         * off, or nothing is owed. Paying is optional — the booking stands.
+         */
+        payment: await this.onlinePayments.publicOffer(this.context.requireCompanyId(), booked.id),
       };
     });
   }
@@ -220,11 +229,6 @@ export class PublicBookingService {
     // public page: the same 404 as a company that is not live.
     const entitlements = await this.entitlements.forCompany(companyId);
     if (!this.entitlements.canUse(entitlements, 'ONLINE_BOOKING')) throw new TenantNotFoundError();
-    return this.context.runAsSystem(
-      'public-booking',
-      tenant,
-      fn,
-      this.context.requestId,
-    );
+    return this.context.runAsSystem('public-booking', tenant, fn, this.context.requestId);
   }
 }

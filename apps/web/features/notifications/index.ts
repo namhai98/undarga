@@ -1,5 +1,5 @@
 /**
- * The notifications feature's public surface: history, templates, settings,
+ * The notifications feature's public surface: history, templates, providers, settings,
  * and a customer's channel preferences.
  *
  * Nothing here sends a message. Messages come from business events on the
@@ -18,7 +18,13 @@ export {
   usePreviewTemplate,
   useCustomerNotificationPreferences,
   useUpdateCustomerNotificationPreferences,
+  useRetryNotification,
+  useNotificationProviders,
+  useSaveNotificationProvider,
+  useRemoveNotificationProvider,
+  useVerifyNotificationProvider,
 } from './api/use-notifications';
 
 export { NotificationsPage } from './ui/notifications-page';
+export { NotificationProviders } from './ui/notification-providers';
 export { CustomerNotificationPreferences } from './ui/customer-notification-preferences';

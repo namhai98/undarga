@@ -27,6 +27,8 @@ export interface Customer {
   tags: string[];
   preferredEmployeeId: string | null;
   preferredEmployeeName: string | null;
+  /** PRIVATE photo: view it through a signed URL from the files API. Change it through the files API, not by setting this. */
+  photoFileId: string | null;
 
   /**
    * Projections of the appointment and payment tables. Read-only: the API

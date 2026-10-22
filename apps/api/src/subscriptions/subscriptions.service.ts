@@ -25,6 +25,10 @@ import {
   grantsAccess,
 } from './subscription-state';
 import type { InvoiceQueryDto } from './dto/subscription.dto';
+import {
+  NOTIFICATION_EVENTS,
+  writeNotificationEvent,
+} from '../notifications/notification-event.service';
 
 interface SubscriptionRow {
   id: string;
@@ -481,7 +485,7 @@ export async function issueInvoice(
   const sameMonth = await tx.subscriptionInvoice.count({
     where: { companyId, number: { startsWith: prefix } },
   });
-  return tx.subscriptionInvoice.create({
+  const invoice = await tx.subscriptionInvoice.create({
     data: {
       companyId,
       subscriptionId,
@@ -499,6 +503,12 @@ export async function issueInvoice(
       dueAt: addDays(now, INVOICE_DUE_DAYS),
     },
   });
+  // The renewal notice to the owner, committed with the invoice itself.
+  await writeNotificationEvent(tx, companyId, NOTIFICATION_EVENTS.SUBSCRIPTION_INVOICE_ISSUED, {
+    invoiceId: invoice.id,
+    dedupeBase: `subscription.invoice_issued:${invoice.id}`,
+  });
+  return invoice;
 }
 
 function toPlan(plan: PlanRow, currentPlanId: string | null) {

@@ -4,6 +4,7 @@ import { AvailabilityModule } from '../availability/availability.module';
 import { CustomersModule } from '../customers/customers.module';
 import { DatabaseModule } from '../database/database.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
 import { PublicBookingController } from './public-booking.controller';
 import { PublicBookingService } from './public-booking.service';
@@ -26,6 +27,7 @@ import { PublicCatalogRepository } from './public-catalog.repository';
     AppointmentsModule,
     CustomersModule,
     PromotionsModule,
+    PaymentsModule,
   ],
   controllers: [PublicBookingController],
   providers: [PublicBookingService, PublicCatalogRepository],

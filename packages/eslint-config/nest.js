@@ -81,6 +81,28 @@ module.exports = function nest({ tsconfigRootDir, project = true } = {}) {
         // offsets against its live appointments) that Prisma cannot express;
         // every write then re-enters the row's company via runInCompany().
         'src/notifications/notification-reminder.service.ts',
+        // Delivery receipts arrive at a public URL before any company is
+        // known. Finds the signing configuration and the named notifications by
+        // id, then moves each one forward with a write keyed by id AND company
+        // and conditional on the status it was read in.
+        'src/notifications/notification-receipts.repository.ts',
+        // Calendar sync: finds due jobs and stale busy periods across tenants
+        // (it cannot be told which company has work), then re-enters each
+        // row's company through runInCompany() for every read and write of
+        // its data. Job claims are conditional updates keyed by id.
+        'src/calendar/calendar-sync.service.ts',
+        // INSERT … ON CONFLICT … DO UPDATE with a CASE on the current status,
+        // which Prisma's upsert cannot express. Runs on the caller's TENANT
+        // transaction: company_id is a bound parameter and RLS stays active.
+        'src/calendar/calendar-sync.queue.ts',
+        // Public booking-page images: one lookup by file id, ONLY for files
+        // marked PUBLIC, ready and not deleted. A public page has no company
+        // to scope by; the file id is the address.
+        'src/media/public-files.repository.ts',
+        // File cleanup: finds abandoned uploads, unreferenced files and
+        // unpurged objects across tenants (a NOT EXISTS over every table that
+        // references `file`, which Prisma cannot express); writes are keyed by id.
+        'src/media/file-cleanup.service.ts',
         // Subscriptions: a per-(company, limit) advisory lock so concurrent
         // creates cannot overshoot a plan limit; a FOR UPDATE on the
         // subscription row for plan changes; and the lifecycle sweep, which
@@ -95,6 +117,16 @@ module.exports = function nest({ tsconfigRootDir, project = true } = {}) {
         'src/giftcards/giftcards.service.ts',
         // Same, on a payment row before a refund, plus the ledger posting.
         'src/payments/payments.service.ts',
+        // Webhooks arrive before any company is known: one lookup by the
+        // signed transaction id finds its company, which is then re-entered
+        // through runInCompany() before anything is written. Also owns the
+        // platform-only `payment_webhook_event` table and the operator
+        // console's cross-tenant transaction list (platform:billing:manage).
+        'src/payments/payment-platform.repository.ts',
+        // `customer_identity` is closed to the tenant role (like user_account).
+        // A customer's first portal sign-in creates one, for an email address
+        // just proved by a one-time code; nothing else is done with it here.
+        'src/customer-portal/customer-identity.repository.ts',
         // `SELECT … FOR UPDATE` on one appointment before a status change, and
         // `pg_advisory_xact_lock` per employee/resource before a booking write,
         // so concurrent requests for one slot serialise. Both carry company_id

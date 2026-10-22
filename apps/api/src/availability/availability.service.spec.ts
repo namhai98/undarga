@@ -92,6 +92,31 @@ const query = (overrides: Record<string, string> = {}) => ({
 });
 
 describe('AvailabilityService', () => {
+  // DATE is fixed so the slot assertions are stable; the clock is pinned to the
+  // week before it so the service's "date in the past" rule never fires as the
+  // real calendar moves on. Only Date is faked — timers and promises run as normal.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-10-01T00:00:00.000Z'),
+      doNotFake: [
+        'nextTick',
+        'setImmediate',
+        'setTimeout',
+        'setInterval',
+        'clearTimeout',
+        'clearInterval',
+        'clearImmediate',
+        'queueMicrotask',
+        'hrtime',
+        'performance',
+      ],
+    });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   it('rejects a date that is not a real calendar day', async () => {
     const { service } = createService({
       loadBranch: jest.fn().mockResolvedValue(makeBranch()),
@@ -189,10 +214,7 @@ describe('AvailabilityService', () => {
   it('excludes an employee on partial time off but keeps the slot for a free colleague', async () => {
     const day = makeDay({
       employeeIds: ['emp-a', 'emp-b'],
-      schedules: [
-        makeSchedule('emp-a'),
-        makeSchedule('emp-b'),
-      ],
+      schedules: [makeSchedule('emp-a'), makeSchedule('emp-b')],
       // emp-a is off 14:00–16:00 local (+08:00).
       timeOff: [
         {

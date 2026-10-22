@@ -70,3 +70,6 @@ desktop.ini
 # Compiled output of prisma/seed.ts — ts-node runs the .ts directly.
 apps/api/prisma/*.js
 apps/api/prisma/*.d.ts
+
+# Local file storage (STORAGE_DRIVER=local): uploaded images, never committed.
+apps/api/var/

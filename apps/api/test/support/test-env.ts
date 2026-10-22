@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 /**
  * Point the e2e suite at the TEST database, before anything reads config.
  *
@@ -62,6 +65,31 @@ export function applyTestDatabaseEnv(): void {
 
     process.env[target] = testUrl;
   }
+
+  // The suites deliver to the in-memory mock providers (they assert on what was
+  // "sent" and make it fail on demand). Explicit, because the default outside
+  // production is the `log` provider. A suite needing a real adapter wires one
+  // itself with a mocked fetch.
+  process.env.EMAIL_PROVIDER ??= 'mock';
+  process.env.SMS_PROVIDER ??= 'mock';
+  process.env.PUSH_PROVIDER ??= 'mock';
+  // A fixed, obviously-fake 32-byte key so company provider accounts can be
+  // saved and read back. Test-only; it protects nothing.
+  process.env.SECRETS_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString('base64');
+  // Twilio receipts are signed over the full URL, so the suite needs a base.
+  process.env.NOTIFICATION_WEBHOOK_BASE_URL ??= 'https://api.undarga.test';
+  // Calendar: a fake Google OAuth client (the suite answers Google's URLs with
+  // a mocked fetch). Microsoft stays unconfigured, to test exactly that.
+  process.env.GOOGLE_CALENDAR_CLIENT_ID ??= 'test-client.apps.googleusercontent.test';
+  process.env.GOOGLE_CALENDAR_CLIENT_SECRET ??= 'test-client-secret-not-real';
+  process.env.MICROSOFT_CALENDAR_CLIENT_ID = '';
+  process.env.MICROSOFT_CALENDAR_CLIENT_SECRET = '';
+  process.env.CALENDAR_OAUTH_REDIRECT_URL ??= 'https://app.undarga.test/calendar/callback';
+  // Files: local storage in a throwaway directory, and a fixed public origin
+  // for the URLs the API hands out (the suite requests their paths).
+  process.env.STORAGE_DRIVER ??= 'local';
+  process.env.STORAGE_LOCAL_ROOT ??= join(tmpdir(), `undarga-test-storage-${process.pid}`);
+  process.env.API_PUBLIC_URL ??= 'https://api.undarga.test';
 
   process.env[APPLIED] = '1';
 }

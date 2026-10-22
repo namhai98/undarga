@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { PlatformOnly } from '../../authz/decorators/authz.decorators';
@@ -6,6 +6,15 @@ import { PLATFORM_PERMISSIONS } from '../../authz/permissions';
 import { ZodValidationPipe } from '../../common/pipes';
 import { CompanyProvisioningService } from './company-provisioning.service';
 import { provisionCompanySchema, type ProvisionCompanyDto } from './dto/provision-company.dto';
+import {
+  changeCompanyStatusSchema,
+  companyListQuerySchema,
+  companyUsersQuerySchema,
+  type ChangeCompanyStatusDto,
+  type CompanyListQueryDto,
+  type CompanyUsersQueryDto,
+} from '../dto/platform-admin.dto';
+import { PlatformAdminService } from '../platform-admin.service';
 
 const uuidParam = new ZodValidationPipe(z.string().uuid());
 
@@ -35,7 +44,10 @@ const uuidParam = new ZodValidationPipe(z.string().uuid());
 @ApiTags('platform')
 @Controller({ path: 'platform/companies', version: '1' })
 export class PlatformCompaniesController {
-  constructor(private readonly provisioning: CompanyProvisioningService) {}
+  constructor(
+    private readonly provisioning: CompanyProvisioningService,
+    private readonly admin: PlatformAdminService,
+  ) {}
 
   @Post()
   @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_PROVISION)
@@ -55,17 +67,85 @@ export class PlatformCompaniesController {
     return this.provisioning.provision(dto);
   }
 
+  @Get()
+  @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_LIST)
+  @ApiOperation({
+    summary: 'List every company on the platform',
+    description:
+      'Searchable across display name, legal name, slug and contact email; filterable by ' +
+      'company status, subscription status, plan and creation date. Each row carries member, ' +
+      'branch and employee COUNTS — enough to size a tenant, with none of its contents.',
+  })
+  @ApiResponse({ status: 401, description: 'No token, or a staff token (audience mismatch).' })
+  @ApiResponse({ status: 404, description: 'PLATFORM_ACCESS_REQUIRED — not a platform operator.' })
+  async list(@Query(new ZodValidationPipe(companyListQuerySchema)) query: CompanyListQueryDto) {
+    return this.admin.listCompanies(query);
+  }
+
   @Get(':id')
   @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_LIST)
   @ApiOperation({
-    summary: 'Read a provisioned company back',
+    summary: 'One company, with its size and its subscription',
     description:
-      'For the onboarding flow to re-read what it created, and for an operator to confirm ' +
-      'state after the fact. Counts of members, roles and branches are included so the ' +
-      'caller can tell setup progress without a second call.',
+      'Branch, employee, service, customer and appointment counts, the subscription, and the ' +
+      'last ten administrative actions — in one request. The activity list carries the action ' +
+      'and the actor, never the payload: for a tenant’s own actions that payload contains ' +
+      'customer data.',
   })
   @ApiResponse({ status: 404, description: 'RESOURCE_NOT_FOUND.' })
   async findOne(@Param('id', uuidParam) id: string) {
-    return this.provisioning.findById(id);
+    return this.admin.getCompany(id);
+  }
+
+  @Patch(':id/status')
+  @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_SUSPEND)
+  @ApiOperation({
+    summary: 'Suspend, reactivate, or switch a company off',
+    description:
+      'A reason is REQUIRED and goes on the hash-chained audit trail — suspending a company ' +
+      'stops every member of its staff working, and "an operator clicked it" is not an answer ' +
+      'six months later. The tenant directory cache is invalidated immediately, because ' +
+      'without that a suspended company keeps working until the TTL expires. ' +
+      '`CANCELED -> ACTIVE` is the only way back from a company deactivating itself: the ' +
+      'company-facing endpoint is deliberately one-way, since a cancelled company’s owner can ' +
+      'no longer reach anything.',
+  })
+  @ApiResponse({ status: 200, description: 'Changed; the full company is returned.' })
+  @ApiResponse({ status: 400, description: 'VALIDATION_FAILED — an illegal transition.' })
+  @ApiResponse({ status: 409, description: 'CONFLICT — already in that status, or deleted.' })
+  async changeStatus(
+    @Param('id', uuidParam) id: string,
+    @Body(new ZodValidationPipe(changeCompanyStatusSchema)) dto: ChangeCompanyStatusDto,
+  ) {
+    return this.admin.changeCompanyStatus(id, dto);
+  }
+
+  @Get(':id/users')
+  @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_LIST)
+  @ApiOperation({
+    summary: 'The people who can sign in to this company',
+    description:
+      'Company USERS, not customers — the people who bought the product, which is who an ' +
+      'operator supports. No password hash, session, MFA secret or token is selected. ' +
+      'Nothing here returns a tenant’s customers.',
+  })
+  async users(
+    @Param('id', uuidParam) id: string,
+    @Query(new ZodValidationPipe(companyUsersQuerySchema)) query: CompanyUsersQueryDto,
+  ) {
+    return this.admin.listCompanyUsers(id, query);
+  }
+
+  @Get(':id/subscription')
+  @PlatformOnly(PLATFORM_PERMISSIONS.COMPANY_LIST)
+  @ApiOperation({
+    summary: 'Subscription and usage, together',
+    description:
+      'One question — "is this customer within what they are paying for" — so one response. ' +
+      'Plan entitlements with any negotiated overrides applied, this period’s counters against ' +
+      'those limits, and recent periods so growth is visible without a second call.',
+  })
+  async subscription(@Param('id', uuidParam) id: string) {
+    return this.admin.getCompanySubscription(id);
   }
 }

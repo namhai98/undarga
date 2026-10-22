@@ -43,6 +43,8 @@ export interface SeededWorld {
   weakOperator: { id: string; email: string };
   /** Platform operator allowed to provision companies. */
   provisioner: { id: string; email: string };
+  /** Runs the operator console: list, suspend, read the audit trail. */
+  platformAdmin: { id: string; email: string };
 }
 
 /**
@@ -139,7 +141,37 @@ export async function seedWorld(prisma: PrismaClient): Promise<SeededWorld> {
     [PLATFORM_PERMISSIONS.COMPANY_PROVISION, PLATFORM_PERMISSIONS.COMPANY_LIST],
   );
 
-  return { companyA, companyB, userA, userB, userAB, operator, weakOperator, provisioner };
+  // A FOURTH operator, for the same reason the third exists.
+  //
+  // Running the platform console — listing tenants, suspending one, reading the
+  // audit trail — is a different job again from support and from provisioning.
+  // Keeping them apart is what lets a test assert that `platform:audit:read` is
+  // genuinely separate from `platform:company:list`: reading the history of
+  // everything every tenant has ever done is a larger grant than listing them.
+  const platformAdmin = await seedPlatformUser(
+    prisma,
+    'admin@platform.test',
+    'Platform Administrator',
+    passwordHash,
+    'PLATFORM_ADMIN',
+    [
+      PLATFORM_PERMISSIONS.COMPANY_LIST,
+      PLATFORM_PERMISSIONS.COMPANY_SUSPEND,
+      PLATFORM_PERMISSIONS.AUDIT_READ_ALL,
+    ],
+  );
+
+  return {
+    companyA,
+    companyB,
+    userA,
+    userB,
+    userAB,
+    operator,
+    weakOperator,
+    provisioner,
+    platformAdmin,
+  };
 }
 
 async function seedCompany(
@@ -155,6 +187,10 @@ async function seedCompany(
       status: 'ACTIVE',
       defaultTimezoneName: 'Asia/Ulaanbaatar',
       currencyCode: 'MNT',
+      // Fully set up below (branch, roles, settings), so the wizard is done —
+      // without this the demo would send every seeded user into onboarding.
+      onboardingStatus: 'COMPLETED',
+      onboardingCompletedAt: new Date(),
     },
   });
 
@@ -303,7 +339,7 @@ async function addMembership(prisma: PrismaClient, companyId: string, userAccoun
   return membership;
 }
 
-async function seedPlatformUser(
+export async function seedPlatformUser(
   prisma: PrismaClient,
   email: string,
   fullName: string,

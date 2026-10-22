@@ -9,14 +9,12 @@ This describes what was **built**, not what was planned.
 
 ## 1. Why an operator does this and not a signup form
 
-There is no self-serve signup. Creating a company means creating its billing
-relationship, and plans, trials and entitlements are still open design decisions
-([ARCHITECTURE.md §16](./ARCHITECTURE.md) #16 and #17). Operator provisioning
-sidesteps all of it: the commercial terms are agreed out of band, and the
-platform records the result.
-
-Self-serve can be added later as a second entry point into the same service —
-nothing in `CompanyProvisioningService` assumes who called it.
+Operator provisioning is one of two entry points. The other is self-serve
+onboarding ([ONBOARDING.md](./ONBOARDING.md)): a signed-in account creates a
+company and becomes its owner through `CompanyProvisioningService.createForAccount`
+— the same transaction (settings, system roles, owner, trial), plus the first
+branch. An operator-provisioned company starts at onboarding NOT_STARTED, and its
+owner finishes the setup steps in the same wizard.
 
 ---
 

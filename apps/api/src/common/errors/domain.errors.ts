@@ -449,8 +449,141 @@ export class JobTenantMismatchError extends DomainError {
 }
 
 // ---------------------------------------------------------------------------
+// Customer portal
+// ---------------------------------------------------------------------------
+
+export class SignInCodeInvalidError extends DomainError {
+  readonly code = 'SIGN_IN_CODE_INVALID' as const;
+  readonly status = 401;
+  constructor() {
+    // Wrong, expired and exhausted are deliberately indistinguishable.
+    super('That code is not valid. Request a new one.');
+  }
+}
+
+export type CustomerActionRefusal =
+  | 'NOT_ALLOWED_BY_BUSINESS'
+  | 'PAST_DEADLINE'
+  | 'STATUS'
+  | 'PAYMENT_IN_PROGRESS'
+  | 'ALREADY_PAID';
+
+export class CustomerActionNotAllowedError extends DomainError {
+  readonly code = 'CUSTOMER_ACTION_NOT_ALLOWED' as const;
+  readonly status = 409;
+  constructor(
+    action: 'cancel' | 'reschedule',
+    reason: CustomerActionRefusal,
+    message: string,
+    deadline?: Date | null,
+  ) {
+    super(message, { action, reason, ...(deadline ? { deadline: deadline.toISOString() } : {}) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Online payments
+// ---------------------------------------------------------------------------
+
+/** No gateway is configured, or the configured one cannot take this payment. */
+export class PaymentsUnavailableError extends DomainError {
+  readonly code = 'PAYMENTS_UNAVAILABLE' as const;
+  readonly status = 503;
+  constructor(message = 'Online payments are not available.') {
+    super(message);
+  }
+}
+
+/**
+ * The provider refused or failed a call. The message is ours, never the
+ * provider's: gateway error bodies can echo account identifiers and are logged
+ * (without secrets) instead of being returned.
+ */
+export class PaymentProviderError extends DomainError {
+  readonly code = 'PAYMENT_PROVIDER_ERROR' as const;
+  readonly status = 502;
+  constructor(message = 'The payment provider could not complete the request. Try again.') {
+    super(message);
+  }
+}
+
+export class WebhookSignatureInvalidError extends DomainError {
+  readonly code = 'WEBHOOK_SIGNATURE_INVALID' as const;
+  readonly status = 401;
+  constructor() {
+    super('Webhook signature could not be verified.');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Generic
 // ---------------------------------------------------------------------------
+
+/** Company provider settings need SECRETS_ENCRYPTION_KEY, which is not set. */
+export class NotificationProvidersUnavailableError extends DomainError {
+  readonly code = 'NOTIFICATION_PROVIDERS_UNAVAILABLE' as const;
+  readonly status = 503;
+  constructor(message = 'Company notification providers are not available on this server.') {
+    super(message);
+  }
+}
+
+export class CalendarProviderUnavailableError extends DomainError {
+  readonly code = 'CALENDAR_PROVIDER_UNAVAILABLE' as const;
+  readonly status = 503;
+  constructor(message = 'That calendar provider is not available on this server.') {
+    super(message);
+  }
+}
+
+/** One message for every bad state, so a probe learns nothing about which check failed. */
+export class CalendarOAuthInvalidError extends DomainError {
+  readonly code = 'CALENDAR_OAUTH_INVALID' as const;
+  readonly status = 400;
+  constructor() {
+    super('This calendar authorisation link is invalid or has expired. Start again.');
+  }
+}
+
+export class CalendarProviderFailedError extends DomainError {
+  readonly code = 'CALENDAR_PROVIDER_ERROR' as const;
+  readonly status = 502;
+  constructor(message = 'The calendar provider could not complete the request. Try again.') {
+    super(message);
+  }
+}
+
+export class FileTooLargeError extends DomainError {
+  readonly code = 'FILE_TOO_LARGE' as const;
+  readonly status = 413;
+  constructor(maxBytes: number) {
+    super(`The file is larger than ${Math.round((maxBytes / 1024 / 1024) * 10) / 10} MB.`, { maxBytes });
+  }
+}
+
+export class FileTypeNotAllowedError extends DomainError {
+  readonly code = 'FILE_TYPE_NOT_ALLOWED' as const;
+  readonly status = 415;
+  constructor(allowed: readonly string[]) {
+    super('That kind of file is not accepted. Use a JPEG, PNG or WebP image.', { allowed: [...allowed] });
+  }
+}
+
+export class FileInvalidError extends DomainError {
+  readonly code = 'FILE_INVALID' as const;
+  readonly status = 422;
+  constructor(message = 'The file is not a valid image.', details?: Record<string, unknown>) {
+    super(message, details);
+  }
+}
+
+export class StorageUnavailableError extends DomainError {
+  readonly code = 'STORAGE_UNAVAILABLE' as const;
+  readonly status = 503;
+  constructor() {
+    super('File storage is unavailable. Nothing was saved; try again.');
+  }
+}
 
 export class ValidationFailedError extends DomainError {
   readonly code = 'VALIDATION_FAILED' as const;

@@ -198,11 +198,12 @@ describe('public booking', () => {
       ).toBe(404);
     });
 
-    it('lists only bookable staff, with name and job title only', async () => {
+    it('lists only bookable staff, with name, job title and public photo only', async () => {
       const res = await request(http).get(`${base()}/branches/${branch}/services/${cut}/employees`);
       expect(res.status).toBe(200);
       expect(res.body.data.map((e: { name: string }) => e.name)).toEqual(['Ari', 'Bat']);
-      expect(res.body.data[0]).toEqual({ id: e1, name: 'Ari', jobTitle: 'Senior stylist' });
+      // The portrait is public by intent (the booking page shows it); nothing else is added.
+      expect(res.body.data[0]).toEqual({ id: e1, name: 'Ari', jobTitle: 'Senior stylist', avatarFileId: null });
       expect(JSON.stringify(res.body)).not.toContain('+97611111111');
     });
 

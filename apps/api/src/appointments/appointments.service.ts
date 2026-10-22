@@ -13,6 +13,7 @@ import {
 } from '../common/errors';
 import { todayInZone, toIsoWithOffset } from '../common/time';
 import { AvailabilityService } from '../availability/availability.service';
+import { enqueueCalendarSync } from '../calendar/calendar-sync.queue';
 import { bookingPrice } from '../catalog/service-price';
 import { PromotionsService } from '../promotions/promotions.service';
 import {
@@ -263,6 +264,8 @@ export class AppointmentsService {
       await this.events.emitWithin(tx, companyId, NOTIFICATION_EVENTS.APPOINTMENT_CREATED, {
         appointmentId: appointment.id,
       });
+      // Same transaction, same reason: the employee's calendar is updated later.
+      await enqueueCalendarSync(tx, companyId, [appointment.id]);
 
       return { appointment, assignment, promotion };
     });
@@ -323,8 +326,21 @@ export class AppointmentsService {
   // Reschedule — cancel-and-create
   // ===========================================================================
 
-  async reschedule(appointmentId: string, input: RescheduleAppointmentDto) {
+  async reschedule(
+    appointmentId: string,
+    input: RescheduleAppointmentDto,
+    options: {
+      /**
+       * The customer portal: the appointment must be this customer's, the new
+       * time must be offered PUBLICLY (online-bookable, lead time, advance
+       * window), staff and room stay as they are, and `guard` — the business's
+       * rules — runs under the row lock.
+       */
+      customer?: { customerId: string; guard: (startsAt: Date) => void };
+    } = {},
+  ) {
     const startsAt = new Date(input.startsAt);
+    const customer = options.customer;
 
     const current = await this.appointments.transaction(async (tx, companyId) => {
       const row = await tx.appointment.findFirst({
@@ -337,6 +353,9 @@ export class AppointmentsService {
         },
       });
       if (!row) throw new ResourceNotFoundError('Appointment', appointmentId);
+      if (customer && row.customerId !== customer.customerId) {
+        throw new ResourceNotFoundError('Appointment', appointmentId);
+      }
       return row;
     });
 
@@ -347,25 +366,34 @@ export class AppointmentsService {
     if (!item) throw new ResourceNotFoundError('AppointmentItem', appointmentId);
 
     const booking = await this.appointments.transaction((tx, companyId) =>
-      this.resolveBooking(tx, companyId, {
-        branchId: current.branchId,
-        serviceId: item.serviceId,
-        customerId: current.customerId,
-        // Same person and room by default; the caller may name others.
-        employeeId: input.employeeId ?? item.employeeId ?? undefined,
-        resourceId: input.resourceId ?? item.resources[0]?.resourceId,
-      }),
+      this.resolveBooking(
+        tx,
+        companyId,
+        {
+          branchId: current.branchId,
+          serviceId: item.serviceId,
+          customerId: current.customerId,
+          // Same person and room by default; the caller may name others.
+          employeeId: (customer ? undefined : input.employeeId) ?? item.employeeId ?? undefined,
+          resourceId: (customer ? undefined : input.resourceId) ?? item.resources[0]?.resourceId,
+        },
+        Boolean(customer),
+      ),
     );
 
     // The appointment being moved must not count as busy against its own new
     // time — nudging a booking by fifteen minutes is the commonest reschedule.
-    const slot = await this.offeredSlot(booking, startsAt, current.id);
+    const slot = await this.offeredSlot(booking, startsAt, current.id, Boolean(customer));
 
     const { replacement, before } = await this.writeGuarded(async (tx, companyId) => {
       const locked = await lockAppointment(tx, companyId, appointmentId);
+      if (customer && locked.customerId !== customer.customerId) {
+        throw new ResourceNotFoundError('Appointment', appointmentId);
+      }
       if (!RESCHEDULABLE.includes(locked.status)) {
         throw new InvalidStatusTransitionError(locked.status, 'RESCHEDULED');
       }
+      customer?.guard(locked.startsAt);
 
       // Release the old slot first, in the same transaction: the new booking
       // may overlap it, and the constraint must see it gone.
@@ -412,6 +440,8 @@ export class AppointmentsService {
         appointmentId: replacement.id,
         previousAppointmentId: current.id,
       });
+      // The old booking's event goes, the new one's appears.
+      await enqueueCalendarSync(tx, companyId, [current.id, replacement.id]);
 
       return { replacement, before: locked };
     });
@@ -434,6 +464,7 @@ export class AppointmentsService {
       metadata: input.reason ? { reason: input.reason } : undefined,
     });
 
+    if (customer) return { id: replacement.id, appointmentNumber: replacement.appointmentNumber };
     return this.findById(replacement.id);
   }
 
@@ -476,6 +507,26 @@ export class AppointmentsService {
     });
   }
 
+  /**
+   * The customer portal's cancellation: the same transition, owned by the
+   * customer instead of scoped by staff permissions. `guard` carries the
+   * business's rules (deadline), evaluated under the row lock so a request in
+   * the last second before the deadline cannot slip past it.
+   */
+  async cancelByCustomer(
+    appointmentId: string,
+    customerId: string,
+    input: CancelAppointmentDto,
+    guard: (startsAt: Date) => void,
+  ): Promise<void> {
+    await this.transition(appointmentId, 'CANCELLED', 'appointment.cancelled', {
+      reason: input.reason,
+      cancellation: true,
+      customerId,
+      guard,
+    });
+  }
+
   private async transition(
     appointmentId: string,
     to: AppointmentStatus,
@@ -485,10 +536,19 @@ export class AppointmentsService {
       cancellation?: boolean;
       ownPermission?: string;
       guard?: (startsAt: Date) => void;
+      /**
+       * The customer portal: the appointment must be this customer's, checked
+       * under the row lock. Another customer's id is a 404, never a 403.
+       */
+      customerId?: string;
     },
   ) {
     const from = await this.writeGuarded(async (tx, companyId) => {
       const locked = await lockAppointment(tx, companyId, appointmentId);
+
+      if (options.customerId !== undefined && locked.customerId !== options.customerId) {
+        throw new ResourceNotFoundError('Appointment', appointmentId);
+      }
 
       if (options.ownPermission) {
         const own = await this.ownScope(tx, companyId, options.ownPermission);
@@ -513,6 +573,8 @@ export class AppointmentsService {
 
       const event = STATUS_EVENTS[to];
       if (event) await this.events.emitWithin(tx, companyId, event, { appointmentId });
+      // Every transition: the event's text changes, or it leaves the calendar.
+      await enqueueCalendarSync(tx, companyId, [appointmentId]);
       return locked.status;
     });
 
@@ -525,6 +587,9 @@ export class AppointmentsService {
       metadata: options.reason ? { reason: options.reason } : undefined,
     });
 
+    // The staff detail (internal notes, history) is not the customer's to see;
+    // the portal reads back its own projection.
+    if (options.customerId !== undefined) return null;
     return this.findById(appointmentId);
   }
 
@@ -1192,16 +1257,16 @@ interface Assignment {
 
 async function lockAppointment(tx: TenantTx, companyId: string, appointmentId: string) {
   const rows = await tx.$queryRaw<
-    Array<{ id: string; status: AppointmentStatus; starts_at: Date }>
+    Array<{ id: string; status: AppointmentStatus; starts_at: Date; customer_id: string }>
   >`
-    SELECT id, status, starts_at
+    SELECT id, status, starts_at, customer_id
       FROM appointment
      WHERE id = ${appointmentId}::uuid AND company_id = ${companyId}::uuid
      FOR UPDATE
   `;
   const row = rows[0];
   if (!row) throw new ResourceNotFoundError('Appointment', appointmentId);
-  return { id: row.id, status: row.status, startsAt: row.starts_at };
+  return { id: row.id, status: row.status, startsAt: row.starts_at, customerId: row.customer_id };
 }
 
 /**

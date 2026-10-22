@@ -5,7 +5,7 @@ import { RequirePermission } from '../authz/decorators/authz.decorators';
 import { COMPANY_PERMISSIONS } from '../authz/permissions';
 import { ZodValidationPipe } from '../common/pipes';
 import { RequestContextService } from '../tenancy/context/request-context.service';
-import { AllowPlatformAccess } from '../tenancy/decorators/tenant.decorators';
+import { AllowPlatformAccess, RequiresWrite } from '../tenancy/decorators/tenant.decorators';
 import { notificationQuerySchema, type NotificationQueryDto } from './dto/notification.dto';
 import { NotificationSchedulerService } from './notification-scheduler.service';
 import { NotificationsService } from './notifications.service';
@@ -71,6 +71,22 @@ export class NotificationsController {
     return this.scheduler.runOnce({
       companyId: this.context.requireCompanyId('notifications.run'),
     });
+  }
+
+  @Post(':notificationId/retry')
+  @RequirePermission(COMPANY_PERMISSIONS.SETTINGS_WRITE)
+  @RequiresWrite()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Send a failed message again',
+    description:
+      'FAILED or UNKNOWN only. UNKNOWN (the provider never answered) is never retried ' +
+      'automatically, because it may already have been delivered — a person decides. The same ' +
+      'row goes back to the queue; no new message is created. Audited.',
+  })
+  @ApiResponse({ status: 409, description: 'The message is not in a retryable state.' })
+  async retry(@Param('notificationId', uuidParam) notificationId: string) {
+    return this.notifications.retry(notificationId);
   }
 
   @Get(':notificationId')

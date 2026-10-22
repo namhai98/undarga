@@ -39,6 +39,19 @@ export interface ProvisionedCompany {
   roles: Array<{ id: string; key: string; name: string; isSystem: boolean }>;
 }
 
+/** The company's own fields: what the operator path and self-serve onboarding share. */
+export type CompanyCoreInput = Omit<ProvisionCompanyDto, 'owner' | 'planKey'>;
+
+/** Who becomes the first owner. */
+type OwnerSpec =
+  /** Operator provisioning: found or created by email, invited if they cannot sign in. */
+  | { kind: 'invite'; email: string; fullName: string }
+  /** Self-serve onboarding: the signed-in account itself, a member immediately. */
+  | { kind: 'account'; userAccountId: string };
+
+/** Extra writes run inside the provisioning transaction, after the owner exists. */
+export type ProvisioningSetup<T> = (tx: Prisma.TransactionClient, companyId: string) => Promise<T>;
+
 /** Human labels for the seeded roles. Keys come from SYSTEM_ROLES. */
 const SYSTEM_ROLE_NAMES: Record<string, string> = {
   OWNER: 'Owner',
@@ -94,7 +107,13 @@ export class CompanyProvisioningService {
     await this.assertReferencesExist(input);
     await this.assertSlugAvailable(input.slug);
 
-    const result = await this.runProvisioningTransaction(input);
+    const { owner, planKey, ...company } = input;
+    const result = await this.runProvisioningTransaction(company, {
+      owner: { kind: 'invite', email: owner.email, fullName: owner.fullName },
+      planKey,
+      status: 'PENDING_SETUP',
+      onboardingStatus: 'NOT_STARTED',
+    });
 
     // AFTER the commit, never inside it.
     //
@@ -148,6 +167,65 @@ export class CompanyProvisioningService {
   }
 
   /**
+   * Create a company owned by an EXISTING, signed-in account — self-serve
+   * onboarding (docs/ONBOARDING.md).
+   *
+   * The same transaction as `provision`: settings, the six system roles, the
+   * owner membership and the default plan's trial, plus whatever `setup`
+   * writes (the first branch). Any failure — including one inside `setup` —
+   * rolls all of it back, so no partial company is ever left behind.
+   *
+   * Differences from operator provisioning, each deliberate:
+   *   - the owner is the CALLER's account, never one named by email in a body,
+   *     so nobody can make someone else the owner of a company;
+   *   - the membership is ACTIVE immediately, because the caller can already
+   *     sign in — there is nothing to accept;
+   *   - the company is ACTIVE, not PENDING_SETUP: `setup` has created its first
+   *     branch, so it is set up.
+   *
+   * Auditing is the caller's job: this is an action WITHIN the new company by
+   * one of its members, not a platform-level one.
+   */
+  async createForAccount<T>(
+    input: CompanyCoreInput,
+    userAccountId: string,
+    setup: ProvisioningSetup<T>,
+  ): Promise<{
+    company: ProvisionedCompany['company'];
+    owner: ProvisionedCompany['owner'];
+    setup: T;
+  }> {
+    await this.assertReferencesExist(input);
+    await this.assertSlugAvailable(input.slug);
+
+    const result = await this.runProvisioningTransaction(input, {
+      owner: { kind: 'account', userAccountId },
+      status: 'ACTIVE',
+      onboardingStatus: 'IN_PROGRESS',
+      setup,
+    });
+
+    // After the commit — see `provision`.
+    this.directory.invalidate(result.company.id, result.company.slug);
+
+    return {
+      company: {
+        id: result.company.id,
+        slug: result.company.slug,
+        legalName: result.company.legalName,
+        displayName: result.company.displayName,
+        status: result.company.status,
+        defaultTimezoneName: result.company.defaultTimezoneName,
+        currencyCode: result.company.currencyCode,
+        locale: result.company.locale,
+        createdAt: result.company.createdAt,
+      },
+      owner: result.owner,
+      setup: result.setup as T,
+    };
+  }
+
+  /**
    * Every write, in one transaction.
    *
    * Nothing here is conditional on anything outside it, so a failure at any
@@ -155,7 +233,16 @@ export class CompanyProvisioningService {
    * leaves the database exactly as it was. There is no compensating cleanup
    * path because there is nothing to compensate for.
    */
-  private async runProvisioningTransaction(input: ProvisionCompanyDto) {
+  private async runProvisioningTransaction(
+    input: CompanyCoreInput,
+    options: {
+      owner: OwnerSpec;
+      planKey?: string;
+      status: 'PENDING_SETUP' | 'ACTIVE';
+      onboardingStatus: 'NOT_STARTED' | 'IN_PROGRESS';
+      setup?: ProvisioningSetup<unknown>;
+    },
+  ) {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const company = await tx.company.create({
@@ -163,10 +250,13 @@ export class CompanyProvisioningService {
             slug: input.slug,
             legalName: input.legalName,
             displayName: input.displayName,
-            // PENDING_SETUP, not ACTIVE. The owner has not accepted, there are
-            // no branches and no services — nothing can be booked yet, and the
-            // status should say so rather than flatter the situation.
-            status: 'PENDING_SETUP',
+            // Operator provisioning: PENDING_SETUP, not ACTIVE. The owner has
+            // not accepted, there are no branches and no services — nothing can
+            // be booked yet, and the status should say so rather than flatter
+            // the situation. Self-serve onboarding passes ACTIVE because its
+            // `setup` creates the first branch in this same transaction.
+            status: options.status,
+            onboardingStatus: options.onboardingStatus,
             defaultTimezoneName: input.defaultTimezoneName,
             currencyCode: input.currencyCode,
             locale: input.locale,
@@ -182,7 +272,7 @@ export class CompanyProvisioningService {
         await tx.companySettings.create({ data: { companyId: company.id } });
 
         // Its subscription: a trial of the chosen (or default) plan.
-        await this.startSubscription(tx, company.id, input.planKey);
+        await this.startSubscription(tx, company.id, options.planKey);
 
         const roles = await this.createSystemRoles(tx, company.id);
 
@@ -193,9 +283,19 @@ export class CompanyProvisioningService {
           throw new Error('System role seeding produced no OWNER role.');
         }
 
-        const owner = await this.createOwner(tx, company.id, ownerRole.id, input.owner);
+        const owner =
+          options.owner.kind === 'invite'
+            ? await this.createOwner(tx, company.id, ownerRole.id, options.owner)
+            : await this.attachAccountOwner(
+                tx,
+                company.id,
+                ownerRole.id,
+                options.owner.userAccountId,
+              );
 
-        return { company, roles, owner };
+        const setup = options.setup ? await options.setup(tx, company.id) : undefined;
+
+        return { company, roles, owner, setup };
       });
     } catch (error) {
       // The slug check above is a check-then-act, so two concurrent provisions
@@ -221,7 +321,7 @@ export class CompanyProvisioningService {
    * "unknown timezone" into a 400 that names the field, which is the difference
    * between a caller fixing their request and filing a bug.
    */
-  private async assertReferencesExist(input: ProvisionCompanyDto): Promise<void> {
+  private async assertReferencesExist(input: CompanyCoreInput): Promise<void> {
     const [timezone, currency] = await Promise.all([
       this.prisma.timezone.findUnique({ where: { name: input.defaultTimezoneName } }),
       this.prisma.currency.findUnique({ where: { code: input.currencyCode } }),
@@ -246,6 +346,21 @@ export class CompanyProvisioningService {
    * case are indistinguishable to the caller. The check exists for the message,
    * the constraint exists for the correctness.
    */
+  /**
+   * Whether a slug is free, for a form's live check. Advisory only: creation
+   * re-checks, and the unique index decides a race.
+   *
+   * Deleted companies still hold their slug — the column is unique without a
+   * `deleted_at` filter — so they count as taken, which is what creation does.
+   */
+  async isSlugAvailable(slugValue: string): Promise<boolean> {
+    const existing = await this.prisma.company.findUnique({
+      where: { slug: slugValue },
+      select: { id: true },
+    });
+    return existing === null;
+  }
+
   private async assertSlugAvailable(slugValue: string): Promise<void> {
     const existing = await this.prisma.company.findUnique({
       where: { slug: slugValue },
@@ -428,6 +543,57 @@ export class CompanyProvisioningService {
       status: membership.status,
       accountCreated: existing === null,
       requiresInvitation: !canAlreadySignIn,
+    };
+  }
+
+  /**
+   * Make an existing, signed-in account the first owner.
+   *
+   * Looked up by ID — the one from the verified token — never by an email from
+   * a request body. The account must still be usable: a token can outlive a
+   * disable or a deletion by up to its lifetime, and neither should be able to
+   * found a company in that window.
+   */
+  private async attachAccountOwner(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    ownerRoleId: string,
+    userAccountId: string,
+  ) {
+    const account = await tx.userAccount.findFirst({
+      where: { id: userAccountId, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true, email: true, fullName: true },
+    });
+    if (!account) {
+      throw new ConflictError('Your account cannot own a company in its current state.', {
+        field: 'owner',
+      });
+    }
+
+    const membership = await tx.companyUser.create({
+      data: {
+        companyId,
+        userAccountId: account.id,
+        // See `createOwner`: this file is the only writer of `isOwner: true`.
+        isOwner: true,
+        status: 'ACTIVE',
+        joinedAt: new Date(),
+      },
+      select: { id: true, status: true },
+    });
+
+    await tx.companyUserRole.create({
+      data: { companyId, companyUserId: membership.id, roleId: ownerRoleId },
+    });
+
+    return {
+      userAccountId: account.id,
+      companyUserId: membership.id,
+      email: account.email,
+      fullName: account.fullName,
+      status: membership.status,
+      accountCreated: false,
+      requiresInvitation: false,
     };
   }
 

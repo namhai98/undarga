@@ -263,6 +263,23 @@ export class AvailabilityRepository {
           })
         : [];
 
+      // Busy periods read from employees' external calendars (times only).
+      // Only from connections that are working and opted in: a stale set from
+      // a calendar that needs reconnecting is not trusted. In addition to —
+      // never instead of — the bookings above and the exclusion constraint.
+      const calendarBusy = employeeIds.length
+        ? await tx.calendarBusyBlock.findMany({
+            where: {
+              companyId,
+              employeeId: { in: employeeIds },
+              startsAt: { lt: scanEnd },
+              endsAt: { gt: scanStart },
+              connection: { status: 'ACTIVE', useForAvailability: true },
+            },
+            select: { employeeId: true, startsAt: true, endsAt: true },
+          })
+        : [];
+
       return {
         serviceBranch,
         companySettings,
@@ -273,7 +290,9 @@ export class AvailabilityRepository {
         employeeIds,
         schedules,
         exceptions,
-        timeOff,
+        // External busy periods make the employee unavailable exactly as
+        // approved time off does, so the engine needs no new concept.
+        timeOff: [...timeOff, ...calendarBusy],
         appointmentItems,
         requirements,
         resources,

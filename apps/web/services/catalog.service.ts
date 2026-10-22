@@ -61,6 +61,8 @@ export interface ServiceSummary {
   priceMinor: string;
   currencyCode: string;
   requiresDeposit: boolean;
+  /** Public image (booking page). Change it through the files API, not by setting this. */
+  imageFileId: string | null;
   depositMinor: string | null;
   requiresEmployee: boolean;
   requiresResource: boolean;

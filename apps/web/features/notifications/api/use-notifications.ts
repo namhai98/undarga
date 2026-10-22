@@ -9,6 +9,8 @@ import {
   type NotificationQuery,
   type NotificationSettingsUpdate,
   type NotificationTemplate,
+  type ProviderChannelView,
+  type SaveProviderInput,
   type TemplateInput,
 } from '@/services/notifications.service';
 
@@ -21,6 +23,7 @@ export const notificationKeys = {
   stats: (companyId: string) => [...notificationKeys.all(companyId), 'stats'] as const,
   settings: (companyId: string) => [...notificationKeys.all(companyId), 'settings'] as const,
   templates: (companyId: string) => [...notificationKeys.all(companyId), 'templates'] as const,
+  providers: (companyId: string) => [...notificationKeys.all(companyId), 'providers'] as const,
   customer: (companyId: string, customerId: string) =>
     [...notificationKeys.all(companyId), 'customer', customerId] as const,
 };
@@ -152,4 +155,56 @@ export function useUpdateCustomerNotificationPreferences(customerId: string) {
     onSuccess: (saved) =>
       queryClient.setQueryData(notificationKeys.customer(activeCompanyId!, customerId), saved),
   });
+}
+
+/** Send a failed or unknown message again. Refreshes the history and stats. */
+export function useRetryNotification() {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      notificationsService.retry(activeCompanyId!, notificationId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all(activeCompanyId!) }),
+  });
+}
+
+export function useNotificationProviders() {
+  const { activeCompanyId } = useSession();
+  return useQuery({
+    queryKey: notificationKeys.providers(activeCompanyId ?? 'none'),
+    queryFn: ({ signal }) => notificationsService.providers(activeCompanyId!, signal),
+    enabled: Boolean(activeCompanyId),
+  });
+}
+
+function useProviderMutation<TInput>(
+  call: (companyId: string, input: TInput) => Promise<ProviderChannelView>,
+) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TInput) => call(activeCompanyId!, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: notificationKeys.providers(activeCompanyId!) }),
+  });
+}
+
+export function useSaveNotificationProvider() {
+  return useProviderMutation(
+    (companyId, input: { channel: 'EMAIL' | 'SMS'; config: SaveProviderInput }) =>
+      notificationsService.saveProvider(companyId, input.channel, input.config),
+  );
+}
+
+export function useRemoveNotificationProvider() {
+  return useProviderMutation((companyId, channel: 'EMAIL' | 'SMS') =>
+    notificationsService.removeProvider(companyId, channel),
+  );
+}
+
+export function useVerifyNotificationProvider() {
+  return useProviderMutation((companyId, channel: 'EMAIL' | 'SMS') =>
+    notificationsService.verifyProvider(companyId, channel),
+  );
 }

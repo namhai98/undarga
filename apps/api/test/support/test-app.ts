@@ -1,5 +1,5 @@
 import { INestApplication, VersioningType } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../../src/app.module';
 import { AuthService } from '../../src/auth/auth.service';
@@ -41,6 +41,13 @@ export interface HarnessOptions {
    * per-account ceiling in AccountService, which is exercised normally.
    */
   throttling?: boolean;
+  /**
+   * Replace providers before compiling — e.g. the payment gateway, so a suite
+   * runs against a mock provider with a known signing secret instead of
+   * whatever the environment configures. Everything else stays the shipped
+   * wiring.
+   */
+  override?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
 }
 
 export async function createTestHarness(options: HarnessOptions = {}): Promise<TestHarness> {
@@ -50,11 +57,13 @@ export async function createTestHarness(options: HarnessOptions = {}): Promise<T
   // none — hence a config flag rather than a test-module override.
   process.env.THROTTLE_ENABLED = options.throttling ? 'true' : 'false';
 
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule, ProbeModule],
-  }).compile();
+  });
+  const moduleRef = await (options.override ? options.override(builder) : builder).compile();
 
-  const app = moduleRef.createNestApplication();
+  // rawBody, as in main.ts: webhook signatures are verified over raw bytes.
+  const app = moduleRef.createNestApplication({ rawBody: true });
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   await app.init();

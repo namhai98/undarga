@@ -9,12 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCan, useSession } from '@/features/auth';
 import { useCompany } from '@/features/companies';
+import { ImageUpload } from '@/features/media';
 import { useZodForm } from '@/hooks/use-zod-form';
 import { currencyFormat } from '@/lib/currency';
 import { ApiError } from '@/services/api-error';
 import type { CatalogStatus, ServiceInput } from '@/services/catalog.service';
 import {
+  catalogKeys,
   useCreateService,
   useDeleteService,
   useService,
@@ -76,6 +80,10 @@ export function ServiceForm({
   const company = useCompany();
   const categories = useServiceCategories();
   const existing = useService(serviceId);
+
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  const canWriteImage = useCan('service:write');
 
   const create = useCreateService();
   const update = useUpdateService(serviceId ?? '');
@@ -150,9 +158,7 @@ export function ServiceForm({
       await remove.mutateAsync(serviceId);
       onDone();
     } catch (error) {
-      setFormError(
-        error instanceof ApiError ? error.message : 'Could not remove the service.',
-      );
+      setFormError(error instanceof ApiError ? error.message : 'Could not remove the service.');
     }
   };
 
@@ -170,6 +176,25 @@ export function ServiceForm({
           <AlertTitle>Could not save</AlertTitle>
           <AlertDescription>{formError}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {serviceId && service ? (
+        // Saved straight away, independent of the form's Save button.
+        <ImageUpload
+          purpose="SERVICE_IMAGE"
+          targetId={serviceId}
+          fileId={service.imageFileId}
+          label="Service image"
+          hint="Shown on your booking page. JPEG, PNG or WebP, at least 200 × 200 pixels."
+          shape="wide"
+          canEdit={canWriteImage}
+          onChange={() => {
+            if (activeCompanyId)
+              void queryClient.invalidateQueries({
+                queryKey: catalogKeys.services(activeCompanyId),
+              });
+          }}
+        />
       ) : null}
 
       <Field id="name" label="Name" error={errors.name}>
@@ -212,7 +237,12 @@ export function ServiceForm({
         </Field>
       </div>
 
-      <Field id="description" label="Description" hint="Shown to customers." error={errors.description}>
+      <Field
+        id="description"
+        label="Description"
+        hint="Shown to customers."
+        error={errors.description}
+      >
         <textarea
           id="description"
           name="description"
@@ -296,9 +326,7 @@ export function ServiceForm({
             name="price"
             inputMode="decimal"
             required
-            defaultValue={
-              service ? minorToDecimalString(service.priceMinor, format.minorUnit) : ''
-            }
+            defaultValue={service ? minorToDecimalString(service.priceMinor, format.minorUnit) : ''}
             placeholder={format.minorUnit === 0 ? '50000' : '50000.00'}
             className="tabular-nums"
           />
@@ -327,7 +355,12 @@ export function ServiceForm({
       <fieldset className="grid gap-3">
         <legend className="mb-2 text-sm font-medium">Availability</legend>
 
-        <Field id="status" label="Status" hint="Whether it can be booked at all." error={errors.status}>
+        <Field
+          id="status"
+          label="Status"
+          hint="Whether it can be booked at all."
+          error={errors.status}
+        >
           <select
             id="status"
             name="status"

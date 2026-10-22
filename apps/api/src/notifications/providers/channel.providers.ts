@@ -1,25 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config';
+import { isValidAddress } from './address-rules';
 import { MockNotificationProvider } from './mock.provider';
 
 /**
- * The three channels, each its own provider. Today all three are mocks; a real
- * vendor replaces one of these classes (or is registered after it in
- * `NotificationsModule`) and nothing else changes.
+ * The test doubles, one per channel (`EMAIL_PROVIDER=mock` and friends).
  *
- * Address validation lives here because it is the vendor's rule, not the
- * business's: what counts as a deliverable phone number is whatever the SMS
- * gateway accepts.
+ * They are what the automated suites run against: they record what would have
+ * been sent and can be told to fail. They are never registered unless a
+ * channel is explicitly configured as `mock`, and env validation refuses that
+ * in production — so a mock can no longer stand in for a missing provider and
+ * report a message as sent that went nowhere.
  */
-
-/** Deliberately simple: one @, a dot in the domain, no spaces. Vendors verify the rest. */
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** E.164 after removing spaces, dashes and brackets: +, then 8–15 digits. */
-const E164 = /^\+[1-9]\d{7,14}$/;
-
-/** A device token as FCM/APNs issue them: long, URL-safe. */
-const DEVICE_TOKEN = /^[A-Za-z0-9:_\-.]{32,4096}$/;
 
 @Injectable()
 export class EmailNotificationProvider extends MockNotificationProvider {
@@ -31,7 +23,7 @@ export class EmailNotificationProvider extends MockNotificationProvider {
   }
 
   isValidAddress(address: string): boolean {
-    return address.length <= 320 && EMAIL.test(address);
+    return isValidAddress('EMAIL', address);
   }
 }
 
@@ -45,7 +37,7 @@ export class SmsNotificationProvider extends MockNotificationProvider {
   }
 
   isValidAddress(address: string): boolean {
-    return E164.test(address.replace(/[\s\-()]/g, ''));
+    return isValidAddress('SMS', address);
   }
 }
 
@@ -59,6 +51,6 @@ export class PushNotificationProvider extends MockNotificationProvider {
   }
 
   isValidAddress(address: string): boolean {
-    return DEVICE_TOKEN.test(address);
+    return isValidAddress('PUSH', address);
   }
 }

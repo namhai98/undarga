@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import type { PublicPaymentOffer } from './online-payments.service';
 
 /**
  * The public booking page's API. Every call is `anonymous`: no bearer token is
@@ -27,6 +28,7 @@ export interface PublicCompany {
     accentColor: string;
     headline: string | null;
     blurb: string | null;
+    logoFileId: string | null;
   } | null;
   branches: PublicBranch[];
 }
@@ -46,6 +48,7 @@ export interface PublicService {
   currencyCode: string;
   requiresEmployee: boolean;
   color: string | null;
+  imageFileId: string | null;
   categoryId: string | null;
 }
 
@@ -53,6 +56,7 @@ export interface PublicEmployee {
   id: string;
   name: string;
   jobTitle: string | null;
+  avatarFileId: string | null;
 }
 
 export interface PublicSlot {
@@ -115,6 +119,12 @@ export interface PublicBookingConfirmation {
   price: { originalMinor: string; discountMinor: string; amountMinor: string; currencyCode: string };
   promotion: { name: string; code: string | null } | null;
   customer: { firstName: string };
+  /**
+   * Pay online now, when the company can take it. The amount is the server's
+   * (what is owed, or the deposit); the token is what lets this booker — and
+   * only them — pay for this booking. null when online payment is off.
+   */
+  payment: PublicPaymentOffer | null;
 }
 
 const base = (slug: string) => `/public/companies/${encodeURIComponent(slug)}`;

@@ -548,6 +548,15 @@ describe('subscriptions', () => {
       const invoice = await harness.prisma.subscriptionInvoice.findFirstOrThrow({
         where: { companyId, status: 'OPEN' },
       });
+      // The owner's renewal notice, written with the invoice.
+      expect(
+        await harness.prisma.outboxEvent.count({
+          where: {
+            type: 'subscription.invoice_issued',
+            payload: { path: ['invoiceId'], equals: invoice.id },
+          },
+        }),
+      ).toBe(1);
 
       // The invoice falls due unpaid.
       await harness.prisma.subscriptionInvoice.update({
@@ -558,6 +567,16 @@ describe('subscriptions', () => {
       stored = await harness.prisma.subscription.findUniqueOrThrow({ where: { companyId } });
       expect(stored.status).toBe('PAST_DUE');
       expect(stored.graceEndsAt!.getTime()).toBeGreaterThan(Date.now());
+      // Told once that payment is needed, however often the sweep runs.
+      await as(billingOperator).post('/api/v1/platform/subscriptions/sweep').expect(200);
+      expect(
+        await harness.prisma.outboxEvent.count({
+          where: {
+            type: 'subscription.payment_failed',
+            payload: { path: ['invoiceId'], equals: invoice.id },
+          },
+        }),
+      ).toBe(1);
       // Past due still works.
       await newCustomer(ownerB, companyId).expect(201);
 

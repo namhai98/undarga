@@ -55,6 +55,7 @@ export class PublicCatalogRepository {
             accentColor: true,
             bookingPageHeadline: true,
             bookingPageBlurb: true,
+            logoFileId: true,
           },
         }),
         tx.companySettings.findFirst({
@@ -76,6 +77,8 @@ export class PublicCatalogRepository {
               accentColor: branding.accentColor,
               headline: branding.bookingPageHeadline,
               blurb: branding.bookingPageBlurb,
+              /** Public image: /public/files/:id. */
+              logoFileId: branding.logoFileId,
             }
           : null,
         branches,
@@ -114,6 +117,7 @@ export class PublicCatalogRepository {
               requiresEmployee: true,
               color: true,
               sortOrder: true,
+              imageFileId: true,
               category: {
                 select: { id: true, name: true, sortOrder: true, status: true, deletedAt: true },
               },
@@ -139,6 +143,7 @@ export class PublicCatalogRepository {
             currencyCode: service.currencyCode,
             requiresEmployee: service.requiresEmployee,
             color: service.color,
+            imageFileId: service.imageFileId,
             categoryId: category?.id ?? null,
             sortOrder: service.sortOrder,
             categorySort: category?.sortOrder ?? Number.MAX_SAFE_INTEGER,
@@ -179,7 +184,7 @@ export class PublicCatalogRepository {
           services: { some: { companyId, serviceId } },
           branches: { some: { companyId, branchId } },
         },
-        select: { id: true, displayName: true, profile: { select: { jobTitle: true } } },
+        select: { id: true, displayName: true, profile: { select: { jobTitle: true, avatarFileId: true } } },
         orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
       });
 
@@ -187,6 +192,7 @@ export class PublicCatalogRepository {
         id: e.id,
         name: e.displayName,
         jobTitle: e.profile?.jobTitle ?? null,
+        avatarFileId: e.profile?.avatarFileId ?? null,
       }));
     });
   }
@@ -236,6 +242,7 @@ export class PublicCatalogRepository {
         district: true,
         phone: true,
         timezoneName: true,
+        imageFileId: true,
         settings: { select: { allowOnlineBooking: true } },
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -306,6 +313,7 @@ function toPublicBranch(b: {
   district: string | null;
   phone: string | null;
   timezoneName: string;
+  imageFileId?: string | null;
 }) {
   return {
     id: b.id,
@@ -313,5 +321,6 @@ function toPublicBranch(b: {
     address: [b.addressLine1, b.addressLine2, b.district, b.city].filter(Boolean).join(', ') || null,
     phone: b.phone,
     timezone: b.timezoneName,
+    imageFileId: b.imageFileId ?? null,
   };
 }

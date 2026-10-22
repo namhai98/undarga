@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
+import { AppointmentOnlinePayment } from '@/features/payments';
 import { currencyFormat } from '@/lib/currency';
 import { PriceBreakdown } from '@/components/price-breakdown';
 import type { AppointmentDetail as Detail, StatusAction } from '@/services/appointments.service';
@@ -73,6 +74,18 @@ function Loaded({ detail }: { detail: Detail }) {
   const canCancelAny = useCan('appointment:cancel:any');
   const canCancelOwn = useCan('appointment:cancel:own');
   const canCancel = canCancelAny || canCancelOwn;
+  const canTakePayment = useCan('payment:write');
+  const canRefund = useCan('payment:refund');
+  // Online payment is offered while something is owed and the visit is live.
+  const owesMoney =
+    detail.status !== 'CANCELLED' &&
+    detail.status !== 'EXPIRED' &&
+    detail.totalMinor !== '0' &&
+    (detail.paymentStatus === 'UNPAID' || detail.paymentStatus === 'PARTIALLY_PAID');
+  // Sticky once shown: when the payment lands the appointment turns PAID, and
+  // the card must stay to say so (and to offer the refund).
+  const [paymentCard, setPaymentCard] = useState(owesMoney);
+  if (owesMoney && !paymentCard) setPaymentCard(true);
 
   const act = useAppointmentAction(detail.id);
   const cancel = useCancelAppointment(detail.id);
@@ -396,6 +409,10 @@ function Loaded({ detail }: { detail: Detail }) {
           </CardContent>
         </Card>
       </div>
+
+      {canTakePayment && paymentCard ? (
+        <AppointmentOnlinePayment appointmentId={detail.id} canRefund={canRefund} />
+      ) : null}
     </div>
   );
 }

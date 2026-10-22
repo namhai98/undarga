@@ -51,7 +51,13 @@ export class AppConfig {
   // ---------------------------------------------------------------------------
   get cors() {
     const raw = this.get('CORS_ORIGINS').trim();
-    const origins = raw === '' ? [] : raw.split(',').map((o) => o.trim()).filter(Boolean);
+    const origins =
+      raw === ''
+        ? []
+        : raw
+            .split(',')
+            .map((o) => o.trim())
+            .filter(Boolean);
     return {
       origins,
       /**
@@ -177,29 +183,103 @@ export class AppConfig {
   }
 
   // ---------------------------------------------------------------------------
-  // storage — placeholder. Nothing uploads yet.
+  // file storage (docs/FILE-STORAGE.md)
   // ---------------------------------------------------------------------------
   get storage() {
     const bucket = this.get('S3_BUCKET');
+    const endpoint = this.get('S3_ENDPOINT')?.replace(/\/+$/, '');
+    const driver = this.get('STORAGE_DRIVER') ?? (bucket ? 's3' : 'local');
     return {
-      configured: Boolean(bucket),
-      endpoint: this.get('S3_ENDPOINT'),
-      region: this.get('S3_REGION'),
-      bucket,
-      accessKey: this.get('S3_ACCESS_KEY'),
-      secretKey: this.get('S3_SECRET_KEY'),
+      driver,
+      localRoot: this.get('STORAGE_LOCAL_ROOT') ?? 'var/uploads',
+      s3:
+        bucket && this.get('S3_ACCESS_KEY') && this.get('S3_SECRET_KEY')
+          ? {
+              bucket,
+              endpoint: endpoint ?? null,
+              region: this.get('S3_REGION') ?? 'us-east-1',
+              accessKey: this.get('S3_ACCESS_KEY')!,
+              secretKey: this.get('S3_SECRET_KEY')!,
+              forcePathStyle: this.get('S3_FORCE_PATH_STYLE') ?? Boolean(endpoint),
+            }
+          : null,
+      publicBaseUrl: this.get('STORAGE_PUBLIC_BASE_URL')?.replace(/\/+$/, '') ?? null,
+      apiPublicUrl: (this.get('API_PUBLIC_URL') ?? `http://localhost:${this.get('PORT')}`).replace(/\/+$/, ''),
+      apiPrefix: this.get('API_PREFIX'),
+      maxImageBytes: this.get('FILE_MAX_IMAGE_BYTES'),
+      maxImagePixels: this.get('FILE_MAX_IMAGE_PIXELS'),
+      signedUrlTtlSeconds: this.get('FILE_SIGNED_URL_TTL_SECONDS'),
+      cleanupEnabled: this.get('FILE_CLEANUP_ENABLED'),
+      cleanupIntervalMs: this.get('FILE_CLEANUP_INTERVAL_MS'),
+      orphanGraceMinutes: this.get('FILE_ORPHAN_GRACE_MINUTES'),
+      /** Signs local-driver download URLs. Derived, so no extra secret to manage. */
+      urlSigningSecret: this.get('JWT_ACCESS_SECRET'),
     };
   }
 
   // ---------------------------------------------------------------------------
-  // payments — placeholder. Nothing charges yet.
+  // notification providers — docs/NOTIFICATION-PROVIDERS.md
+  // ---------------------------------------------------------------------------
+  get calendar() {
+    const webAppUrl = (this.get('WEB_APP_URL') ?? '').replace(/\/+$/, '');
+    const pair = (id: string | undefined, secret: string | undefined) =>
+      id && secret ? { clientId: id, clientSecret: secret } : null;
+    return {
+      google: pair(this.get('GOOGLE_CALENDAR_CLIENT_ID'), this.get('GOOGLE_CALENDAR_CLIENT_SECRET')),
+      microsoft: pair(
+        this.get('MICROSOFT_CALENDAR_CLIENT_ID'),
+        this.get('MICROSOFT_CALENDAR_CLIENT_SECRET'),
+      ),
+      microsoftTenant: this.get('MICROSOFT_CALENDAR_TENANT') ?? 'common',
+      redirectUrl:
+        this.get('CALENDAR_OAUTH_REDIRECT_URL') ?? (webAppUrl ? `${webAppUrl}/calendar/callback` : null),
+      syncEnabled: this.get('CALENDAR_SYNC_ENABLED'),
+      syncIntervalMs: this.get('CALENDAR_SYNC_INTERVAL_MS'),
+      busyRefreshMinutes: this.get('CALENDAR_BUSY_REFRESH_MINUTES'),
+    };
+  }
+
+  get notificationProviders() {
+    const fallback = this.app.isProduction ? 'none' : 'log';
+    return {
+      email: {
+        provider: this.get('EMAIL_PROVIDER') ?? fallback,
+        fromAddress: this.get('EMAIL_FROM_ADDRESS') ?? null,
+        fromName: this.get('EMAIL_FROM_NAME') ?? null,
+        sendgridApiKey: this.get('SENDGRID_API_KEY') ?? null,
+        sendgridWebhookPublicKey: this.get('SENDGRID_WEBHOOK_PUBLIC_KEY') ?? null,
+      },
+      sms: {
+        provider: this.get('SMS_PROVIDER') ?? fallback,
+        twilioAccountSid: this.get('TWILIO_ACCOUNT_SID') ?? null,
+        twilioAuthToken: this.get('TWILIO_AUTH_TOKEN') ?? null,
+        twilioFromNumber: this.get('TWILIO_FROM_NUMBER') ?? null,
+        twilioMessagingServiceSid: this.get('TWILIO_MESSAGING_SERVICE_SID') ?? null,
+      },
+      push: { provider: this.get('PUSH_PROVIDER') ?? 'none' },
+      /** Without a trailing slash; empty when receipts are not configured. */
+      webhookBaseUrl: (this.get('NOTIFICATION_WEBHOOK_BASE_URL') ?? '').replace(/\/+$/, ''),
+      secretsKey: this.get('SECRETS_ENCRYPTION_KEY') ?? null,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // online payments — docs/PAYMENTS.md
   // ---------------------------------------------------------------------------
   get payments() {
     const provider = this.get('PAYMENT_PROVIDER');
     return {
-      configured: provider !== 'none',
       provider,
-      apiKey: this.get('PAYMENT_API_KEY'),
+      configured: provider !== 'none',
+      signingSecret: this.get('PAYMENT_SIGNING_SECRET') ?? null,
+      /** Without a trailing slash. */
+      webhookBaseUrl: (this.get('PAYMENT_WEBHOOK_BASE_URL') ?? '').replace(/\/+$/, ''),
+      qpay: {
+        baseUrl: this.get('QPAY_BASE_URL').replace(/\/+$/, ''),
+        clientId: this.get('QPAY_CLIENT_ID') ?? null,
+        clientSecret: this.get('QPAY_CLIENT_SECRET') ?? null,
+        invoiceCode: this.get('QPAY_INVOICE_CODE') ?? null,
+      },
     };
   }
 }

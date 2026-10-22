@@ -183,16 +183,117 @@ export const envSchema = z.object({
   SMTP_PASSWORD: optionalString,
   SMTP_FROM: optionalString,
 
-  // --- object storage (placeholder; no uploads yet) -------------------------
+  // --- file storage (docs/FILE-STORAGE.md) ----------------------------------
+  /** `local` (development) or `s3` (any S3-compatible store). Default: s3 when S3_BUCKET is set. */
+  STORAGE_DRIVER: z.enum(['local', 's3']).optional(),
+  /** Local driver only. Relative to the API's working directory. */
+  STORAGE_LOCAL_ROOT: optionalString,
+  /** Omit for AWS; set for MinIO, Cloudflare R2, DigitalOcean Spaces… */
   S3_ENDPOINT: optionalString,
   S3_REGION: optionalString,
   S3_BUCKET: optionalString,
   S3_ACCESS_KEY: optionalString,
   S3_SECRET_KEY: optionalString,
+  /** Path-style URLs (endpoint/bucket/key). Default: true when S3_ENDPOINT is set. */
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /**
+   * Optional CDN / public-bucket origin serving the `public/` prefix. When set,
+   * public images redirect there instead of streaming through the API.
+   */
+  STORAGE_PUBLIC_BASE_URL: optionalString,
+  /** This API's public origin, for the URLs it hands out. Default http://localhost:PORT. */
+  API_PUBLIC_URL: optionalString,
+  /** Largest accepted image upload, bytes. */
+  FILE_MAX_IMAGE_BYTES: int(5 * 1024 * 1024, 1024),
+  /** Largest accepted image, in pixels (decompression-bomb guard). */
+  FILE_MAX_IMAGE_PIXELS: int(40_000_000, 10_000),
+  /** Lifetime of a signed URL for a private file. */
+  FILE_SIGNED_URL_TTL_SECONDS: int(300, 30),
+  FILE_CLEANUP_ENABLED: bool(true),
+  FILE_CLEANUP_INTERVAL_MS: int(10 * 60_000, 1_000),
+  /** An unattached or half-uploaded file older than this is removed. */
+  FILE_ORPHAN_GRACE_MINUTES: int(60, 1),
 
-  // --- payments (placeholder; no charges yet) -------------------------------
-  PAYMENT_PROVIDER: z.enum(['none', 'stripe', 'qpay']).default('none'),
-  PAYMENT_API_KEY: optionalString,
+  // --- notification providers (docs/NOTIFICATION-PROVIDERS.md) -------------
+  /**
+   * Who delivers each channel for companies without their own account.
+   * `none`: nothing is sent on the channel and no notification row is created
+   *   for it (unless a company connects its own account).
+   * `log`: development only — written to the log, recorded as provider `log`.
+   * `mock`: automated tests only. Unset: `log` outside production, else `none`.
+   */
+  EMAIL_PROVIDER: z.enum(['none', 'log', 'mock', 'sendgrid']).optional(),
+  EMAIL_FROM_ADDRESS: optionalString,
+  EMAIL_FROM_NAME: optionalString,
+  SENDGRID_API_KEY: optionalString,
+  /** The Event Webhook's verification key (base64 DER or PEM), for signed receipts. */
+  SENDGRID_WEBHOOK_PUBLIC_KEY: optionalString,
+  SMS_PROVIDER: z.enum(['none', 'log', 'mock', 'twilio']).optional(),
+  TWILIO_ACCOUNT_SID: optionalString,
+  TWILIO_AUTH_TOKEN: optionalString,
+  /** A Twilio number in E.164, or use TWILIO_MESSAGING_SERVICE_SID. */
+  TWILIO_FROM_NUMBER: optionalString,
+  TWILIO_MESSAGING_SERVICE_SID: optionalString,
+  /** No device registration exists yet, so push has no real provider. */
+  PUSH_PROVIDER: z.enum(['none', 'mock']).optional(),
+  /**
+   * This API's public origin, for delivery receipts (SendGrid Event Webhook,
+   * Twilio status callbacks). Without it messages are tracked to ACCEPTED only.
+   */
+  NOTIFICATION_WEBHOOK_BASE_URL: optionalString,
+  /**
+   * 32 random bytes, base64: encrypts companies' own provider credentials at
+   * rest (AES-256-GCM). Without it companies cannot store their own accounts.
+   * Rotating it makes stored credentials unreadable — re-enter them.
+   */
+  SECRETS_ENCRYPTION_KEY: optionalString,
+
+  // --- calendar integration (docs/CALENDAR-INTEGRATION.md) -----------------
+  /** Google OAuth client (Web application). Both or neither. */
+  GOOGLE_CALENDAR_CLIENT_ID: optionalString,
+  GOOGLE_CALENDAR_CLIENT_SECRET: optionalString,
+  /** Microsoft Entra app registration. Both or neither. */
+  MICROSOFT_CALENDAR_CLIENT_ID: optionalString,
+  MICROSOFT_CALENDAR_CLIENT_SECRET: optionalString,
+  /** `common` (any account), `organizations`, `consumers`, or a tenant id. */
+  MICROSOFT_CALENDAR_TENANT: optionalString,
+  /**
+   * Where the provider sends the browser back: the web app's
+   * /calendar/callback page. Must be registered with each provider exactly.
+   * Default: WEB_APP_URL + /calendar/callback.
+   */
+  CALENDAR_OAUTH_REDIRECT_URL: optionalString,
+  CALENDAR_SYNC_ENABLED: bool(true),
+  CALENDAR_SYNC_INTERVAL_MS: int(30_000, 1_000),
+  /** How often busy periods are re-read from each calendar. */
+  CALENDAR_BUSY_REFRESH_MINUTES: int(10, 1),
+
+  // --- online payments (docs/PAYMENTS.md) -----------------------------------
+  /**
+   * The gateway that takes online payments. `none` disables them; `mock` is a
+   * local simulator and is refused in production.
+   */
+  PAYMENT_PROVIDER: z.enum(['none', 'mock', 'qpay']).default('none'),
+  /**
+   * Signs what this server hands out and must recognise later: webhook callback
+   * URLs, the mock provider's webhooks and public booking payment links. At
+   * least 32 characters; rotate it and outstanding payment links stop working.
+   */
+  PAYMENT_SIGNING_SECRET: optionalString,
+  /**
+   * This API's public origin, e.g. https://api.example.mn — where a provider
+   * delivers webhooks. Configured, never derived from a request.
+   */
+  PAYMENT_WEBHOOK_BASE_URL: optionalString,
+  /** QPay merchant API v2. Sandbox: https://merchant-sandbox.qpay.mn */
+  QPAY_BASE_URL: z.string().url().default('https://merchant.qpay.mn'),
+  QPAY_CLIENT_ID: optionalString,
+  QPAY_CLIENT_SECRET: optionalString,
+  /** The merchant's invoice template code, issued by QPay. */
+  QPAY_INVOICE_CODE: optionalString,
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -227,15 +328,95 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (env.SMTP_USER && !env.SMTP_PASSWORD) {
     problems.push('SMTP_USER is set but SMTP_PASSWORD is not.');
   }
+  if (env.STORAGE_DRIVER === 's3' && !env.S3_BUCKET) {
+    problems.push('STORAGE_DRIVER is "s3" but S3_BUCKET is not set.');
+  }
+  if (env.NODE_ENV === 'production' && env.STORAGE_DRIVER !== 's3' && !env.S3_BUCKET && env.STORAGE_DRIVER !== 'local') {
+    problems.push(
+      'No file storage configured for production: set S3_BUCKET (and credentials), or STORAGE_DRIVER=local deliberately.',
+    );
+  }
   if (env.S3_BUCKET && !(env.S3_ACCESS_KEY && env.S3_SECRET_KEY)) {
     problems.push('S3_BUCKET is set but S3_ACCESS_KEY / S3_SECRET_KEY are not.');
   }
-  if (env.PAYMENT_PROVIDER !== 'none' && !env.PAYMENT_API_KEY) {
-    problems.push(`PAYMENT_PROVIDER is "${env.PAYMENT_PROVIDER}" but PAYMENT_API_KEY is not set.`);
+  if (env.PAYMENT_PROVIDER !== 'none') {
+    if (!env.PAYMENT_SIGNING_SECRET || env.PAYMENT_SIGNING_SECRET.length < 32) {
+      problems.push(
+        `PAYMENT_PROVIDER is "${env.PAYMENT_PROVIDER}" but PAYMENT_SIGNING_SECRET is missing or ` +
+          'shorter than 32 characters.',
+      );
+    }
+    if (!env.PAYMENT_WEBHOOK_BASE_URL) {
+      problems.push(
+        `PAYMENT_PROVIDER is "${env.PAYMENT_PROVIDER}" but PAYMENT_WEBHOOK_BASE_URL is not set.`,
+      );
+    }
+  }
+  if (env.EMAIL_PROVIDER === 'sendgrid') {
+    for (const key of ['SENDGRID_API_KEY', 'EMAIL_FROM_ADDRESS'] as const) {
+      if (!env[key]) problems.push(`EMAIL_PROVIDER is "sendgrid" but ${key} is not set.`);
+    }
+  }
+  if (env.SMS_PROVIDER === 'twilio') {
+    for (const key of ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'] as const) {
+      if (!env[key]) problems.push(`SMS_PROVIDER is "twilio" but ${key} is not set.`);
+    }
+    if (!env.TWILIO_FROM_NUMBER && !env.TWILIO_MESSAGING_SERVICE_SID) {
+      problems.push(
+        'SMS_PROVIDER is "twilio" but neither TWILIO_FROM_NUMBER nor TWILIO_MESSAGING_SERVICE_SID is set.',
+      );
+    }
+  }
+  if (
+    env.SECRETS_ENCRYPTION_KEY &&
+    Buffer.from(env.SECRETS_ENCRYPTION_KEY, 'base64').length !== 32
+  ) {
+    problems.push('SECRETS_ENCRYPTION_KEY must be 32 random bytes, base64-encoded.');
+  }
+  for (const [id, secret] of [
+    ['GOOGLE_CALENDAR_CLIENT_ID', 'GOOGLE_CALENDAR_CLIENT_SECRET'],
+    ['MICROSOFT_CALENDAR_CLIENT_ID', 'MICROSOFT_CALENDAR_CLIENT_SECRET'],
+  ] as const) {
+    if (Boolean(env[id]) !== Boolean(env[secret])) {
+      problems.push(`${id} and ${secret} must be set together.`);
+    }
+  }
+  if (
+    (env.GOOGLE_CALENDAR_CLIENT_ID || env.MICROSOFT_CALENDAR_CLIENT_ID) &&
+    !env.CALENDAR_OAUTH_REDIRECT_URL &&
+    !env.WEB_APP_URL
+  ) {
+    problems.push('Calendar OAuth needs CALENDAR_OAUTH_REDIRECT_URL or WEB_APP_URL.');
+  }
+
+  if (env.PAYMENT_PROVIDER === 'qpay') {
+    for (const key of ['QPAY_CLIENT_ID', 'QPAY_CLIENT_SECRET', 'QPAY_INVOICE_CODE'] as const) {
+      if (!env[key]) problems.push(`PAYMENT_PROVIDER is "qpay" but ${key} is not set.`);
+    }
   }
 
   // --- production-only ------------------------------------------------------
   if (env.NODE_ENV === 'production') {
+    for (const key of ['EMAIL_PROVIDER', 'SMS_PROVIDER', 'PUSH_PROVIDER'] as const) {
+      const value = env[key];
+      if (value === 'log' || value === 'mock') {
+        problems.push(
+          `${key}=${value} records messages that are never delivered; refused in production.`,
+        );
+      }
+    }
+    if (
+      env.NOTIFICATION_WEBHOOK_BASE_URL &&
+      !env.NOTIFICATION_WEBHOOK_BASE_URL.startsWith('https://')
+    ) {
+      problems.push('NOTIFICATION_WEBHOOK_BASE_URL must be https:// in production.');
+    }
+    if (env.PAYMENT_PROVIDER === 'mock') {
+      problems.push('PAYMENT_PROVIDER=mock simulates payments and is refused in production.');
+    }
+    if (env.PAYMENT_WEBHOOK_BASE_URL && !env.PAYMENT_WEBHOOK_BASE_URL.startsWith('https://')) {
+      problems.push('PAYMENT_WEBHOOK_BASE_URL must be https:// in production.');
+    }
     if (env.DB_POOLING_MODE === 'session') {
       problems.push(
         'DB_POOLING_MODE=session is not permitted in production: SET LOCAL is ' +

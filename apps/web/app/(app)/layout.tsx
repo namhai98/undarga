@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { RequireSession, SignOutButton, useSession } from '@/features/auth';
+import { OnboardingGate } from '@/features/onboarding';
 import { ReadOnlyBanner } from '@/features/subscription';
 
 /**
@@ -12,16 +13,19 @@ import { ReadOnlyBanner } from '@/features/subscription';
  * this whole subtree client-rendered, which is a real cost, accepted knowingly:
  * nothing under here could be server-rendered with data anyway.
  *
- * `RequireSession` is a redirect, not a security boundary — see its own comment.
+ * `RequireSession` and `OnboardingGate` are redirects, not security boundaries —
+ * see their own comments.
  */
 export default function AppLayout({ children }: LayoutProps<'/'>) {
   return (
     <RequireSession>
-      <div className="flex min-h-dvh flex-col">
-        <AppBar />
-        <ReadOnlyBanner />
-        <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">{children}</main>
-      </div>
+      <OnboardingGate>
+        <div className="flex min-h-dvh flex-col">
+          <AppBar />
+          <ReadOnlyBanner />
+          <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">{children}</main>
+        </div>
+      </OnboardingGate>
     </RequireSession>
   );
 }

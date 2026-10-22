@@ -25,6 +25,7 @@ import {
   type CustomerFormValues,
   type Step,
 } from '../model/booking-flow';
+import { filesService } from '@/services/files.service';
 import { BookingConfirmation } from './booking-confirmation';
 import {
   BranchStep,
@@ -85,7 +86,9 @@ export function PublicBookingPage({ companySlug }: { companySlug: string }) {
 
 function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
   const singleBranch = company.branches.length === 1 ? company.branches[0]!.id : null;
-  const [state, dispatch] = useReducer(reducer, undefined, () => initialState(singleBranch, isoDay()));
+  const [state, dispatch] = useReducer(reducer, undefined, () =>
+    initialState(singleBranch, isoDay()),
+  );
   const [serverErrors, setServerErrors] = useState<FieldErrors>({});
   const [failure, setFailure] = useState<string | null>(null);
   const create = useCreatePublicBooking(slug);
@@ -103,8 +106,9 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
   );
 
   const branch = company.branches.find((b) => b.id === state.branchId) ?? null;
-  const employeeName =
-    state.employeeId ? employees.data?.find((e) => e.id === state.employeeId)?.name ?? null : null;
+  const employeeName = state.employeeId
+    ? (employees.data?.find((e) => e.id === state.employeeId)?.name ?? null)
+    : null;
   const steps = stepsFor(state, Boolean(singleBranch));
   const position = steps.indexOf(state.step);
 
@@ -141,20 +145,29 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
         case 'SLOT_UNAVAILABLE':
           dispatch({
             type: 'slotLost',
-            message: 'Someone booked that time just before you. Please pick another — the list is up to date.',
+            message:
+              'Someone booked that time just before you. Please pick another — the list is up to date.',
           });
           return;
         case 'VALIDATION_FAILED': {
           const next: FieldErrors = {};
-          const issues = (error.details?.['issues'] ?? []) as Array<{ path?: string; message?: string }>;
+          const issues = (error.details?.['issues'] ?? []) as Array<{
+            path?: string;
+            message?: string;
+          }>;
           for (const issue of Array.isArray(issues) ? issues : []) {
             const field = issue.path?.replace(/^customer\./, '') as keyof FieldErrors | undefined;
-            if (field && issue.message && ['firstName', 'lastName', 'phone', 'email', 'note'].includes(field)) {
+            if (
+              field &&
+              issue.message &&
+              ['firstName', 'lastName', 'phone', 'email', 'note'].includes(field)
+            ) {
               next[field] ??= issue.message;
             }
           }
           setServerErrors(next);
-          if (Object.keys(next).length === 0) setFailure('Please check your details and try again.');
+          if (Object.keys(next).length === 0)
+            setFailure('Please check your details and try again.');
           return;
         }
         case 'ONLINE_BOOKING_UNAVAILABLE':
@@ -187,6 +200,14 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
   return (
     <div className="grid gap-6" style={brandStyle(company.branding?.primaryColor)}>
       <header className="grid gap-1">
+        {company.branding?.logoFileId ? (
+          // eslint-disable-next-line @next/next/no-img-element -- public, API-served and pre-sized
+          <img
+            src={filesService.publicUrl(company.branding.logoFileId)!}
+            alt={`${company.name} logo`}
+            className="mb-2 h-14 w-auto max-w-[12rem] object-contain"
+          />
+        ) : null}
         <p className="text-muted-foreground text-sm">Book online</p>
         <h1 className="text-2xl font-semibold tracking-tight">{company.name}</h1>
         {company.branding?.headline ? (
@@ -197,6 +218,7 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
       {state.step === 'confirmed' && state.confirmation ? (
         <BookingConfirmation
           confirmation={state.confirmation}
+          slug={slug}
           locale={company.locale}
           onBookAnother={() => dispatch({ type: 'restart' })}
         />
@@ -318,7 +340,11 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
             className="bg-muted/40 order-first grid gap-2 rounded-xl p-4 text-sm md:order-none md:sticky md:top-6"
           >
             <p className="font-medium">Your booking</p>
-            <Line icon={<MapPin aria-hidden className="size-4" />} value={branch?.name} placeholder="Location" />
+            <Line
+              icon={<MapPin aria-hidden className="size-4" />}
+              value={branch?.name}
+              placeholder="Location"
+            />
             <Line
               icon={<CalendarCheck aria-hidden className="size-4" />}
               value={

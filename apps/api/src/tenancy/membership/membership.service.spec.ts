@@ -415,6 +415,7 @@ describe('MembershipService', () => {
         customerIdentityId: 'ident-1',
         companyCustomerId: 'cc-1',
         companyId: COMPANY_A,
+        sessionId: 'sess-1',
       };
 
       await expect(service.authorize(customer, COMPANY_B, 'ROUTE_PARAM')).rejects.toThrow(

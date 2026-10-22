@@ -6,20 +6,22 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
 import { useNotificationSettings } from '../api/use-notifications';
 import { NotificationHistory } from './notification-history';
+import { NotificationProviders } from './notification-providers';
 import { NotificationSettingsForm } from './notification-settings-form';
 import { NotificationTemplates } from './notification-templates';
 
-type Tab = 'history' | 'templates' | 'settings';
+type Tab = 'history' | 'templates' | 'providers' | 'settings';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'history', label: 'History' },
   { id: 'templates', label: 'Templates' },
+  { id: 'providers', label: 'Providers' },
   { id: 'settings', label: 'Settings' },
 ];
 
 /**
  * Notifications: what was sent, the wording, and the switches.
  *
- * All three need `settings:read`; changing anything needs `settings:write`,
+ * All four need `settings:read`; changing anything needs `settings:write`,
  * and the forms render disabled without it. The settings response also
  * carries the catalog of message types, which the history uses for labels.
  */
@@ -42,7 +44,8 @@ export function NotificationsPage() {
       <header className="grid gap-1">
         <h1 className="text-xl font-semibold">Notifications</h1>
         <p className="text-muted-foreground text-sm">
-          Email, SMS and push messages to customers about their bookings and gift cards.
+          Email, SMS and push messages to customers about their bookings, payments and gift cards,
+          and billing notices to the owner.
         </p>
       </header>
 
@@ -74,6 +77,7 @@ export function NotificationsPage() {
       <div role="tabpanel" id={`notif-panel-${tab}`} aria-labelledby={`notif-tab-${tab}`}>
         {tab === 'history' ? <NotificationHistory catalog={settings.data?.catalog ?? []} /> : null}
         {tab === 'templates' ? <NotificationTemplates /> : null}
+        {tab === 'providers' ? <NotificationProviders /> : null}
         {tab === 'settings' ? (
           settings.isPending ? (
             <Skeleton className="h-60 w-full" aria-busy="true" />

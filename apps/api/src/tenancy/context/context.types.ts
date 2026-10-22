@@ -43,12 +43,14 @@ export interface PlatformUserActor {
   };
 }
 
-/** End consumers booking online. Reserved — the customer realm is not built. */
+/** A customer signed in to one business's portal (docs/CUSTOMER-PORTAL.md). */
 export interface CustomerActor {
   readonly kind: 'CUSTOMER';
   readonly customerIdentityId: string;
   readonly companyCustomerId: string;
   readonly companyId: string;
+  /** The portal session, so signing out can revoke exactly this one. */
+  readonly sessionId: string;
 }
 
 /** Background jobs, schedulers, migrations. Never originates from a request. */

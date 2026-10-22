@@ -2,8 +2,10 @@
 
 import { CheckCircle2 } from 'lucide-react';
 import { PriceBreakdown } from '@/components/price-breakdown';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PublicBookingPayment } from '@/features/payments';
 import type { PublicBookingConfirmation } from '@/services/public-booking.service';
 import { formatDay, wallTime } from '../model/booking-flow';
 import { price } from './steps';
@@ -15,6 +17,8 @@ import { price } from './steps';
  */
 export function BookingConfirmation(props: {
   confirmation: PublicBookingConfirmation;
+  /** The company's public slug, for paying online. */
+  slug: string;
   locale?: string;
   onBookAnother: () => void;
 }) {
@@ -58,13 +62,27 @@ export function BookingConfirmation(props: {
             discountLabel={c.promotion?.code ?? c.promotion?.name ?? null}
           />
         ) : null}
+        {c.payment ? (
+          <div className="border-border/60 border-t pt-4">
+            <PublicBookingPayment slug={props.slug} offer={c.payment} />
+          </div>
+        ) : null}
         <p className="text-muted-foreground text-xs">
           Times are in {c.timezone}.
           {c.branch.phone ? ` To change or cancel, call ${c.branch.phone} and quote your reference.` : ' Quote your reference if you need to change or cancel.'}
         </p>
-        <Button variant="outline" className="w-full sm:w-fit" onClick={props.onBookAnother}>
-          Book another appointment
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="w-full sm:w-fit" onClick={props.onBookAnother}>
+            Book another appointment
+          </Button>
+          {/* Sign-in is by a code to the email on the booking. */}
+          <Link
+            href={`/portal/${props.slug}`}
+            className={`${buttonVariants({ variant: 'ghost' })} w-full sm:w-fit`}
+          >
+            Manage my bookings
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );

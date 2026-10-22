@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSession } from '@/features/auth';
@@ -14,9 +16,8 @@ import { useSession } from '@/features/auth';
  * provisioned owner's account can exist before the invitation is accepted. The
  * API is quite happy to issue them a token — there is simply no tenant to enter.
  *
- * Left as an explanation rather than a call to action because there is no
- * self-serve signup: a company is provisioned by a platform operator, so the
- * genuine next step is to ask somebody, not to click something.
+ * Two genuine next steps: create a company through onboarding (the caller
+ * becomes its owner), or wait for an invitation to someone else's.
  */
 export default function NoCompanyPage() {
   const router = useRouter();
@@ -48,12 +49,23 @@ export default function NoCompanyPage() {
             Your account works — {user?.email} — but it is not attached to one.
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-muted-foreground grid gap-2 text-sm">
-          <p>
-            Companies are set up by the platform team, not self-serve. If you were expecting access,
-            ask whoever invited you to send a new invitation link.
-          </p>
-          <p>If you have one already, opening it will bring you straight here.</p>
+        <CardContent className="grid gap-4 text-sm">
+          <div className="grid gap-2">
+            <p className="font-medium">Starting your own business?</p>
+            <p className="text-muted-foreground">
+              Set up your company in a few steps. You will be its owner, and your free trial starts
+              straight away.
+            </p>
+            <Link href="/onboarding" className={`${buttonVariants({ size: 'sm' })} w-fit`}>
+              Create your company
+            </Link>
+          </div>
+          <div className="text-muted-foreground grid gap-2 border-t pt-4">
+            <p>
+              Joining someone else&rsquo;s company? Ask whoever invited you to send a new invitation
+              link. Opening it will bring you straight here.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

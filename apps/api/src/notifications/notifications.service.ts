@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { ResourceNotFoundError } from '../common/errors';
+import { AuditService } from '../audit/audit.service';
+import { ConflictError, ResourceNotFoundError } from '../common/errors';
 import type { Prisma } from '@prisma/client';
 import type { NotificationQueryDto as NotificationQuery } from './dto/notification.dto';
 import { RequestContextService } from '../tenancy/context/request-context.service';
@@ -42,7 +43,57 @@ export class NotificationRepository extends TenantScopedRepository<NotificationR
  */
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly notifications: NotificationRepository) {}
+  constructor(
+    private readonly notifications: NotificationRepository,
+    private readonly audit: AuditService,
+  ) {}
+
+  /**
+   * Send a FAILED or UNKNOWN notification again.
+   *
+   * UNKNOWN is never retried automatically — the provider may have sent it —
+   * so this is where a person decides. The row goes back to PENDING with its
+   * attempt count kept, so one manual retry is one more attempt, not a fresh
+   * automatic budget. The same row is reused: no new message is created.
+   */
+  async retry(notificationId: string) {
+    const result = await this.notifications.transaction(async (tx, companyId) => {
+      const row = await tx.notification.findFirst({ where: { id: notificationId, companyId } });
+      if (!row) throw new ResourceNotFoundError('Notification', notificationId);
+      if (row.status !== 'FAILED' && row.status !== 'UNKNOWN') {
+        throw new ConflictError(
+          'Only a failed message, or one whose outcome is unknown, can be retried.',
+          {
+            status: row.status,
+          },
+        );
+      }
+      const { count } = await tx.notification.updateMany({
+        where: { id: row.id, companyId, status: row.status },
+        data: {
+          status: 'PENDING',
+          scheduledFor: new Date(),
+          nextRetryAt: null,
+          failedAt: null,
+          failureReason: null,
+          providerStatus: null,
+          providerEventAt: null,
+        },
+      });
+      if (count === 0)
+        throw new ConflictError('The message changed while retrying. Reload and try again.');
+      const updated = await tx.notification.findFirstOrThrow({ where: { id: row.id, companyId } });
+      return { before: row.status, updated };
+    });
+    await this.audit.record({
+      action: 'notification.retried',
+      resourceType: 'Notification',
+      resourceId: notificationId,
+      before: { status: result.before },
+      after: { status: 'PENDING' },
+    });
+    return toSummary(result.updated);
+  }
 
   async list(query: NotificationQuery) {
     return this.notifications.transaction(async (tx, companyId) => {
@@ -131,12 +182,15 @@ function toSummary(row: {
   appointmentId: string | null;
   scheduledFor: Date;
   sentAt: Date | null;
+  deliveredAt: Date | null;
   failedAt: Date | null;
   failureReason: string | null;
   retryCount: number;
   maxRetries: number;
   nextRetryAt: Date | null;
   provider: string | null;
+  providerStatus: string | null;
+  providerEventAt: Date | null;
   createdAt: Date;
 }) {
   return {
@@ -156,12 +210,18 @@ function toSummary(row: {
     appointmentId: row.appointmentId,
     scheduledFor: row.scheduledFor,
     sentAt: row.sentAt,
+    deliveredAt: row.deliveredAt,
     failedAt: row.failedAt,
     failureReason: row.failureReason,
     retryCount: row.retryCount,
     maxRetries: row.maxRetries,
     nextRetryAt: row.nextRetryAt,
     provider: row.provider,
+    /** The provider's own word for the latest state (`accepted`, `delivered`, `bounce`…). */
+    providerStatus: row.providerStatus,
+    providerEventAt: row.providerEventAt,
+    /** FAILED and UNKNOWN can be sent again by hand. */
+    retryable: row.status === 'FAILED' || row.status === 'UNKNOWN',
     createdAt: row.createdAt,
   };
 }

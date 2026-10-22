@@ -127,7 +127,7 @@ outcome; the caller writes the row inside its own transaction.
 | Provider | Methods | What it is |
 |---|---|---|
 | `ManualPaymentProvider` | CASH, CARD, BANK_TRANSFER, WALLET, OTHER | Money that already moved. Nothing to authorise, nothing that can decline. |
-| `MockOnlinePaymentProvider` | ONLINE | The slot QPay goes into. |
+| `MockOnlinePaymentProvider` | ONLINE | Development only: lets staff record a simulated ONLINE charge. Not registered in production. |
 
 The mock is **deterministic, not random**: an amount whose minor units end in 13
 declines, `metadata.simulate: "pending"` stays pending. A mock that fails 10% of
@@ -137,10 +137,10 @@ the time at random makes a flaky suite and teaches nobody anything.
 charge — no money enters the business, a liability the company already owes is
 drawn down.
 
-**Adding QPay**: implement the interface, add it to the array in
-`payments.module.ts`, remove the mock. The registry refuses to start if two
-providers claim `ONLINE`, because silently routing half the payments to a stub
-is the failure worth preventing.
+**Real online payments** (QPay, hosted checkout, webhooks) are a separate layer
+— `src/payments/gateway/` — described in [PAYMENTS.md](./PAYMENTS.md). They
+settle into the same `payment` rows and ledger through this module, and a
+refund of a gateway payment goes back through the gateway.
 
 ---
 
@@ -300,27 +300,26 @@ dispatcher leaves — reruns, and asserts no second notification.
 ### Channels and providers
 
 ```
-NotificationWorkerService → NotificationProviderRegistry → NotificationProvider
-                                                             ├── EmailNotificationProvider
-                                                             ├── SmsNotificationProvider
-                                                             └── PushNotificationProvider
+NotificationWorkerService → the company's own account (notification_provider_config), if enabled
+                          → else the platform provider for the channel (EMAIL/SMS/PUSH_PROVIDER)
 ```
 
-All three are mocks (`providers/mock.provider.ts`): they log the whole message
-in development and, anywhere else, only the recipient's **domain** / last
-digits. Outside production they keep the last 200 messages in memory and can be
-told to fail — which is how the tests drive retries. A real vendor is one class
-registered after the mock in `NotificationsModule`; the registry is last-wins.
-Each provider also owns `isValidAddress`, checked before a row is created. A production log full of customers' phone numbers
-is a breach waiting for whoever has log access — `mail/mailer.service.ts`
-already made this decision, and the two behave the same way.
+Real delivery is SendGrid (email) and Twilio (SMS); `log` is the development
+stand-in and `mock` the test double, both refused in production. A provider's
+answer is recorded as it is: accepted → `SENT`, confirmed → `DELIVERED`
+(signed receipts), no answer → `UNKNOWN` (never retried automatically). Full
+detail, configuration and setup: [NOTIFICATION-PROVIDERS.md](NOTIFICATION-PROVIDERS.md).
+Each channel owns `isValidAddress`, checked before a row is created, and logs
+carry only the recipient's **domain** / last digits.
 
 ### What decides whether a message is created
 
 Per channel, in order: the type goes out on it (company `eventChannels`, else
-the default) → the company has the channel on → the customer has not turned it
-off (`notification_preference`) → there is an address → the address is valid.
-The first four suppress silently (no row). An invalid address becomes a
+the default) → the company has the channel on (customer-facing types) → some
+provider can send it → the recipient has not turned it off
+(`notification_preference`) → consent allows it (a revoked reminder consent
+stops reminders; marketing needs an explicit grant) → there is an address → the
+address is valid. All but the last suppress silently (no row). An invalid address becomes a
 `CANCELLED` row with `Invalid email address.` / `Invalid phone number.`, so the
 history can say why a customer heard nothing. Push has no device registry yet,
 so it currently reaches nobody.

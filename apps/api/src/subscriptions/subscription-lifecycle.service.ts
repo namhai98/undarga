@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Subscription } from '@prisma/client';
+import type { PaymentMethod, Subscription } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { ConflictError, ResourceNotFoundError } from '../common/errors';
 import { PlatformPrismaService } from '../database/platform-prisma.service';
@@ -7,6 +7,10 @@ import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.se
 import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.service';
 import { EntitlementsService } from './entitlements.service';
 import { GRACE_DAYS, addDays, addInterval, effectiveStatus } from './subscription-state';
+import {
+  NOTIFICATION_EVENTS,
+  writeNotificationEvent,
+} from '../notifications/notification-event.service';
 import { issueInvoice, updateSubscription } from './subscriptions.service';
 
 /**
@@ -145,9 +149,9 @@ export class SubscriptionLifecycleService {
    */
   async markPaid(companyId: string, invoiceId: string, reference: string) {
     const result = await this.inCompany(companyId, async (tx) => {
-      const sub = await lock(tx, companyId);
       const invoice = await tx.subscriptionInvoice.findFirst({
         where: { id: invoiceId, companyId },
+        select: { status: true, totalMinor: true, currencyCode: true },
       });
       if (!invoice) throw new ResourceNotFoundError('SubscriptionInvoice', invoiceId);
       if (invoice.status !== 'OPEN') {
@@ -156,36 +160,14 @@ export class SubscriptionLifecycleService {
         });
       }
 
-      const now = new Date();
-      await tx.subscriptionInvoice.updateMany({
-        where: { id: invoice.id, companyId, status: 'OPEN' },
-        data: { status: 'PAID', amountPaidMinor: invoice.totalMinor, paidAt: now },
+      const settled = await settleInvoicePayment(tx, companyId, invoiceId, {
+        amountMinor: invoice.totalMinor,
+        currencyCode: invoice.currencyCode,
+        method: 'BANK_TRANSFER',
+        provider: 'manual',
+        providerPaymentId: reference,
       });
-      await tx.subscriptionPayment.create({
-        data: {
-          companyId,
-          invoiceId: invoice.id,
-          amountMinor: invoice.totalMinor,
-          currencyCode: invoice.currencyCode,
-          method: 'BANK_TRANSFER',
-          status: 'SUCCEEDED',
-          provider: 'manual',
-          providerPaymentId: reference,
-          paidAt: now,
-        },
-      });
-
-      const status = effectiveStatus(sub, now);
-      if ((status === 'PAST_DUE' || status === 'EXPIRED') && invoice.periodEnd > now) {
-        await updateSubscription(tx, companyId, sub.id, {
-          status: 'ACTIVE',
-          graceEndsAt: null,
-          expiredAt: null,
-          currentPeriodStart: invoice.periodStart,
-          currentPeriodEnd: invoice.periodEnd,
-        });
-      }
-      return { invoiceId: invoice.id, subscriptionStatus: status };
+      return { invoiceId, subscriptionStatus: settled.subscriptionStatus };
     });
 
     this.invalidate(companyId);
@@ -225,6 +207,11 @@ export class SubscriptionLifecycleService {
         status: 'PAST_DUE',
         graceEndsAt: addDays(overdue.dueAt, GRACE_DAYS),
       });
+      await writeNotificationEvent(tx, companyId, NOTIFICATION_EVENTS.SUBSCRIPTION_PAYMENT_FAILED, {
+        invoiceId: overdue.id,
+        paymentStatus: 'overdue',
+        dedupeBase: `subscription.past_due:${overdue.id}`,
+      });
       return 'pastDue';
     }
 
@@ -256,6 +243,103 @@ export class SubscriptionLifecycleService {
     this.entitlements.invalidate(companyId);
     this.directory.invalidate(companyId);
   }
+}
+
+/**
+ * Settle an invoice: the one path for "a subscription invoice was paid",
+ * whether an operator recorded a bank transfer (`markPaid`) or an online
+ * payment's provider confirmed it (PaymentTransactionsService).
+ *
+ * Runs inside the caller's transaction, under the subscription row lock:
+ *   - an OPEN invoice becomes PAID;
+ *   - a `subscription_payment` row records the money;
+ *   - a PAST_DUE or EXPIRED subscription whose invoice this was is ACTIVE again.
+ *
+ * Money that arrives for an invoice that is no longer OPEN (paid another way
+ * meanwhile, or voided by a plan change) is still RECORDED — it moved — but the
+ * invoice and subscription are left alone and `invoiceWasOpen` says so, so the
+ * caller can flag it for a refund.
+ */
+export async function settleInvoicePayment(
+  tx: TenantTx,
+  companyId: string,
+  invoiceId: string,
+  payment: {
+    amountMinor: bigint;
+    currencyCode: string;
+    method: PaymentMethod;
+    provider: string;
+    providerPaymentId: string;
+  },
+) {
+  const sub = await lock(tx, companyId);
+  const invoice = await tx.subscriptionInvoice.findFirst({ where: { id: invoiceId, companyId } });
+  if (!invoice) throw new ResourceNotFoundError('SubscriptionInvoice', invoiceId);
+
+  const now = new Date();
+  const invoiceWasOpen = invoice.status === 'OPEN';
+
+  if (invoiceWasOpen) {
+    await tx.subscriptionInvoice.updateMany({
+      where: { id: invoice.id, companyId, status: 'OPEN' },
+      data: {
+        status: 'PAID',
+        amountPaidMinor: invoice.amountPaidMinor + payment.amountMinor,
+        paidAt: now,
+      },
+    });
+  }
+
+  const recorded = await tx.subscriptionPayment.create({
+    data: {
+      companyId,
+      invoiceId: invoice.id,
+      amountMinor: payment.amountMinor,
+      currencyCode: payment.currencyCode,
+      method: payment.method,
+      status: 'SUCCEEDED',
+      provider: payment.provider,
+      providerPaymentId: payment.providerPaymentId,
+      paidAt: now,
+    },
+    select: { id: true },
+  });
+
+  const status = effectiveStatus(sub, now);
+  let reactivated = false;
+  if (
+    invoiceWasOpen &&
+    (status === 'PAST_DUE' || status === 'EXPIRED') &&
+    invoice.periodEnd > now
+  ) {
+    await updateSubscription(tx, companyId, sub.id, {
+      status: 'ACTIVE',
+      graceEndsAt: null,
+      expiredAt: null,
+      currentPeriodStart: invoice.periodStart,
+      currentPeriodEnd: invoice.periodEnd,
+    });
+    reactivated = true;
+  }
+
+  return {
+    subscriptionPaymentId: recorded.id,
+    subscriptionStatus: status,
+    invoiceWasOpen,
+    reactivated,
+  };
+}
+
+/** A failed online attempt at an invoice: counted, nothing else changes. */
+export async function recordFailedInvoiceAttempt(
+  tx: TenantTx,
+  companyId: string,
+  invoiceId: string,
+) {
+  await tx.subscriptionInvoice.updateMany({
+    where: { id: invoiceId, companyId },
+    data: { attemptCount: { increment: 1 } },
+  });
 }
 
 async function lock(tx: TenantTx, companyId: string): Promise<Subscription> {

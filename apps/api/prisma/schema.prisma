@@ -93,6 +93,19 @@ enum CompanyStatus {
   @@map("company_status")
 }
 
+/// How far a company is through the onboarding wizard (docs/ONBOARDING.md).
+/// Independent of CompanyStatus: this guides the UI, it never gates the API.
+enum OnboardingStatus {
+  /// Exists, but its first branch and business settings are not set up yet —
+  /// typically provisioned by a platform operator.
+  NOT_STARTED
+  /// Company, branch and business settings are done; the services step is not.
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("onboarding_status")
+}
+
 enum DomainStatus {
   PENDING_VERIFICATION
   VERIFIED
@@ -292,6 +305,44 @@ enum RefundStatus {
   @@map("refund_status")
 }
 
+/// An online payment's lifecycle (docs/PAYMENTS.md). Only the provider —
+/// through a verified webhook or a server-side status check — moves it to
+/// SUCCEEDED; nothing a browser says does.
+enum PaymentTransactionStatus {
+  /// Created at the provider; waiting for the payer.
+  PENDING
+  /// The provider has the payment in flight.
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  /// Abandoned, cancelled, or expired at the provider.
+  CANCELLED
+  /// Fully refunded. A partial refund stays SUCCEEDED with refunded_minor > 0.
+  REFUNDED
+
+  @@map("payment_transaction_status")
+}
+
+/// What an online payment pays for.
+enum PaymentTransactionKind {
+  APPOINTMENT
+  SUBSCRIPTION_INVOICE
+
+  @@map("payment_transaction_kind")
+}
+
+enum PaymentWebhookStatus {
+  RECEIVED
+  PROCESSED
+  /// Verified, but nothing to do (unknown transaction, no state change).
+  IGNORED
+  FAILED
+  /// Signature did not verify. Nothing from it was trusted.
+  REJECTED
+
+  @@map("payment_webhook_status")
+}
+
 enum RefundDestination {
   ORIGINAL_METHOD
   GIFT_CARD
@@ -400,6 +451,10 @@ enum NotificationStatus {
   FAILED
   RETRYING
   CANCELLED
+  /// The provider was called and never answered (a timeout after the request
+  /// left). It may or may not have been sent, so it is NOT retried
+  /// automatically — a person decides (docs/NOTIFICATION-PROVIDERS.md).
+  UNKNOWN
 
   @@map("notification_status")
 }
@@ -500,6 +555,7 @@ model Currency {
   promotions           Promotion[]
   giftCards            GiftCard[]
   subscriptionInvoices SubscriptionInvoice[]
+  paymentTransactions  PaymentTransaction[]
 
   @@map("currency")
 }
@@ -802,6 +858,7 @@ model SubscriptionInvoice {
   plan         Plan?                 @relation(fields: [planId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   currency     Currency              @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
   payments     SubscriptionPayment[]
+  transactions PaymentTransaction[]
 
   @@unique([companyId, number])
   @@unique([companyId, id])
@@ -831,7 +888,8 @@ model SubscriptionPayment {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  invoice SubscriptionInvoice @relation(fields: [companyId, invoiceId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  invoice      SubscriptionInvoice  @relation(fields: [companyId, invoiceId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  transactions PaymentTransaction[]
 
   @@unique([companyId, id])
   @@index([companyId, status])
@@ -899,6 +957,9 @@ model Company {
   suspendedAt DateTime? @map("suspended_at") @db.Timestamptz(3)
   purgeAfter  DateTime? @map("purge_after") @db.Timestamptz(3)
 
+  onboardingStatus      OnboardingStatus @default(NOT_STARTED) @map("onboarding_status")
+  onboardingCompletedAt DateTime?        @map("onboarding_completed_at") @db.Timestamptz(3)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
@@ -930,10 +991,16 @@ model Company {
   notificationTemplates   NotificationTemplate[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  notificationProviders   NotificationProviderConfig[]
+  calendarConnections     CalendarConnection[]
   appointmentReminders    AppointmentReminder[]
   subscription            Subscription?
   entitlementOverrides    SubscriptionEntitlementOverride[]
   subscriptionInvoices    SubscriptionInvoice[]
+  paymentTransactions     PaymentTransaction[]
+  paymentWebhookEvents    PaymentWebhookEvent[]
+  customerLoginCodes      CustomerLoginCode[]
+  customerSessions        CustomerSession[]
   usageRecords            UsageRecord[]
   usageCounters           UsageCounter[]
   auditLogs               AuditLog[]
@@ -1357,9 +1424,13 @@ model Branch {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  timezone Timezone  @relation(fields: [timezoneName], references: [name], onDelete: Restrict, onUpdate: NoAction)
-  currency Currency? @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  /// Shown on the public booking page.
+  imageFileId String? @map("image_file_id") @db.Uuid
+
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  imageFile File?     @relation("BranchImage", fields: [companyId, imageFileId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  timezone  Timezone  @relation(fields: [timezoneName], references: [name], onDelete: Restrict, onUpdate: NoAction)
+  currency  Currency? @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
 
   settings          BranchSettings?
   businessHours     BusinessHours[]
@@ -1495,6 +1566,7 @@ model Employee {
   promotionEmployees   PromotionEmployee[]
   preferredByCustomers CompanyCustomer[]
   waitlistEntries      WaitlistEntry[]
+  calendarConnection   CalendarConnection?
 
   // NOTE: (companyId, employeeCode) uniqueness is PARTIAL — see 001_hardening.sql.
   @@unique([companyId, id])
@@ -1736,10 +1808,14 @@ model Service {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  category ServiceCategory? @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  taxRate  TaxRate?         @relation(fields: [companyId, taxRateId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  currency Currency         @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+  /// Shown on the public booking page.
+  imageFileId String? @map("image_file_id") @db.Uuid
+
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category  ServiceCategory? @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  imageFile File?            @relation("ServiceImage", fields: [companyId, imageFileId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  taxRate   TaxRate?         @relation(fields: [companyId, taxRateId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  currency  Currency         @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
 
   branches             ServiceBranch[]
   employees            EmployeeService[]
@@ -1925,6 +2001,7 @@ model CustomerIdentity {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   companyProfiles CompanyCustomer[]
+  sessions        CustomerSession[]
 
   @@map("customer_identity")
 }
@@ -1934,6 +2011,53 @@ model CustomerIdentity {
 /// is what stops Company A's data reaching Company B.
 /// The duplicated name/email/phone are deliberate: two companies hold
 /// independently editable records of the same human.
+/// A one-time code that signs a customer in to one company's portal
+/// (docs/CUSTOMER-PORTAL.md). Only its HMAC is stored.
+model CustomerLoginCode {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  companyCustomerId String    @map("company_customer_id") @db.Uuid
+  codeHash          String    @map("code_hash") @db.VarChar(88)
+  attempts          Int       @default(0) @db.SmallInt
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt        DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  customer CompanyCustomer @relation(fields: [companyId, companyCustomerId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([companyId, id])
+  @@index([companyId, companyCustomerId, createdAt(sort: Desc)])
+  @@map("customer_login_code")
+}
+
+/// A customer portal refresh session, bound to one company and one customer
+/// record. Rotated on every refresh; reuse of a rotated token revokes the family.
+model CustomerSession {
+  id                 String  @id @default(uuid(7)) @db.Uuid
+  companyId          String  @map("company_id") @db.Uuid
+  companyCustomerId  String  @map("company_customer_id") @db.Uuid
+  customerIdentityId String  @map("customer_identity_id") @db.Uuid
+  tokenHash          String  @unique @map("token_hash") @db.VarChar(88)
+  familyId           String  @map("family_id") @db.Uuid
+  replacedById       String? @map("replaced_by_id") @db.Uuid
+
+  ipAddress String?   @map("ip_address") @db.Inet
+  userAgent String?   @map("user_agent") @db.VarChar(512)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  customer         CompanyCustomer  @relation(fields: [companyId, companyCustomerId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+  customerIdentity CustomerIdentity @relation(fields: [customerIdentityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([companyId, id])
+  @@index([companyId, familyId])
+  @@index([expiresAt])
+  @@map("customer_session")
+}
+
 model CompanyCustomer {
   id                 String  @id @default(uuid(7)) @db.Uuid
   companyId          String  @map("company_id") @db.Uuid
@@ -1976,19 +2100,26 @@ model CompanyCustomer {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
+  /// PRIVATE: staff-only, through signed URLs. Never on a public page.
+  photoFileId String? @map("photo_file_id") @db.Uuid
+  photoFile   File?   @relation("CustomerPhoto", fields: [companyId, photoFileId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+
   company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   customerIdentity  CustomerIdentity? @relation(fields: [customerIdentityId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   preferredEmployee Employee?         @relation(fields: [companyId, preferredEmployeeId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
 
-  appointments       Appointment[]
-  customerNotes      CompanyCustomerNote[]
-  consents           CustomerConsent[]
-  payments           Payment[]
-  purchasedGiftCards GiftCard[]            @relation("GiftCardPurchaser")
-  receivedGiftCards  GiftCard[]            @relation("GiftCardRecipient")
-  promotionTargets   PromotionCustomer[]
-  redemptions        PromotionRedemption[]
-  waitlistEntries    WaitlistEntry[]
+  appointments        Appointment[]
+  customerNotes       CompanyCustomerNote[]
+  consents            CustomerConsent[]
+  payments            Payment[]
+  paymentTransactions PaymentTransaction[]
+  loginCodes          CustomerLoginCode[]
+  sessions            CustomerSession[]
+  purchasedGiftCards  GiftCard[]            @relation("GiftCardPurchaser")
+  receivedGiftCards   GiftCard[]            @relation("GiftCardRecipient")
+  promotionTargets    PromotionCustomer[]
+  redemptions         PromotionRedemption[]
+  waitlistEntries     WaitlistEntry[]
 
   // NOTE: (companyId, email) and (companyId, phone) uniqueness are PARTIAL
   //       (WHERE deleted_at IS NULL AND value IS NOT NULL) — see 001_hardening.sql.
@@ -2126,6 +2257,7 @@ model Appointment {
   statusHistory        AppointmentStatusHistory[]
   payments             Payment[]
   refunds              Refund[]
+  paymentTransactions  PaymentTransaction[]
   invoice              Invoice?
   redemptions          PromotionRedemption[]
   giftCardTransactions GiftCardTransaction[]
@@ -2334,6 +2466,7 @@ model Payment {
   refunds              Refund[]
   ledgerEntries        LedgerEntry[]
   giftCardTransactions GiftCardTransaction[]
+  transactions         PaymentTransaction[]
   purchasedGiftCards   GiftCard[]
 
   @@unique([companyId, paymentNumber])
@@ -2381,6 +2514,107 @@ model Refund {
   @@index([companyId, paymentId])
   @@index([companyId, status])
   @@map("refund")
+}
+
+/// One online payment attempt at an external provider (docs/PAYMENTS.md).
+///
+/// Never holds card data: only the provider's references, the amount, and the
+/// non-sensitive checkout handles (a redirect URL or QR payload) the payer
+/// needs. When it SUCCEEDS it settles into the existing records — a `payment`
+/// row with its ledger entries for an appointment, a `subscription_payment`
+/// and a PAID invoice for SaaS billing — in the same database transaction.
+model PaymentTransaction {
+  id        String                   @id @default(uuid(7)) @db.Uuid
+  companyId String                   @map("company_id") @db.Uuid
+  kind      PaymentTransactionKind
+  status    PaymentTransactionStatus @default(PENDING)
+
+  appointmentId         String? @map("appointment_id") @db.Uuid
+  subscriptionInvoiceId String? @map("subscription_invoice_id") @db.Uuid
+  customerId            String? @map("customer_id") @db.Uuid
+  /// Set when the payment settled into a `payment` row (appointments).
+  paymentId             String? @map("payment_id") @db.Uuid
+  /// Set when the payment settled into a `subscription_payment` row.
+  subscriptionPaymentId String? @map("subscription_payment_id") @db.Uuid
+
+  initiatedByType ActorType @map("initiated_by_type")
+  initiatedById   String?   @map("initiated_by_id") @db.Uuid
+
+  amountMinor   BigInt @map("amount_minor")
+  refundedMinor BigInt @default(0) @map("refunded_minor")
+  feeMinor      BigInt @default(0) @map("fee_minor")
+  currencyCode  String @map("currency_code") @db.Char(3)
+
+  provider              String  @db.VarChar(32)
+  /// The provider's id for this payment request (QPay: invoice_id).
+  providerTransactionId String? @map("provider_transaction_id") @db.VarChar(128)
+  /// The provider's id for the money that actually moved (QPay: payment_id).
+  providerPaymentId     String? @map("provider_payment_id") @db.VarChar(128)
+  idempotencyKey        String  @map("idempotency_key") @db.VarChar(128)
+
+  /// What the payer needs to pay: redirect URL, QR payload, app links. Public by nature.
+  checkout      Json?     @db.JsonB
+  metadata      Json?     @db.JsonB
+  failureReason String?   @map("failure_reason") @db.VarChar(512)
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
+  lastCheckedAt DateTime? @map("last_checked_at") @db.Timestamptz(3)
+
+  succeededAt DateTime? @map("succeeded_at") @db.Timestamptz(3)
+  failedAt    DateTime? @map("failed_at") @db.Timestamptz(3)
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  refundedAt  DateTime? @map("refunded_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointment         Appointment?         @relation(fields: [companyId, appointmentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  subscriptionInvoice SubscriptionInvoice? @relation(fields: [companyId, subscriptionInvoiceId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  customer            CompanyCustomer?     @relation(fields: [companyId, customerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  payment             Payment?             @relation(fields: [companyId, paymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  subscriptionPayment SubscriptionPayment? @relation(fields: [companyId, subscriptionPaymentId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  currency            Currency             @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
+
+  // NOTE: partial unique indexes ("one open transaction per appointment /
+  // invoice") and CHECK constraints live in the migration SQL.
+  @@unique([companyId, id])
+  @@unique([companyId, idempotencyKey])
+  @@unique([provider, providerTransactionId])
+  @@index([companyId, status, createdAt(sort: Desc)])
+  @@index([companyId, appointmentId])
+  @@index([companyId, subscriptionInvoiceId])
+  @@map("payment_transaction")
+}
+
+/// Every webhook delivery, verified or not, for debugging and audit.
+///
+/// A PLATFORM table: deliveries arrive before any company is known, and the
+/// tenant role is denied it entirely by RLS. The payload is stored with
+/// sensitive-looking keys removed; providers here never send card data anyway.
+model PaymentWebhookEvent {
+  id       String               @id @default(uuid(7)) @db.Uuid
+  provider String               @db.VarChar(32)
+  /// Dedupe key: a redelivery of the same event has the same key.
+  eventKey String               @map("event_key") @db.VarChar(200)
+  status   PaymentWebhookStatus @default(RECEIVED)
+
+  signatureValid        Boolean @map("signature_valid")
+  providerTransactionId String? @map("provider_transaction_id") @db.VarChar(128)
+  transactionId         String? @map("transaction_id") @db.Uuid
+  companyId             String? @map("company_id") @db.Uuid
+
+  payload  Json?   @db.JsonB
+  error    String? @db.VarChar(1000)
+  attempts Int     @default(1) @db.SmallInt
+
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(3)
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([provider, eventKey])
+  @@index([transactionId])
+  @@index([receivedAt(sort: Desc)])
+  @@map("payment_webhook_event")
 }
 
 model Invoice {
@@ -2826,10 +3060,16 @@ model Notification {
   maxRetries    Int       @default(3) @map("max_retries") @db.SmallInt
   nextRetryAt   DateTime? @map("next_retry_at") @db.Timestamptz(3)
 
-  provider          String? @db.VarChar(32)
-  providerMessageId String? @map("provider_message_id") @db.VarChar(128)
+  provider          String?   @db.VarChar(32)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(128)
   /// Prevents duplicate sends when an event is replayed.
-  dedupeKey         String? @map("dedupe_key") @db.VarChar(160)
+  dedupeKey         String?   @map("dedupe_key") @db.VarChar(160)
+  /// The provider's own last word on it (e.g. "delivered", "bounce", "undelivered"),
+  /// from a signed delivery receipt. Never trusted unless the receipt verified.
+  providerStatus    String?   @map("provider_status") @db.VarChar(32)
+  providerEventAt   DateTime? @map("provider_event_at") @db.Timestamptz(3)
+  /// Which credentials sent it: null = the platform's, else the company's config.
+  providerConfigId  String?   @map("provider_config_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -2864,6 +3104,178 @@ model AppointmentReminder {
 
   @@unique([companyId, appointmentId, offsetMinutes, startsAt])
   @@map("appointment_reminder")
+}
+
+/// A company's own sending account for one channel (docs/NOTIFICATION-PROVIDERS.md).
+/// Without one, the platform's account (environment variables) is used.
+///
+/// `credentials` is ENCRYPTED (AES-256-GCM, SECRETS_ENCRYPTION_KEY) and never
+/// leaves the API; `settings` holds the non-secret parts (sender address,
+/// from number, webhook verification key) and is shown to the company.
+model NotificationProviderConfig {
+  id        String              @id @default(uuid(7)) @db.Uuid
+  companyId String              @map("company_id") @db.Uuid
+  channel   NotificationChannel
+  provider  String              @db.VarChar(32)
+  isEnabled Boolean             @default(true) @map("is_enabled")
+
+  credentials String @db.Text
+  /// Last four characters of the main secret, for "is this the key I think it is".
+  secretHint  String @map("secret_hint") @db.VarChar(8)
+  settings    Json   @default("{}") @db.JsonB
+
+  /// Result of the last connection check.
+  status        String    @default("UNVERIFIED") @db.VarChar(16)
+  lastCheckedAt DateTime? @map("last_checked_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error") @db.VarChar(512)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([companyId, channel])
+  @@unique([companyId, id])
+  @@map("notification_provider_config")
+}
+
+// =============================================================================
+// CALENDAR INTEGRATION (docs/CALENDAR-INTEGRATION.md)
+// =============================================================================
+
+/// One employee's external calendar (Google or Microsoft). One-way: this SaaS
+/// writes appointment events to it and, optionally, reads busy periods from
+/// it. Nothing read from it ever changes an appointment.
+model CalendarConnection {
+  id         String @id @default(uuid(7)) @db.Uuid
+  companyId  String @map("company_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  /// `google` | `microsoft` (CHECK in the migration).
+  provider   String @db.VarChar(16)
+  /// ACTIVE | NEEDS_REAUTH | ERROR (CHECK in the migration).
+  status     String @default("ACTIVE") @db.VarChar(16)
+
+  /// Which account authorised it, for "is this the right calendar". Shown to
+  /// people who may manage the connection only.
+  accountEmail         String?   @map("account_email") @db.VarChar(320)
+  /// Sealed {accessToken, refreshToken} (SECRETS_ENCRYPTION_KEY). Never returned.
+  credentials          String    @db.Text
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  scopes               String    @db.VarChar(512)
+
+  calendarId       String  @default("primary") @map("calendar_id") @db.VarChar(512)
+  calendarName     String? @map("calendar_name") @db.VarChar(256)
+  calendarTimeZone String? @map("calendar_time_zone") @db.VarChar(64)
+
+  /// Keep completed appointments on the calendar (otherwise they stay as last synced).
+  syncCompleted      Boolean @default(true) @map("sync_completed")
+  /// Read busy periods from this calendar into the employee's availability.
+  useForAvailability Boolean @default(true) @map("use_for_availability")
+
+  lastSyncAt    DateTime? @map("last_sync_at") @db.Timestamptz(3)
+  busySyncedAt  DateTime? @map("busy_synced_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error") @db.VarChar(512)
+  lastErrorAt   DateTime? @map("last_error_at") @db.Timestamptz(3)
+  /// The company user who connected it.
+  connectedById String?   @map("connected_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  employee   Employee            @relation(fields: [companyId, employeeId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+  eventLinks CalendarEventLink[]
+  busyBlocks CalendarBusyBlock[]
+
+  /// One calendar per employee.
+  @@unique([companyId, employeeId])
+  @@unique([companyId, id])
+  @@index([status])
+  @@map("calendar_connection")
+}
+
+/// A pending OAuth authorisation: single use, ten minutes, bound to the user
+/// who started it. Only the SHA-256 of the state is stored.
+model CalendarOAuthState {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  provider      String    @db.VarChar(16)
+  userAccountId String    @map("user_account_id") @db.Uuid
+  stateHash     String    @unique @map("state_hash") @db.VarChar(64)
+  /// Sealed PKCE code verifier.
+  codeVerifier  String    @map("code_verifier") @db.Text
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([companyId, expiresAt])
+  @@map("calendar_oauth_state")
+}
+
+/// The external event this SaaS created for one appointment on one
+/// connection. Its id is how updates and deletions find the event; the hash
+/// says whether anything worth sending changed.
+model CalendarEventLink {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  connectionId    String    @map("connection_id") @db.Uuid
+  /// No FK: a hard-deleted appointment must still have its event removed.
+  appointmentId   String    @map("appointment_id") @db.Uuid
+  calendarId      String    @map("calendar_id") @db.VarChar(512)
+  externalEventId String    @map("external_event_id") @db.VarChar(1024)
+  contentHash     String    @map("content_hash") @db.VarChar(64)
+  lastSyncedAt    DateTime  @map("last_synced_at") @db.Timestamptz(3)
+  lastError       String?   @map("last_error") @db.VarChar(512)
+  lastErrorAt     DateTime? @map("last_error_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  connection CalendarConnection @relation(fields: [companyId, connectionId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([connectionId, appointmentId])
+  @@index([companyId, appointmentId])
+  @@map("calendar_event_link")
+}
+
+/// "This appointment's calendar events need reconciling." One row per
+/// appointment: a change while one is queued or running bumps `version`
+/// instead of adding a second job, so no two workers sync the same appointment.
+model CalendarSyncJob {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  appointmentId String    @map("appointment_id") @db.Uuid
+  /// PENDING | RUNNING | DONE | FAILED (CHECK in the migration).
+  status        String    @default("PENDING") @db.VarChar(16)
+  version       Int       @default(1)
+  attempts      Int       @default(0) @db.SmallInt
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedAt      DateTime? @map("locked_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error") @db.VarChar(512)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([companyId, appointmentId])
+  @@index([status, nextAttemptAt])
+  @@map("calendar_sync_job")
+}
+
+/// A busy period read from an external calendar: times only — never a title,
+/// attendee or description.
+model CalendarBusyBlock {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  connectionId String   @map("connection_id") @db.Uuid
+  employeeId   String   @map("employee_id") @db.Uuid
+  startsAt     DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt       DateTime @map("ends_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  connection CalendarConnection @relation(fields: [companyId, connectionId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([companyId, employeeId, startsAt])
+  @@index([connectionId])
+  @@map("calendar_busy_block")
 }
 
 model NotificationPreference {
@@ -2982,11 +3394,33 @@ model File {
   id        String @id @default(uuid(7)) @db.Uuid
   companyId String @map("company_id") @db.Uuid
 
-  storageKey String @map("storage_key") @db.VarChar(512)
-  fileName   String @map("file_name") @db.VarChar(256)
-  mimeType   String @map("mime_type") @db.VarChar(128)
-  sizeBytes  BigInt @map("size_bytes")
-  checksum   String @db.VarChar(88)
+  /// Generated by the server (`{visibility}/{companyId}/{purpose}/{uuid}.{ext}`),
+  /// never derived from anything the client sent.
+  storageKey      String @map("storage_key") @db.VarChar(512)
+  /// `local` | `s3`: where storageKey lives, so changing provider later does
+  /// not orphan what is already stored.
+  storageProvider String @default("local") @map("storage_provider") @db.VarChar(16)
+  /// The uploader's file name, sanitised, for display only. Never used as a path.
+  fileName        String @map("file_name") @db.VarChar(256)
+  /// The DETECTED type of the stored (re-encoded) bytes, not the client's claim.
+  mimeType        String @map("mime_type") @db.VarChar(128)
+  sizeBytes       BigInt @map("size_bytes")
+  /// SHA-256 of the stored bytes, base64.
+  checksum        String @db.VarChar(88)
+
+  /// COMPANY_LOGO | BRANCH_IMAGE | EMPLOYEE_PHOTO | SERVICE_IMAGE | CUSTOMER_PHOTO
+  purpose    String    @default("OTHER") @db.VarChar(32)
+  /// The row it was uploaded for (company, branch, employee, service, customer).
+  targetId   String?   @map("target_id") @db.Uuid
+  /// PUBLIC: served to anyone at /public/files/:id (booking-page images).
+  /// PRIVATE: only through a short-lived signed URL, to authorised staff.
+  visibility String    @default("PRIVATE") @db.VarChar(16)
+  width      Int?
+  height     Int?
+  /// UPLOADING: row written, object being stored. READY: stored and attached.
+  status     String    @default("READY") @db.VarChar(16)
+  /// When the stored object was removed after the row was deleted.
+  purgedAt   DateTime? @map("purged_at") @db.Timestamptz(3)
 
   scanStatus FileScanStatus @default(PENDING) @map("scan_status")
   scannedAt  DateTime?      @map("scanned_at") @db.Timestamptz(3)
@@ -3005,8 +3439,14 @@ model File {
   brandingHeaders  CompanyBranding[] @relation("BrandingEmailHeader")
   employeeAvatars  EmployeeProfile[]
   invoicePdfs      Invoice[]
+  branchImages     Branch[]          @relation("BranchImage")
+  serviceImages    Service[]         @relation("ServiceImage")
+  customerPhotos   CompanyCustomer[] @relation("CustomerPhoto")
 
   @@unique([companyId, id])
   @@index([companyId, scanStatus])
+  @@index([companyId, purpose, targetId])
+  @@index([status, createdAt])
+  @@index([deletedAt, purgedAt])
   @@map("file")
 }

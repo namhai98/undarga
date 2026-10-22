@@ -1,6 +1,7 @@
 'use client';
 
-import { Loader2, Search } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Loader2, Search, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,8 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useBranches } from '@/features/branches';
-import { useCan } from '@/features/auth';
-import { useEmployees } from '../api/use-employees';
+import { useCan, useSession } from '@/features/auth';
+import { ImageUpload } from '@/features/media';
+import { filesService } from '@/services/files.service';
+import { employeeKeys, useEmployees } from '../api/use-employees';
 import type { EmployeeQuery, EmployeeStatus } from '@/services/employees.service';
 
 const PAGE_SIZE = 25;
@@ -42,6 +45,10 @@ export function EmployeeList() {
 
   const canWrite = useCan('employee:write');
   const branches = useBranches();
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  /** The employee whose photo is being changed, if any. */
+  const [photoFor, setPhotoFor] = useState<string | null>(null);
 
   const query: EmployeeQuery = {
     ...(search ? { search } : {}),
@@ -156,24 +163,89 @@ export function EmployeeList() {
         </div>
       ) : null}
 
+      {photoFor && items.some((e) => e.id === photoFor)
+        ? (() => {
+            const employee = items.find((e) => e.id === photoFor)!;
+            return (
+              <section
+                aria-label={`Photo of ${employee.displayName}`}
+                className="border-border/60 grid gap-3 rounded-lg border p-4"
+              >
+                <ImageUpload
+                  purpose="EMPLOYEE_PHOTO"
+                  targetId={employee.id}
+                  fileId={employee.avatarFileId}
+                  label={`Photo of ${employee.displayName}`}
+                  hint="Shown on your booking page. At least 96 × 96 pixels; square works best."
+                  shape="round"
+                  canEdit={canWrite}
+                  onChange={() => {
+                    if (activeCompanyId)
+                      void queryClient.invalidateQueries({
+                        queryKey: employeeKeys.all(activeCompanyId),
+                      });
+                  }}
+                />
+                <div>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setPhotoFor(null)}>
+                    Done
+                  </Button>
+                </div>
+              </section>
+            );
+          })()
+        : null}
+
       {items.length > 0 ? (
         // Wrapped so a narrow screen scrolls the table rather than the page.
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Code</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Job title</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Branches</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Login</th>
-                <th scope="col" className="py-2 font-medium">Status</th>
+                <th scope="col" className="w-10 py-2 pr-3 font-medium">
+                  <span className="sr-only">Photo</span>
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  Name
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  Code
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  Job title
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  Branches
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  Login
+                </th>
+                <th scope="col" className="py-2 font-medium">
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody>
               {items.map((employee) => (
                 <tr key={employee.id} className="border-border/40 border-b last:border-0">
-                  <td className="py-2 pr-3 font-medium">{employee.displayName}</td>
+                  <td className="py-2 pr-3">
+                    <Avatar fileId={employee.avatarFileId} />
+                  </td>
+                  <td className="py-2 pr-3 font-medium">
+                    {employee.displayName}
+                    {canWrite ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="ml-1 h-6 px-1.5 text-xs"
+                        aria-label={`Change photo of ${employee.displayName}`}
+                        onClick={() => setPhotoFor(employee.id)}
+                      >
+                        Photo
+                      </Button>
+                    ) : null}
+                  </td>
                   <td className="text-muted-foreground py-2 pr-3 font-mono text-xs">
                     {employee.employeeCode ?? '—'}
                   </td>
@@ -231,5 +303,17 @@ export function EmployeeList() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function Avatar({ fileId }: { fileId: string | null }) {
+  const url = filesService.publicUrl(fileId);
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element -- API-served, already sized server-side
+    <img src={url} alt="" className="size-8 rounded-full object-cover" loading="lazy" />
+  ) : (
+    <span className="bg-muted grid size-8 place-items-center rounded-full" aria-hidden>
+      <UserRound className="text-muted-foreground size-4" />
+    </span>
   );
 }

@@ -19,6 +19,7 @@ const service = (overrides: Partial<PublicService> = {}): PublicService => ({
   currencyCode: 'MNT',
   requiresEmployee: true,
   color: null,
+  imageFileId: null,
   categoryId: null,
   ...overrides,
 });

@@ -25,6 +25,8 @@ export interface EmployeeSummary {
   calendarColor: string | null;
   hiredOn: string | null;
   jobTitle: string | null;
+  /** Public portrait (booking page). Change it through the files API, not by setting this. */
+  avatarFileId: string | null;
   branchIds: string[];
   primaryBranchId: string | null;
   account: EmployeeAccount | null;

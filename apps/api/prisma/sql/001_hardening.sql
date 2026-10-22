@@ -106,6 +106,7 @@ REVOKE UPDATE, DELETE ON audit_log FROM app_tenant;
 -- The platform realm is invisible to tenant connections.
 REVOKE ALL ON platform_user, platform_role, platform_role_permission,
               platform_user_role FROM app_tenant;
+REVOKE ALL ON payment_webhook_event FROM app_tenant;
 
 -- Reference data is read-only to everyone but migrations.
 REVOKE INSERT, UPDATE, DELETE ON currency, timezone, permission, feature
@@ -530,13 +531,17 @@ DECLARE
     'service_resource_requirement','tax_rate',
     'resource_type','resource',
     'company_customer','company_customer_note','customer_consent',
+    'customer_login_code','customer_session',
     'appointment','appointment_item','appointment_resource',
     'appointment_status_history','waitlist_entry',
-    'payment','refund','invoice','invoice_line','ledger_entry',
+    'payment','refund','invoice','invoice_line','ledger_entry','payment_transaction',
     'promotion','promotion_service','promotion_branch','promotion_employee',
     'promotion_customer','coupon','promotion_redemption',
     'gift_card','gift_card_transaction',
     'notification','notification_preference','appointment_reminder',
+    'notification_provider_config',
+    'calendar_connection','calendar_oauth_state','calendar_event_link','calendar_sync_job',
+    'calendar_busy_block',
     'subscription','subscription_entitlement_override','subscription_invoice',
     'subscription_payment','usage_record','usage_counter',
     'outbox_event','idempotency_key','file'
@@ -607,7 +612,10 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['platform_user','platform_role',
                            'platform_role_permission','platform_user_role',
                            'impersonation_grant','platform_session',
-                           'user_session','user_token'] LOOP
+                           'user_session','user_token',
+                           -- Webhook deliveries arrive before any company is known
+                           -- and are processed on the platform connection.
+                           'payment_webhook_event'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('CREATE POLICY %1$I_deny_tenants ON %1$I USING (false)', t);

@@ -45,6 +45,8 @@ export interface CompanyBranding {
   bookingPageBlurb: string | null;
   emailFromName: string | null;
   emailReplyTo: string | null;
+  /** Public logo (booking page). Change it through the files API, not by setting this. */
+  logoFileId: string | null;
 }
 
 /**

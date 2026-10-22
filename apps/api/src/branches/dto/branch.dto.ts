@@ -12,7 +12,7 @@ import { z } from 'zod';
  * Normalised to uppercase so `hq` and `HQ` cannot coexist and confuse a
  * receptionist reading a printed schedule.
  */
-const branchCode = z
+export const branchCodeSchema = z
   .string()
   .trim()
   .toUpperCase()
@@ -39,7 +39,7 @@ const longitude = z
   .regex(/^-?\d{1,3}(?:\.\d{1,6})?$/, 'Use decimal degrees, e.g. 106.917701.')
   .refine((v) => Math.abs(Number(v)) <= 180, 'Longitude must be between -180 and 180.');
 
-const address = {
+export const branchAddressFields = {
   phone: z.string().trim().max(32).nullable().optional(),
   email: z.string().trim().toLowerCase().email().max(320).nullable().optional(),
   addressLine1: z.string().trim().max(160).nullable().optional(),
@@ -61,7 +61,7 @@ const address = {
 
 export const createBranchSchema = z
   .object({
-    code: branchCode,
+    code: branchCodeSchema,
     name: z.string().trim().min(1).max(128),
     /**
      * Required, with no fallback to the company default.
@@ -81,7 +81,7 @@ export const createBranchSchema = z
       .nullable()
       .optional(),
     sortOrder: z.number().int().min(0).max(32_767).optional(),
-    ...address,
+    ...branchAddressFields,
   })
   .strict();
 export type CreateBranchDto = z.infer<typeof createBranchSchema>;
@@ -96,7 +96,7 @@ export type CreateBranchDto = z.infer<typeof createBranchSchema>;
  */
 export const updateBranchSchema = z
   .object({
-    code: branchCode.optional(),
+    code: branchCodeSchema.optional(),
     name: z.string().trim().min(1).max(128).optional(),
     timezoneName: timezoneName.optional(),
     currencyCode: z
@@ -107,7 +107,7 @@ export const updateBranchSchema = z
       .optional(),
     status: z.enum(['ACTIVE', 'TEMPORARILY_CLOSED', 'INACTIVE']).optional(),
     sortOrder: z.number().int().min(0).max(32_767).optional(),
-    ...address,
+    ...branchAddressFields,
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'Provide at least one field to update.' });
@@ -147,11 +147,9 @@ export type UpdateBranchSettingsDto = z.infer<typeof updateBranchSettingsSchema>
 // ---------------------------------------------------------------------------
 
 /** `HH:MM`, 24-hour. Seconds are not accepted: nobody opens at 09:00:30. */
-const timeOfDay = z
-  .string()
-  .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:MM, e.g. 09:00.');
+const timeOfDay = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:MM, e.g. 09:00.');
 
-const businessHoursDay = z
+export const businessHoursDaySchema = z
   .object({
     dayOfWeek: z.number().int().min(0).max(6),
     isClosed: z.boolean().default(false),
@@ -220,7 +218,7 @@ export const putBusinessHoursSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
       .optional(),
-    days: z.array(businessHoursDay).min(1).max(7),
+    days: z.array(businessHoursDaySchema).min(1).max(7),
   })
   .strict()
   .superRefine((value, ctx) => {

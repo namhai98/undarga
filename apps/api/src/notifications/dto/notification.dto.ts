@@ -21,6 +21,7 @@ export const notificationQuerySchema = z
         'FAILED',
         'RETRYING',
         'CANCELLED',
+        'UNKNOWN',
       ])
       .optional(),
     channel: z.enum(['EMAIL', 'SMS', 'PUSH', 'IN_APP']).optional(),

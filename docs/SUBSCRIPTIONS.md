@@ -83,13 +83,28 @@ EXPIRED ──reactivate / change plan / operator extend / invoice paid──▶
 | `POST` | `/platform/companies/:id/billing/:invoiceId/mark-paid` | `platform:billing:manage` |
 | `POST` | `/platform/subscriptions/sweep` | `platform:billing:manage` |
 
-## For the payment integration later
+## Paying online
 
-- `subscription_invoice` rows are the thing to charge: OPEN, with amount,
-  currency, period and due date. `invoice_number` is `INV-YYYYMM-NNNN` per
-  company.
-- `markPaid` is the webhook's job: it records a `subscription_payment`
-  (`provider`, `provider_payment_id`) and reactivates a past-due or expired
-  subscription. `subscription.provider` / `provider_subscription_id` exist for
-  a provider-managed subscription.
-- `GRACE` and `SUSPENDED` statuses are reserved for a provider's dunning flow.
+Connected in [PAYMENTS.md](./PAYMENTS.md):
+
+| Method | Path | Permission |
+|---|---|---|
+| `POST` | `/companies/:id/billing/:invoiceId/pay` | `settings:billing:write` (not `@RequiresWrite`: an expired company can pay to recover) |
+| `GET` | `/payments/:transactionId` | `settings:billing:read` for an invoice payment |
+| `POST` | `/platform/payments/:transactionId/refund` | `platform:billing:manage` |
+
+- **Renewals**: the sweep issues the OPEN renewal invoice as before; the owner
+  pays it from the subscription page.
+- **Success**: the provider's confirmation runs `settleInvoicePayment` — the same
+  code operator `mark-paid` uses — in the payment's transaction: invoice PAID,
+  `subscription_payment` (method ONLINE), and a PAST_DUE / EXPIRED subscription
+  is ACTIVE again.
+- **Failure**: the invoice stays OPEN and `attempt_count` goes up; the
+  subscription moves only as the sweep says (PAST_DUE after the due date, then
+  EXPIRED after grace).
+- **Cancellation** of the subscription is unchanged. An unpaid checkout can be
+  cancelled; money that still arrives is recorded.
+- **Refunds** of SaaS payments are platform-only and whole-payment; the invoice
+  stays PAID and the subscription is not changed.
+- `GRACE` and `SUSPENDED` statuses remain reserved for a provider-managed
+  dunning flow, which QPay does not have.

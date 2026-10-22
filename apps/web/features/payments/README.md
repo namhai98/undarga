@@ -1,6 +1,13 @@
 # `payments` feature
 
-Placeholder. Nothing is implemented yet.
+Online payments through the configured provider (QPay, or the local mock) —
+see docs/PAYMENTS.md. The checkout panel, and the three places it is used:
+an appointment (staff), a subscription invoice (owner), a public booking
+(the anonymous booker, holding the confirmation's payment token).
+
+Nothing here reports a payment as paid. The UI starts a checkout and then
+reads the status the SERVER got from the provider; polling stops once the
+provider has answered. No card details are ever entered in this app.
 
 ## Layout
 

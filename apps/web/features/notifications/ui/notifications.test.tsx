@@ -149,7 +149,8 @@ describe('Notification history', () => {
     const sent = (await screen.findByText('s***@example.com', { selector: 'td' })).closest('tr')!;
     expect(within(sent).getByText('Appointment booked')).toBeInTheDocument();
     expect(within(sent).getByText('Email')).toBeInTheDocument();
-    expect(within(sent).getByText('Sent')).toBeInTheDocument();
+    // Accepted by the provider; only a receipt makes it Delivered.
+    expect(within(sent).getByText('Accepted')).toBeInTheDocument();
 
     const retrying = screen.getByText('***2233').closest('tr')!;
     expect(within(retrying).getByText('Retrying')).toBeInTheDocument();
@@ -443,5 +444,233 @@ describe('Customer notification preferences', () => {
       },
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// =============================================================================
+describe('Retrying a message', () => {
+  const history = (items: unknown[]) =>
+    json(envelope({ items, total: items.length, limit: 25, offset: 0 }));
+
+  it('offers a retry for an unknown or failed message, and sends it', async () => {
+    const fetchMock = api((url, init) => {
+      if (url.pathname.endsWith('/retry') && init?.method === 'POST') {
+        return json(envelope(row({ id: 'n-9', status: 'PENDING', retryable: false })));
+      }
+      if (url.pathname.endsWith('/notifications')) {
+        return history([
+          row({ id: 'n-9', status: 'UNKNOWN', sentAt: null, failureReason: 'Timed out', retryable: true }),
+          row({
+            id: 'n-8',
+            recipientAddress: 'd***@example.com',
+            status: 'DELIVERED',
+            retryable: false,
+            deliveredAt: '2026-09-29T02:01:00.000Z',
+          }),
+        ]);
+      }
+      return undefined;
+    });
+
+    renderWithProviders(<NotificationsPage />, {
+      session: session(['settings:read', 'settings:write']),
+    });
+
+    const unknown = (await screen.findByText('Timed out')).closest('tr')!;
+    expect(within(unknown).getByText('Unknown')).toBeInTheDocument();
+    expect(within(unknown).getByText(/check before retrying/)).toBeInTheDocument();
+    const delivered = screen.getByText('d***@example.com').closest('tr')!;
+    expect(within(delivered).getByText('Delivered')).toBeInTheDocument();
+    expect(within(delivered).queryByRole('button', { name: /Retry/ })).toBeNull();
+
+    await userEvent.click(within(unknown).getByRole('button', { name: /Retry/ }));
+    await waitFor(() =>
+      expect(urlsOf(fetchMock).some((u) => u.pathname.endsWith('/notifications/n-9/retry'))).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('shows no retry button without settings:write', async () => {
+    api((url) =>
+      url.pathname.endsWith('/notifications')
+        ? history([row({ status: 'FAILED', failureReason: 'Bounced', retryable: true })])
+        : undefined,
+    );
+    renderWithProviders(<NotificationsPage />, { session: session(['settings:read']) });
+    const failed = (await screen.findByText('Bounced')).closest('tr')!;
+    expect(within(failed).queryByRole('button', { name: /Retry/ })).toBeNull();
+  });
+});
+
+// =============================================================================
+describe('Notification providers', () => {
+  const emailView = {
+    channel: 'EMAIL',
+    active: 'company',
+    platformProvider: 'sendgrid',
+    supportedProviders: ['sendgrid'],
+    company: {
+      id: 'cfg-1',
+      provider: 'sendgrid',
+      isEnabled: true,
+      status: 'FAILED',
+      lastCheckedAt: '2026-10-20T00:00:00.000Z',
+      lastError: 'SendGrid rejected the API key (401).',
+      secretHint: '••••9f2a',
+      settings: { fromAddress: 'hello@lotus.test', fromName: 'Lotus', webhookPublicKey: 'MFkw' },
+      receiptUrl: 'https://api.example.test/api/v1/notifications/receipts/sendgrid/cfg-1',
+      updatedAt: '2026-10-20T00:00:00.000Z',
+    },
+  };
+  const providers = (overrides: Record<string, unknown> = {}) => ({
+    companyAccountsAvailable: true,
+    channels: [
+      emailView,
+      {
+        channel: 'SMS',
+        active: 'none',
+        platformProvider: null,
+        supportedProviders: ['twilio'],
+        company: null,
+      },
+      { channel: 'PUSH', active: 'none', platformProvider: null, supportedProviders: [], company: null },
+    ],
+    ...overrides,
+  });
+
+  const openTab = async () => {
+    await userEvent.click(await screen.findByRole('tab', { name: 'Providers' }));
+  };
+
+  it('shows who sends each channel with secrets masked', async () => {
+    api((url) =>
+      url.pathname.endsWith('/notification-providers') ? json(envelope(providers())) : undefined,
+    );
+    renderWithProviders(<NotificationsPage />, { session: session(['settings:read']) });
+    await openTab();
+
+    expect(await screen.findByText('••••9f2a')).toBeInTheDocument();
+    expect(screen.getByText('hello@lotus.test')).toBeInTheDocument();
+    expect(screen.getByText('Not working')).toBeInTheDocument();
+    expect(screen.getByText('SendGrid rejected the API key (401).')).toBeInTheDocument();
+    expect(screen.getByText(/receipts\/sendgrid\/cfg-1/)).toBeInTheDocument();
+    expect(screen.getAllByText('Not configured').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Nothing is sent by push/)).toBeInTheDocument();
+    // Read-only: nothing to press.
+    expect(screen.queryByRole('button', { name: /Connect your own/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check connection' })).toBeNull();
+  });
+
+  it('lets settings:write check a connection, but only the owner connect an account', async () => {
+    const fetchMock = api((url, init) => {
+      if (url.pathname.endsWith('/EMAIL/verify') && init?.method === 'POST') {
+        return json(
+          envelope({
+            ...emailView,
+            company: { ...emailView.company, status: 'CONNECTED', lastError: null },
+          }),
+        );
+      }
+      if (url.pathname.endsWith('/notification-providers')) return json(envelope(providers()));
+      return undefined;
+    });
+    renderWithProviders(<NotificationsPage />, {
+      session: session(['settings:read', 'settings:write']),
+    });
+    await openTab();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Check connection' }));
+    expect(await screen.findByText('The provider accepted the credentials.')).toBeInTheDocument();
+    expect(
+      urlsOf(fetchMock).some((u) => u.pathname.endsWith('/notification-providers/EMAIL/verify')),
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: /Connect your own/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit account' })).toBeNull();
+  });
+
+  it('connects a Twilio account, sending the token once and never showing it back', async () => {
+    const fetchMock = api((url, init) => {
+      if (url.pathname.endsWith('/notification-providers/SMS') && init?.method === 'PUT') {
+        return json(
+          envelope({
+            channel: 'SMS',
+            active: 'company',
+            platformProvider: null,
+            supportedProviders: ['twilio'],
+            company: null,
+          }),
+        );
+      }
+      if (url.pathname.endsWith('/notification-providers')) return json(envelope(providers()));
+      return undefined;
+    });
+    renderWithProviders(<NotificationsPage />, {
+      session: session(['settings:read', 'settings:write', 'settings:billing:write']),
+    });
+    await openTab();
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Connect your own Twilio account' }),
+    );
+    const form = screen.getByRole('form', { name: 'SMS account' });
+    const token = within(form).getByLabelText('Twilio auth token');
+    expect(token).toHaveAttribute('type', 'password');
+    await userEvent.type(token, 'secret-token-1234567890');
+    await userEvent.type(within(form).getByLabelText('Account SID'), `AC${'a'.repeat(32)}`);
+    await userEvent.type(within(form).getByLabelText(/From number/), '+15005550006');
+    await userEvent.click(within(form).getByRole('button', { name: 'Save account' }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
+      expect(put).toBeDefined();
+      expect(bodyOf(put![1])).toEqual({
+        provider: 'twilio',
+        isEnabled: true,
+        secrets: { authToken: 'secret-token-1234567890' },
+        settings: { accountSid: `AC${'a'.repeat(32)}`, fromNumber: '+15005550006' },
+      });
+    });
+    expect(await screen.findByText(/Saved. Check the connection/)).toBeInTheDocument();
+  });
+
+  it('keeps the stored key when editing without typing a new one', async () => {
+    const fetchMock = api((url, init) => {
+      if (url.pathname.endsWith('/notification-providers/EMAIL') && init?.method === 'PUT') {
+        return json(envelope(emailView));
+      }
+      if (url.pathname.endsWith('/notification-providers')) return json(envelope(providers()));
+      return undefined;
+    });
+    renderWithProviders(<NotificationsPage />, {
+      session: session(['settings:read', 'settings:write', 'settings:billing:write']),
+    });
+    await openTab();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit account' }));
+    const form = screen.getByRole('form', { name: 'Email account' });
+    expect(within(form).getByLabelText('SendGrid API key')).toHaveAttribute(
+      'placeholder',
+      'Stored (••••9f2a) — leave blank to keep',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Save account' }));
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
+      expect(put).toBeDefined();
+      expect(bodyOf(put![1])).not.toHaveProperty('secrets');
+    });
+  });
+
+  it('explains when the server cannot store own accounts', async () => {
+    api((url) =>
+      url.pathname.endsWith('/notification-providers')
+        ? json(envelope(providers({ companyAccountsAvailable: false })))
+        : undefined,
+    );
+    renderWithProviders(<NotificationsPage />, {
+      session: session(['settings:read', 'settings:write', 'settings:billing:write']),
+    });
+    await openTab();
+    expect(await screen.findByText('Own accounts are not available')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect your own/ })).toBeNull();
   });
 });

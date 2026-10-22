@@ -16,16 +16,41 @@ export const STATUS_LABEL: Record<NotificationStatus, string> = {
   PENDING: 'Queued',
   SCHEDULED: 'Scheduled',
   SENDING: 'Sending',
-  SENT: 'Sent',
+  // Accepted by the provider. Only a provider receipt makes it "Delivered".
+  SENT: 'Accepted',
   DELIVERED: 'Delivered',
   FAILED: 'Failed',
   RETRYING: 'Retrying',
   CANCELLED: 'Not sent',
+  UNKNOWN: 'Unknown',
 };
+
+/** What each status means, for the history's tooltip and detail view. */
+export const STATUS_HINT: Partial<Record<NotificationStatus, string>> = {
+  SENT: 'The provider accepted the message. Delivery is confirmed only if the provider reports it.',
+  DELIVERED: 'The provider confirmed delivery.',
+  UNKNOWN:
+    'The provider did not answer, so it may or may not have been sent. It is not retried automatically.',
+};
+
+/** Provider names as people know them. */
+export const PROVIDER_LABEL: Record<string, string> = {
+  sendgrid: 'SendGrid',
+  twilio: 'Twilio',
+  log: 'Development log',
+  'mock-email': 'Test (email)',
+  'mock-sms': 'Test (SMS)',
+  'mock-push': 'Test (push)',
+};
+
+export function providerLabel(name: string | null): string {
+  if (!name) return 'Not configured';
+  return PROVIDER_LABEL[name] ?? name;
+}
 
 export function statusVariant(status: NotificationStatus): 'default' | 'secondary' | 'destructive' {
   if (status === 'SENT' || status === 'DELIVERED') return 'default';
-  if (status === 'FAILED') return 'destructive';
+  if (status === 'FAILED' || status === 'UNKNOWN') return 'destructive';
   return 'secondary';
 }
 
@@ -47,6 +72,7 @@ export function retryState(row: NotificationRow): string | null {
   if (row.status === 'FAILED') {
     return row.retryCount > 1 ? `Gave up after ${row.retryCount} attempts` : 'Not retried';
   }
+  if (row.status === 'UNKNOWN') return 'Outcome unknown — check before retrying';
   if (row.status === 'SENT' && row.retryCount > 0) {
     return `Sent after ${row.retryCount} failed attempt${row.retryCount === 1 ? '' : 's'}`;
   }
@@ -88,6 +114,8 @@ export function notificationErrorMessage(error: unknown, fallback: string): stri
     case 'CONFLICT':
     case 'RESOURCE_NOT_FOUND':
       return error.message;
+    case 'NOTIFICATION_PROVIDERS_UNAVAILABLE':
+      return 'Own provider accounts are not available on this server yet.';
     case 'PERMISSION_DENIED':
       return 'You do not have permission to do that.';
     default:

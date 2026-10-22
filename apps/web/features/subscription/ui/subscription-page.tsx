@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
+import { InvoiceOnlinePayment } from '@/features/payments';
 import type { Plan, SubscriptionOverview } from '@/services/subscription.service';
 import { useInvoices, useSubscription, useSubscriptionAction } from '../api/use-subscription';
 import {
@@ -34,7 +35,8 @@ const PAGE_SIZE = 10;
  * Viewing needs `settings:billing:read`; changing anything needs
  * `settings:billing:write` (the owner, by default). Prices and limits come
  * from the server's plan catalog — nothing here knows what a plan contains.
- * No payment is taken: an invoice is issued and settled outside the app.
+ * An OPEN invoice can be paid online through the configured provider
+ * (features/payments); it is marked paid only when the provider confirms.
  */
 export function SubscriptionPage() {
   const canRead = useCan('settings:billing:read');
@@ -73,8 +75,8 @@ export function SubscriptionPage() {
       <header className="grid gap-1">
         <h1 className="text-xl font-semibold">Subscription</h1>
         <p className="text-muted-foreground text-sm">
-          Your plan, what it allows, and your invoices. Payments are arranged with us directly for
-          now — nothing is charged from here.
+          Your plan, what it allows, and your invoices. An open invoice can be paid online; it is
+          marked paid only once the payment provider confirms it.
         </p>
       </header>
       <CurrentPlan data={data} canWrite={canWrite} />
@@ -169,6 +171,16 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
             />
           ) : null}
         </dl>
+
+        {data.openInvoice && canWrite ? (
+          <InvoiceOnlinePayment
+            key={data.openInvoice.id}
+            invoiceId={data.openInvoice.id}
+            invoiceNumber={data.openInvoice.number}
+            amountMinor={data.openInvoice.totalMinor}
+            currencyCode={data.openInvoice.currencyCode}
+          />
+        ) : null}
 
         {sub.status === 'CANCELLED' ? (
           <Alert role="status">

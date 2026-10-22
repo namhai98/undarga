@@ -756,6 +756,8 @@ function toEmployeeResponse(employee: EmployeeSummaryRow) {
     calendarColor: employee.calendarColor,
     hiredOn: employee.hiredOn ? employee.hiredOn.toISOString().slice(0, 10) : null,
     jobTitle: employee.profile?.jobTitle ?? null,
+    /** Public portrait, served at /public/files/:id. Changed through /files. */
+    avatarFileId: employee.profile?.avatarFileId ?? null,
     branchIds: employee.branches?.map((b) => b.branchId) ?? [],
     primaryBranchId: employee.branches?.find((b) => b.isPrimary)?.branchId ?? null,
     account: toAccountSummary(employee),

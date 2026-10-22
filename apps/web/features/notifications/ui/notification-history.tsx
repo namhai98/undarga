@@ -13,13 +13,16 @@ import {
   useNotification,
   useNotificationStats,
   useNotifications,
+  useRetryNotification,
   useRunNotifications,
 } from '../api/use-notifications';
 import {
   CHANNEL_LABEL,
+  STATUS_HINT,
   STATUS_LABEL,
   humanType,
   notificationErrorMessage,
+  providerLabel,
   retryState,
   statusVariant,
 } from '../model/notification-display';
@@ -35,6 +38,11 @@ const selectClass =
  * Recipients arrive masked from the API — checking that a reminder went out
  * does not need the customer's address. A failed message shows why, and where
  * it stands in its retry budget.
+ *
+ * "Accepted" is what most sends end as: the provider took the message. Only a
+ * provider receipt makes it "Delivered". "Unknown" means the provider never
+ * answered; it is not retried automatically, and a person with
+ * `settings:write` decides whether to send it again.
  */
 export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo[] }) {
   const [status, setStatus] = useState('');
@@ -54,6 +62,17 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
   });
   const stats = useNotificationStats();
   const run = useRunNotifications();
+  const retryMessage = useRetryNotification();
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const retryRow = async (id: string) => {
+    setRetryError(null);
+    try {
+      await retryMessage.mutateAsync(id);
+    } catch (caught) {
+      setRetryError(notificationErrorMessage(caught, 'Could not retry the message.'));
+    }
+  };
 
   const items = notifications.data?.items ?? [];
   const total = notifications.data?.total ?? 0;
@@ -77,8 +96,9 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
     <section className="grid gap-4" aria-label="Notification history">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-muted-foreground max-w-prose text-sm">
-          Messages are queued by bookings, reminders and gift cards and sent in the background. No
-          real email, SMS or push provider is connected yet — messages are recorded, not delivered.
+          Messages are queued by bookings, reminders, payments and gift cards and sent in the
+          background. <strong className="font-medium">Accepted</strong> means the provider took the
+          message; <strong className="font-medium">Delivered</strong> means it confirmed delivery.
         </p>
         {canRun ? (
           <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => void pump()}>
@@ -95,6 +115,13 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
         </Alert>
       ) : null}
 
+      {retryError ? (
+        <Alert variant="destructive" role="alert">
+          <AlertTitle>Could not retry</AlertTitle>
+          <AlertDescription>{retryError}</AlertDescription>
+        </Alert>
+      ) : null}
+
       {run.data ? (
         <Alert role="status">
           <AlertDescription>
@@ -107,10 +134,17 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
 
       {stats.data ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Sent" value={stats.data.byStatus.SENT ?? 0} />
           <Stat
-            label="Failed or retrying"
-            value={(stats.data.byStatus.FAILED ?? 0) + (stats.data.byStatus.RETRYING ?? 0)}
+            label="Accepted or delivered"
+            value={(stats.data.byStatus.SENT ?? 0) + (stats.data.byStatus.DELIVERED ?? 0)}
+          />
+          <Stat
+            label="Failed, retrying or unknown"
+            value={
+              (stats.data.byStatus.FAILED ?? 0) +
+              (stats.data.byStatus.RETRYING ?? 0) +
+              (stats.data.byStatus.UNKNOWN ?? 0)
+            }
           />
           <Stat
             label="Events waiting"
@@ -137,7 +171,9 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
           ))}
         </Filter>
         <Filter id="notif-status" label="Status" value={status} onChange={filter(setStatus)}>
-          {(['PENDING', 'SENT', 'RETRYING', 'FAILED', 'CANCELLED'] as const).map((value) => (
+          {(
+            ['PENDING', 'SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'UNKNOWN', 'CANCELLED'] as const
+          ).map((value) => (
             <option key={value} value={value}>
               {STATUS_LABEL[value]}
             </option>
@@ -191,7 +227,7 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
                   Status
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Sent
+                  Accepted / delivered
                 </th>
                 <th scope="col" className="py-2 font-medium">
                   Error / retry
@@ -220,10 +256,16 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
                       {row.recipientAddress}
                     </td>
                     <td className="py-2 pr-3">
-                      <Badge variant={statusVariant(row.status)}>{STATUS_LABEL[row.status]}</Badge>
+                      <Badge variant={statusVariant(row.status)} title={STATUS_HINT[row.status]}>
+                        {STATUS_LABEL[row.status]}
+                      </Badge>
                     </td>
                     <td className="text-muted-foreground py-2 pr-3 whitespace-nowrap">
-                      {row.sentAt ? new Date(row.sentAt).toLocaleString() : '—'}
+                      {row.deliveredAt
+                        ? new Date(row.deliveredAt).toLocaleString()
+                        : row.sentAt
+                          ? new Date(row.sentAt).toLocaleString()
+                          : '—'}
                     </td>
                     <td className="py-2 text-xs">
                       {row.failureReason ? (
@@ -232,6 +274,18 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
                       {retry ? <span className="text-muted-foreground block">{retry}</span> : null}
                       {!row.failureReason && !retry ? (
                         <span className="text-muted-foreground">—</span>
+                      ) : null}
+                      {row.retryable && canRun ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1"
+                          aria-label={`Retry ${label(row.type)} to ${row.recipientAddress}`}
+                          disabled={retryMessage.isPending && retryMessage.variables === row.id}
+                          onClick={() => void retryRow(row.id)}
+                        >
+                          Retry
+                        </Button>
                       ) : null}
                     </td>
                   </tr>
@@ -312,8 +366,12 @@ function NotificationDetailPanel({
             To <span className="font-mono">{data.recipientAddress}</span> ·{' '}
             {data.customTemplate ? 'company template' : 'default wording'} ·{' '}
             {STATUS_LABEL[data.status]}
-            {data.provider ? ` via ${data.provider}` : ''}
+            {data.provider ? ` via ${providerLabel(data.provider)}` : ''}
+            {data.providerStatus ? ` (provider: ${data.providerStatus})` : ''}
           </p>
+          {STATUS_HINT[data.status] ? (
+            <p className="text-muted-foreground text-xs">{STATUS_HINT[data.status]}</p>
+          ) : null}
           {data.subject ? <p className="font-medium">{data.subject}</p> : null}
           <pre className="bg-muted/40 rounded-md p-3 font-sans text-sm whitespace-pre-wrap">
             {data.body ?? data.preview ?? ''}

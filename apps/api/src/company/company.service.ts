@@ -367,6 +367,7 @@ function toBrandingResponse(b: {
   bookingPageBlurb: string | null;
   emailFromName: string | null;
   emailReplyTo: string | null;
+  logoFileId?: string | null;
 }) {
   return {
     primaryColor: b.primaryColor,
@@ -377,8 +378,8 @@ function toBrandingResponse(b: {
     bookingPageBlurb: b.bookingPageBlurb,
     emailFromName: b.emailFromName,
     emailReplyTo: b.emailReplyTo,
-    // `logoFileId` and friends are absent until the file module exists. Adding
-    // them as permanent nulls would advertise an API that does nothing.
+    /** Public, served at /public/files/:id. Uploaded and removed through /files. */
+    logoFileId: b.logoFileId ?? null,
   };
 }
 
@@ -392,4 +393,5 @@ const DEFAULT_BRANDING = {
   bookingPageBlurb: null,
   emailFromName: null,
   emailReplyTo: null,
+  logoFileId: null,
 };

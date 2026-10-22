@@ -106,26 +106,31 @@ export class SessionCookieService {
    * handles cannot arise — `decodeURIComponent` is defensive, not required.
    */
   read(req: Request): string | null {
-    const header = req.headers.cookie;
-    if (!header) return null;
-
-    for (const part of header.split(';')) {
-      const eq = part.indexOf('=');
-      if (eq === -1) continue;
-
-      if (part.slice(0, eq).trim() !== SessionCookieService.REFRESH_COOKIE) continue;
-
-      const raw = part.slice(eq + 1).trim();
-      if (raw === '') return null;
-
-      try {
-        return decodeURIComponent(raw);
-      } catch {
-        // A malformed value is an absent value, not a 500.
-        return null;
-      }
-    }
-
-    return null;
+    return readCookie(req, SessionCookieService.REFRESH_COOKIE);
   }
+}
+
+/** One named cookie from the request, URL-decoded; null when absent or malformed. */
+export function readCookie(req: Request, name: string): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+
+    if (part.slice(0, eq).trim() !== name) continue;
+
+    const raw = part.slice(eq + 1).trim();
+    if (raw === '') return null;
+
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      // A malformed value is an absent value, not a 500.
+      return null;
+    }
+  }
+
+  return null;
 }

@@ -19,11 +19,33 @@ export const NOTIFICATION_EVENTS = {
   APPOINTMENT_REMINDER: 'appointment.reminder',
   APPOINTMENT_COMPLETED: 'appointment.completed',
   PAYMENT_COMPLETED: 'payment.completed',
+  PAYMENT_FAILED: 'payment.failed',
   GIFT_CARD_ISSUED: 'gift_card.issued',
   GIFT_CARD_ASSIGNED: 'gift_card.assigned',
+  SUBSCRIPTION_INVOICE_ISSUED: 'subscription.invoice_issued',
+  SUBSCRIPTION_PAYMENT_FAILED: 'subscription.payment_failed',
 } as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENTS)[keyof typeof NOTIFICATION_EVENTS];
+
+/**
+ * The outbox write itself, for code that has a transaction but no injector
+ * (the subscription lifecycle helpers). `NotificationEventService.emitWithin`
+ * is the same call.
+ *
+ * `payload.dedupeBase`, when given, is what makes a replayed or repeated
+ * event collide instead of sending twice (see the dispatcher).
+ */
+export async function writeNotificationEvent(
+  tx: TenantTx,
+  companyId: string,
+  type: NotificationEventType,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await tx.outboxEvent.create({
+    data: { companyId, type, payload: payload as Prisma.InputJsonValue },
+  });
+}
 
 /**
  * ===========================================================================
@@ -86,9 +108,7 @@ export class NotificationEventService {
     type: NotificationEventType,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    await tx.outboxEvent.create({
-      data: { companyId, type, payload: payload as Prisma.InputJsonValue },
-    });
+    await writeNotificationEvent(tx, companyId, type, payload);
   }
 
   /**

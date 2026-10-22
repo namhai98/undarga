@@ -355,8 +355,11 @@ describe('company provisioning', () => {
         .expect(200);
 
       expect(res.body.data).toMatchObject({ id, status: 'PENDING_SETUP' });
-      expect(res.body.data._count).toMatchObject({
-        users: 1,
+      // The read-back moved to PlatformAdminService when the operator console
+      // landed, so the counts are a named `counts` object rather than Prisma's
+      // raw `_count` — and there are more of them. See docs/PLATFORM-ADMIN.md.
+      expect(res.body.data.counts).toMatchObject({
+        activeUsers: 0,
         roles: Object.keys(SYSTEM_ROLES).length,
         branches: 0,
       });

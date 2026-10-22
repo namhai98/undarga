@@ -86,7 +86,7 @@ cause is three layers away from it. There is a test for exactly this.
 ```
 login
   │
-  ├─ 0 memberships  → /no-company     explain; there is no self-serve signup
+  ├─ 0 memberships  → /no-company     create a company (onboarding) or await an invitation
   ├─ 1 membership   → /dashboard      no picker for a choice of one
   └─ 2+ memberships → /select-company choose deliberately
 ```
@@ -367,17 +367,18 @@ DTO, so even a schema mistake would not reach the column.
 ## 12. What is deliberately not here
 
 **Self-serve registration.** There is no `POST /auth/register`, and that is an
-architectural decision rather than an omission: companies are provisioned by a
-platform operator, and people join through invitations. Adding self-serve signup
-would create a second, contradictory onboarding path and would need the plan and
-trial decisions that are still open. The equivalent of "registration" — creating
+architectural decision rather than an omission: people join through invitations,
+and an account that already exists can create a company of its own through
+onboarding ([ONBOARDING.md](./ONBOARDING.md)), which makes it the owner. Creating
+the ACCOUNT itself stays out of scope. The equivalent of "registration" — creating
 the account, setting the password, attaching the membership — is
 `POST /invitations/accept`, covered in [INVITATIONS.md](./INVITATIONS.md).
 
 **MFA, SSO, OAuth.** None are half-built; there are no stubs to trip over. MFA
 matters most for the platform realm: `AuthService.loginPlatform` logs an error
-saying that realm should not reach production without a second factor, which is
-why provisioning is API-only and there is no operator console.
+saying that realm should not reach production without a second factor. Until
+it has one, the operator console ([PLATFORM-ADMIN.md](./PLATFORM-ADMIN.md))
+belongs on a trusted network only.
 
 **Changing your own email address.** It is absent from the profile schema on
 purpose — the new address has to be verified before it can be signed in with,

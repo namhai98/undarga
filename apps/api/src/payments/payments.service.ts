@@ -9,7 +9,12 @@ import {
   type PaymentStatus,
 } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
-import { ConflictError, ResourceNotFoundError, ValidationFailedError } from '../common/errors';
+import {
+  ConflictError,
+  PaymentProviderError,
+  ResourceNotFoundError,
+  ValidationFailedError,
+} from '../common/errors';
 import { GiftCardsService } from '../giftcards/giftcards.service';
 import { NotificationEventService } from '../notifications/notification-event.service';
 import { RequestContextService } from '../tenancy/context/request-context.service';
@@ -18,6 +23,7 @@ import {
   TenantScopedRepository,
   type PrismaDelegateLike,
 } from '../database/tenant-scoped.repository';
+import { PaymentGateway } from './gateway/payment-gateway';
 import { PaymentProviderRegistry } from './providers/provider.registry';
 import type { CreatePaymentDto, PaymentQueryDto, RefundPaymentDto } from './dto/payment.dto';
 
@@ -122,7 +128,84 @@ export class PaymentsService {
     private readonly events: NotificationEventService,
     private readonly context: RequestContextService,
     private readonly audit: AuditService,
+    private readonly gateway: PaymentGateway,
   ) {}
+
+  /**
+   * Settle a provider-confirmed online payment into the books, inside the
+   * caller's transaction (PaymentTransactionsService, under its row lock).
+   *
+   * Exactly what `create` does for money taken at the till — a `payment` row,
+   * balanced ledger entries with the gateway fee, the appointment's derived
+   * totals — plus the receipt event in the SAME transaction (`emitWithin`), so
+   * a settled payment and its notification commit or fail together.
+   *
+   * The payment's idempotency key is derived from the transaction id. The key
+   * is globally unique, so even a bug that let one transaction settle twice
+   * would hit the constraint instead of booking the money twice.
+   */
+  async recordSettledOnlineWithin(
+    tx: TenantTx,
+    companyId: string,
+    args: {
+      transactionId: string;
+      appointmentId: string;
+      customerId: string | null;
+      amountMinor: bigint;
+      feeMinor: bigint;
+      currencyCode: string;
+      provider: string;
+      providerTransactionId: string | null;
+      providerPaymentId: string | null;
+      purpose: CreatePaymentDto['purpose'];
+    },
+  ) {
+    const appointment = await tx.appointment.findFirst({
+      where: { id: args.appointmentId, companyId },
+      select: { branchId: true, customerId: true },
+    });
+    const feeMinor = args.feeMinor > args.amountMinor ? 0n : args.feeMinor;
+
+    const payment = await this.insertPayment(tx, companyId, {
+      input: { method: 'ONLINE', purpose: args.purpose, note: null },
+      prepared: {
+        currencyCode: args.currencyCode,
+        amountMinor: args.amountMinor,
+        branchId: appointment?.branchId ?? null,
+        customerId: args.customerId ?? appointment?.customerId ?? null,
+        appointmentId: args.appointmentId,
+      },
+      outcome: {
+        status: 'SUCCEEDED',
+        provider: args.provider,
+        providerIntentId: args.providerTransactionId ?? undefined,
+        providerChargeId: args.providerPaymentId ?? undefined,
+      },
+      feeMinor,
+      idempotencyKey: `ptx:${args.transactionId}`,
+      actorId: null,
+    });
+
+    await this.postLedger(tx, companyId, {
+      paymentId: payment.id,
+      method: 'ONLINE',
+      amountMinor: args.amountMinor,
+      feeMinor,
+      currencyCode: args.currencyCode,
+      description: `Online payment ${payment.paymentNumber}`,
+    });
+    await this.refreshAppointmentTotals(tx, companyId, args.appointmentId);
+
+    await this.events.emitWithin(tx, companyId, 'payment.completed', {
+      paymentId: payment.id,
+      appointmentId: args.appointmentId,
+      customerId: payment.customerId,
+      amountMinor: args.amountMinor.toString(),
+      currencyCode: args.currencyCode,
+    });
+
+    return payment;
+  }
 
   async list(query: PaymentQueryDto) {
     return this.payments.transaction(async (tx, companyId) => {
@@ -153,7 +236,9 @@ export class PaymentsService {
         summary: {
           collectedMinor: (totals._sum.amountMinor ?? 0n).toString(),
           refundedMinor: (totals._sum.refundedMinor ?? 0n).toString(),
-          netMinor: ((totals._sum.amountMinor ?? 0n) - (totals._sum.refundedMinor ?? 0n)).toString(),
+          netMinor: (
+            (totals._sum.amountMinor ?? 0n) - (totals._sum.refundedMinor ?? 0n)
+          ).toString(),
         },
       };
     });
@@ -266,8 +351,12 @@ export class PaymentsService {
       const currencyCode = await this.resolveCurrency(tx, companyId, input.currencyCode);
       const amountMinor = BigInt(input.amountMinor);
 
-      let appointment: { id: string; branchId: string; customerId: string; currencyCode: string } | null =
-        null;
+      let appointment: {
+        id: string;
+        branchId: string;
+        customerId: string;
+        currencyCode: string;
+      } | null = null;
 
       if (input.appointmentId) {
         appointment = await tx.appointment.findFirst({
@@ -427,6 +516,21 @@ export class PaymentsService {
   async refund(paymentId: string, input: RefundPaymentDto) {
     const actor = this.actor();
 
+    // Money a gateway took goes back through that gateway. Recording a refund
+    // here without asking it would show money returned that never moved.
+    // (A gift-card credit is ours to give, so it keeps the local path.)
+    if (input.destination === 'ORIGINAL_METHOD') {
+      const taken = await this.payments.transaction((tx, companyId) =>
+        tx.payment.findFirst({
+          where: { id: paymentId, companyId },
+          select: { provider: true },
+        }),
+      );
+      if (taken && this.gateway.isGatewayProvider(taken.provider)) {
+        return this.refundThroughGateway(paymentId, input);
+      }
+    }
+
     const result = await this.payments.transaction(async (tx, companyId) => {
       // Lock the payment row: two refund clicks must not both see the same
       // remaining amount and both succeed.
@@ -530,6 +634,200 @@ export class PaymentsService {
       },
     });
 
+    return this.findById(paymentId);
+  }
+
+  /**
+   * Refund an online payment through the provider that took it.
+   *
+   * Three steps, like `create`, so no transaction is held open across the
+   * provider call:
+   *
+   *   1. tx, payment row locked: check what is refundable — counting refunds
+   *      already IN FLIGHT, so two clicks cannot both send the full amount —
+   *      and write a PENDING refund. Its id is the provider idempotency key.
+   *   2. no tx: ask the provider.
+   *   3. tx, locked again: on success the refund settles exactly as a local one
+   *      does (ledger reversal, payment and appointment totals) and the online
+   *      transaction is marked; on failure the refund is FAILED and nothing
+   *      else moves.
+   *
+   * Only `payment:refund` reaches here — the controller requires it — and the
+   * row is found through the tenant transaction, so another company's payment
+   * is a 404 before any provider is called.
+   */
+  private async refundThroughGateway(paymentId: string, input: RefundPaymentDto) {
+    const actor = this.actor();
+
+    const pending = await this.payments.transaction(async (tx, companyId) => {
+      const locked = await this.lockPayment(tx, companyId, paymentId);
+      if (locked.status !== 'SUCCEEDED') {
+        throw new ValidationFailedError({ paymentId: 'Only a settled payment can be refunded.' });
+      }
+      const provider = this.gateway.byName(locked.provider);
+      if (!provider || !locked.providerChargeId) {
+        throw new ValidationFailedError({
+          paymentId: 'This payment cannot be refunded online. Record the refund another way.',
+        });
+      }
+
+      const inFlight = await tx.refund.aggregate({
+        where: { companyId, paymentId: locked.id, status: 'PENDING' },
+        _sum: { amountMinor: true },
+      });
+      const remaining =
+        locked.amountMinor - locked.refundedMinor - (inFlight._sum.amountMinor ?? 0n);
+      const amount = input.amountMinor ? BigInt(input.amountMinor) : remaining;
+
+      if (amount <= 0n || remaining <= 0n) {
+        throw new ValidationFailedError({
+          amountMinor: 'Nothing is left to refund on this payment.',
+        });
+      }
+      if (amount > remaining) {
+        throw new ValidationFailedError({
+          amountMinor: `Only ${remaining.toString()} is still refundable on this payment.`,
+        });
+      }
+      if (
+        !provider.supportsPartialRefund &&
+        (amount !== locked.amountMinor || locked.refundedMinor > 0n)
+      ) {
+        throw new ValidationFailedError({
+          amountMinor: `${provider.name} refunds whole payments only.`,
+        });
+      }
+
+      const transaction = await tx.paymentTransaction.findFirst({
+        where: { companyId, paymentId: locked.id },
+        select: { id: true, providerTransactionId: true },
+      });
+      const currency = await tx.currency.findUniqueOrThrow({
+        where: { code: locked.currencyCode },
+        select: { minorUnit: true },
+      });
+
+      const refund = await tx.refund.create({
+        data: {
+          companyId,
+          paymentId: locked.id,
+          appointmentId: locked.appointmentId,
+          amountMinor: amount,
+          currencyCode: locked.currencyCode,
+          destination: 'ORIGINAL_METHOD',
+          status: 'PENDING',
+          reason: input.reason,
+          requestedByType: actor.type,
+          requestedById: actor.id,
+        },
+        select: { id: true },
+      });
+
+      return {
+        refundId: refund.id,
+        provider,
+        amount,
+        paymentAmount: locked.amountMinor,
+        currencyCode: locked.currencyCode,
+        minorUnit: currency.minorUnit,
+        providerChargeId: locked.providerChargeId,
+        providerTransactionId: transaction?.providerTransactionId ?? null,
+        transactionId: transaction?.id ?? null,
+      };
+    });
+
+    let outcome: {
+      status: 'SUCCEEDED' | 'PENDING' | 'FAILED';
+      providerRefundId?: string | null;
+      failureReason?: string | null;
+    };
+    try {
+      outcome = await pending.provider.refundPayment({
+        providerTransactionId: pending.providerTransactionId,
+        providerPaymentId: pending.providerChargeId,
+        amountMinor: pending.amount,
+        paymentAmountMinor: pending.paymentAmount,
+        currencyCode: pending.currencyCode,
+        minorUnit: pending.minorUnit,
+        idempotencyKey: pending.refundId,
+        reason: input.reason,
+      });
+    } catch {
+      outcome = { status: 'FAILED', failureReason: 'The provider could not be reached.' };
+    }
+
+    await this.payments.transaction(async (tx, companyId) => {
+      const locked = await this.lockPayment(tx, companyId, paymentId);
+
+      if (outcome.status === 'FAILED') {
+        await tx.refund.updateMany({
+          where: { id: pending.refundId, companyId },
+          data: { status: 'FAILED', processedAt: new Date() },
+        });
+        return;
+      }
+
+      if (outcome.status === 'PENDING') {
+        // The provider accepted it but settles later; the refund stays PENDING
+        // (and counts as in flight) until reconciled.
+        await tx.refund.updateMany({
+          where: { id: pending.refundId, companyId },
+          data: { providerRefundId: outcome.providerRefundId ?? null },
+        });
+        return;
+      }
+
+      const now = new Date();
+      await tx.refund.updateMany({
+        where: { id: pending.refundId, companyId },
+        data: {
+          status: 'SUCCEEDED',
+          providerRefundId: outcome.providerRefundId ?? null,
+          processedAt: now,
+        },
+      });
+      const refundedMinor = locked.refundedMinor + pending.amount;
+      await tx.payment.updateMany({ where: { id: locked.id, companyId }, data: { refundedMinor } });
+      await this.postLedger(tx, companyId, {
+        paymentId: locked.id,
+        refundId: pending.refundId,
+        method: locked.method,
+        amountMinor: pending.amount,
+        feeMinor: 0n,
+        currencyCode: locked.currencyCode,
+        description: `Refund of ${locked.paymentNumber}`,
+        reverse: true,
+      });
+      if (locked.appointmentId)
+        await this.refreshAppointmentTotals(tx, companyId, locked.appointmentId);
+
+      if (pending.transactionId) {
+        const full = refundedMinor >= locked.amountMinor;
+        await tx.paymentTransaction.updateMany({
+          where: { id: pending.transactionId, companyId },
+          data: { refundedMinor, ...(full ? { status: 'REFUNDED', refundedAt: now } : {}) },
+        });
+      }
+    });
+
+    await this.audit.record({
+      action: outcome.status === 'FAILED' ? 'payment.refund_failed' : 'payment.refunded',
+      resourceType: 'refund',
+      resourceId: pending.refundId,
+      after: {
+        paymentId,
+        amountMinor: pending.amount.toString(),
+        provider: pending.provider.name,
+        outcome: outcome.status,
+        reason: input.reason,
+      },
+    });
+
+    if (outcome.status === 'FAILED') {
+      throw new PaymentProviderError(
+        outcome.failureReason ?? 'The provider declined the refund. Nothing was refunded.',
+      );
+    }
     return this.findById(paymentId);
   }
 
@@ -673,7 +971,7 @@ export class PaymentsService {
     tx: TenantTx,
     companyId: string,
     args: {
-      input: CreatePaymentDto;
+      input: { method: PaymentMethod; purpose: CreatePaymentDto['purpose']; note?: string | null };
       prepared: {
         currencyCode: string;
         amountMinor: bigint;
@@ -871,9 +1169,7 @@ function buildPaymentWhere(companyId: string, query: PaymentQueryDto): Prisma.Pa
     ...(query.method ? { method: query.method } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.from || query.to ? { createdAt } : {}),
-    ...(query.search
-      ? { paymentNumber: { contains: query.search.toUpperCase() } }
-      : {}),
+    ...(query.search ? { paymentNumber: { contains: query.search.toUpperCase() } } : {}),
   };
 }
 

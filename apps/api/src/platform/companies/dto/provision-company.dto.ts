@@ -43,7 +43,7 @@ const RESERVED_SLUGS = new Set([
  * this has to be a valid DNS label: it becomes a subdomain the moment
  * TENANT_RESOLVER_SUBDOMAIN is switched on.
  */
-const slug = z
+export const companySlugSchema = z
   .string()
   .min(3)
   .max(64)
@@ -56,7 +56,7 @@ const slug = z
   });
 
 export const provisionCompanySchema = z.object({
-  slug,
+  slug: companySlugSchema,
   legalName: z.string().trim().min(1).max(160),
   displayName: z.string().trim().min(1).max(160),
 

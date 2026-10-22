@@ -145,6 +145,7 @@ export class JwtAuthGuard implements CanActivate {
           customerIdentityId: claims.sub,
           companyCustomerId: claims.cc,
           companyId: claims.act,
+          sessionId: claims.sid,
         };
     }
   }

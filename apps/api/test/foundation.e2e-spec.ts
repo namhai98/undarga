@@ -226,9 +226,28 @@ describe('foundation', () => {
           PLATFORM_DATABASE_URL: 'postgresql://b@localhost:5432/x',
           JWT_ACCESS_SECRET: 'x'.repeat(32),
           TOKEN_HASH_PEPPER: 'y'.repeat(16),
-          PAYMENT_PROVIDER: 'stripe',
+          PAYMENT_PROVIDER: 'qpay',
+          PAYMENT_SIGNING_SECRET: 'z'.repeat(32),
+          PAYMENT_WEBHOOK_BASE_URL: 'https://api.example.mn',
         }),
-      ).toThrow(/PAYMENT_API_KEY/);
+      ).toThrow(/QPAY_CLIENT_ID/);
+    });
+
+    it('refuses the payment simulator in production', async () => {
+      const { validateEnv } = await import('../src/config/env.schema');
+
+      expect(() =>
+        validateEnv({
+          NODE_ENV: 'production',
+          DATABASE_URL: 'postgresql://a@localhost:5432/x',
+          PLATFORM_DATABASE_URL: 'postgresql://b@localhost:5432/x',
+          JWT_ACCESS_SECRET: 'x'.repeat(32),
+          TOKEN_HASH_PEPPER: 'y'.repeat(16),
+          PAYMENT_PROVIDER: 'mock',
+          PAYMENT_SIGNING_SECRET: 'z'.repeat(32),
+          PAYMENT_WEBHOOK_BASE_URL: 'https://api.example.mn',
+        }),
+      ).toThrow(/PAYMENT_PROVIDER=mock/);
     });
   });
 });

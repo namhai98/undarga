@@ -14,6 +14,8 @@ import { CatalogModule } from './catalog/catalog.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CustomersModule } from './customers/customers.module';
 import { GiftCardsModule } from './giftcards/giftcards.module';
+import { CalendarModule } from './calendar/calendar.module';
+import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PromotionsModule } from './promotions/promotions.module';
@@ -24,10 +26,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionGuard } from './authz/guards/permission.guard';
 import { DomainExceptionFilter } from './common/filters';
-import {
-  RequestLoggingInterceptor,
-  ResponseEnvelopeInterceptor,
-} from './common/interceptors';
+import { RequestLoggingInterceptor, ResponseEnvelopeInterceptor } from './common/interceptors';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { ConfigModule } from './config';
 import { DatabaseModule } from './database/database.module';
@@ -36,6 +35,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { MailModule } from './mail/mail.module';
 import { MembersModule } from './members/members.module';
 import { UsersModule } from './users/users.module';
+import { CustomerPortalModule } from './customer-portal/customer-portal.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { PlatformModule } from './platform/platform.module';
 import { RedisModule } from './redis/redis.module';
 import { FeatureGuard } from './subscriptions/feature.guard';
@@ -87,6 +88,8 @@ import { TenancyModule } from './tenancy/tenancy.module';
     AuditModule,
     MembersModule,
     CompanyModule,
+    OnboardingModule,
+    CustomerPortalModule,
     BranchesModule,
     EmployeesModule,
     CatalogModule,
@@ -94,6 +97,8 @@ import { TenancyModule } from './tenancy/tenancy.module';
     GiftCardsModule,
     PromotionsModule,
     NotificationsModule,
+    CalendarModule,
+    MediaModule,
     PaymentsModule,
     AnalyticsModule,
     AvailabilityModule,

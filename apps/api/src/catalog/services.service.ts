@@ -727,6 +727,7 @@ interface ServiceSummaryRow {
   depositMinor: bigint | null;
   color: string | null;
   sortOrder: number;
+  imageFileId?: string | null;
   category?: { id: string; name: string; parentId?: string | null } | null;
   _count?: { branches: number; employees: number };
 }
@@ -758,6 +759,8 @@ function toServiceResponse(service: ServiceSummaryRow) {
     requiresEmployee: service.requiresEmployee,
     requiresResource: service.requiresResource,
     requiresDeposit: service.requiresDeposit,
+    /** Public image, served at /public/files/:id. Changed through /files. */
+    imageFileId: service.imageFileId ?? null,
     depositMinor: service.depositMinor?.toString() ?? null,
     color: service.color,
     sortOrder: service.sortOrder,

@@ -228,6 +228,7 @@ Full detail in [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 | [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md) | How isolation is implemented and enforced |
 | [docs/ARCHITECTURE-RULES.md](docs/ARCHITECTURE-RULES.md) | Ten rules, why each exists, how each is checked |
 | [docs/PROVISIONING.md](docs/PROVISIONING.md) | How a company is created, and why an operator does it |
+| [docs/ONBOARDING.md](docs/ONBOARDING.md) | Self-serve company setup: the wizard, its transaction and its state |
 | [docs/INVITATIONS.md](docs/INVITATIONS.md) | How somebody joins a company, and what a leaked link is worth |
 | [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Signing in, staying signed in, and resolving the company |
 | [docs/COMPANY-BRANCHES.md](docs/COMPANY-BRANCHES.md) | Administering a company and its branches |
@@ -235,6 +236,12 @@ Full detail in [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 | [docs/CATALOG.md](docs/CATALOG.md) | Services and categories: pricing, buffers, and what "bookable" means |
 | [docs/CUSTOMERS.md](docs/CUSTOMERS.md) | Customer records, duplicate handling, and why they are per-company |
 | [docs/BILLING.md](docs/BILLING.md) | Payments, gift cards, promotions, notifications and reporting |
+| [docs/PAYMENTS.md](docs/PAYMENTS.md) | Online payments: providers, QPay, webhooks, idempotency, refunds |
+| [docs/NOTIFICATION-PROVIDERS.md](docs/NOTIFICATION-PROVIDERS.md) | Real email/SMS delivery: SendGrid, Twilio, receipts, company accounts, setup |
+| [docs/CALENDAR-INTEGRATION.md](docs/CALENDAR-INTEGRATION.md) | Google / Outlook calendars: OAuth, one-way sync, busy times, setup |
+| [docs/FILE-STORAGE.md](docs/FILE-STORAGE.md) | Image uploads: validation, local/S3 storage, signed URLs, cleanup, setup |
+| [docs/CUSTOMER-PORTAL.md](docs/CUSTOMER-PORTAL.md) | Customers managing their own bookings: code sign-in, rules, isolation |
+| [docs/PLATFORM-ADMIN.md](docs/PLATFORM-ADMIN.md) | The operator console, and why platform access is not company RBAC |
 
 ---
 

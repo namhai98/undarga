@@ -4,6 +4,8 @@ import { PlatformPrismaService } from '../database/platform-prisma.service';
 import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.service';
 import { NotificationContextService } from './notification-context.service';
 import {
+  NOTIFICATION_TYPES,
+  consentAllows,
   defaultTemplate,
   effectiveEventChannels,
   isNotificationType,
@@ -35,13 +37,18 @@ const CHANNEL_LABEL: Record<DeliveryChannel, string> = {
  * channel, with what text. For each channel, in order:
  *
  *   1. Does this type go out on this channel? (company setting, else default)
- *   2. Is the channel switched on for the company?
- *   3. Has the customer turned it off? (notification_preference)
- *   4. Is there an address at all?           — no:  nothing is created
- *   5. Is the address deliverable?           — no:  a CANCELLED row, with why
- *   6. Render the company's active template, or the platform default.
+ *   2. Is the channel switched on for the company? (customer-facing types)
+ *   3. Is anyone able to send on it? (a platform provider, or the company's
+ *      own enabled account) — no: nothing is created, nothing pretends
+ *   4. Has the recipient turned it off? (notification_preference)
+ *   5. Does the customer's consent allow this kind of message? (reminders:
+ *      not revoked; marketing: explicitly granted)
+ *   6. Is there an address at all?           — no:  nothing is created
+ *   7. Is the address deliverable?           — no:  a CANCELLED row, with why
+ *   8. Render the company's active template in the recipient's language (or
+ *      the nearest one), or the platform default.
  *
- * Suppressions (1–4) never become rows, so the table is an honest record of
+ * Suppressions (1–6) never become rows, so the table is an honest record of
  * what was attempted. An invalid address (5) does, because "why did the
  * customer never get it" deserves an answer on the history screen.
  *
@@ -129,24 +136,37 @@ export class NotificationDispatcherService {
     payload: Prisma.JsonValue,
   ): Promise<number> {
     if (!isNotificationType(type)) return 0;
+    const definition = NOTIFICATION_TYPES[type];
     const data = asRecord(payload);
 
-    const settings = await tx.companySettings.findFirst({
-      where: { companyId },
-      select: {
-        emailNotificationsEnabled: true,
-        smsNotificationsEnabled: true,
-        pushNotificationsEnabled: true,
-        notificationEventChannels: true,
-      },
-    });
+    const [settings, ownAccounts] = await Promise.all([
+      tx.companySettings.findFirst({
+        where: { companyId },
+        select: {
+          emailNotificationsEnabled: true,
+          smsNotificationsEnabled: true,
+          pushNotificationsEnabled: true,
+          notificationEventChannels: true,
+        },
+      }),
+      tx.notificationProviderConfig.findMany({
+        where: { companyId, isEnabled: true },
+        select: { channel: true },
+      }),
+    ]);
+    // The company-wide channel switches are about messages to CUSTOMERS. An
+    // owner's billing notice is not something a company opts out of that way.
+    const customerFacing = definition.audience === 'CUSTOMER';
     const enabled: Record<DeliveryChannel, boolean> = {
-      EMAIL: settings?.emailNotificationsEnabled ?? true,
-      SMS: settings?.smsNotificationsEnabled ?? true,
-      PUSH: settings?.pushNotificationsEnabled ?? true,
+      EMAIL: !customerFacing || (settings?.emailNotificationsEnabled ?? true),
+      SMS: !customerFacing || (settings?.smsNotificationsEnabled ?? true),
+      PUSH: !customerFacing || (settings?.pushNotificationsEnabled ?? true),
     };
+    const ownChannels = new Set(ownAccounts.map((row) => row.channel));
     const channels = effectiveEventChannels(settings?.notificationEventChannels)[type].filter(
-      (channel) => enabled[channel],
+      (channel) =>
+        enabled[channel] &&
+        (ownChannels.has(channel) || this.providers.forChannel(channel) !== null),
     );
     if (channels.length === 0) return 0;
 
@@ -154,21 +174,35 @@ export class NotificationDispatcherService {
     if (!context) return 0;
     const { recipient } = context;
 
-    const [suppressed, templates] = await Promise.all([
-      tx.notificationPreference.findMany({
-        where: {
-          companyId,
-          subjectType: 'CUSTOMER',
-          subjectId: recipient.id,
-          isEnabled: false,
-          OR: [{ type: null }, { type }],
-        },
-        select: { channel: true },
-      }),
+    const needsConsent =
+      recipient.type === 'CUSTOMER' &&
+      recipient.id !== null &&
+      (definition.category === 'REMINDER' || definition.category === 'MARKETING');
+
+    const [suppressed, consents, templates] = await Promise.all([
+      recipient.id
+        ? tx.notificationPreference.findMany({
+            where: {
+              companyId,
+              subjectType: recipient.type,
+              subjectId: recipient.id,
+              isEnabled: false,
+              OR: [{ type: null }, { type }],
+            },
+            select: { channel: true },
+          })
+        : Promise.resolve([]),
+      needsConsent
+        ? tx.customerConsent.findMany({
+            where: { companyId, customerId: recipient.id },
+            orderBy: [{ grantedAt: 'desc' }, { createdAt: 'desc' }],
+            select: { type: true, revokedAt: true },
+          })
+        : Promise.resolve([]),
       tx.notificationTemplate.findMany({
         where: { companyId, key: type, channel: { in: channels }, isActive: true, deletedAt: null },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, channel: true, subject: true, body: true },
+        select: { id: true, channel: true, locale: true, subject: true, body: true },
       }),
     ]);
     const blocked = new Set(suppressed.map((row) => row.channel));
@@ -178,10 +212,14 @@ export class NotificationDispatcherService {
 
     for (const channel of channels) {
       if (blocked.has(channel)) continue;
+      if (!consentAllows(definition.category, channel, consents)) continue;
       const address = addressFor(channel, recipient);
       if (!address) continue;
 
-      const custom = templates.find((t) => t.channel === channel) ?? null;
+      const custom = pickTemplate(
+        templates.filter((t) => t.channel === channel),
+        recipient.locale,
+      );
       const rendered = renderTemplate(custom ?? defaultTemplate(type, channel), context.variables);
       const valid = this.providers.isValidAddress(channel, address);
 
@@ -197,9 +235,10 @@ export class NotificationDispatcherService {
             channel,
             type,
             status: valid ? 'PENDING' : 'CANCELLED',
-            recipientType: 'CUSTOMER',
+            recipientType: recipient.type,
             recipientId: recipient.id,
             recipientAddress: address.slice(0, 320),
+            locale: (custom?.locale ?? recipient.locale).slice(0, 12),
             // SMS has no subject; push uses it as the title.
             subject: channel === 'SMS' ? null : rendered.subject,
             body: rendered.body,
@@ -239,6 +278,20 @@ function addressFor(
   }
 }
 
+/**
+ * The company template for the recipient's language: the exact locale, else the
+ * same language (`mn` for `mn-MN`), else the most recently edited one.
+ */
+function pickTemplate<T extends { locale: string }>(templates: T[], locale: string): T | null {
+  const lang = locale.split('-')[0]!.toLowerCase();
+  return (
+    templates.find((t) => t.locale.toLowerCase() === locale.toLowerCase()) ??
+    templates.find((t) => t.locale.split('-')[0]!.toLowerCase() === lang) ??
+    templates[0] ??
+    null
+  );
+}
+
 function asRecord(value: Prisma.JsonValue): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
@@ -246,7 +299,15 @@ function asRecord(value: Prisma.JsonValue): Record<string, unknown> {
 /** What is worth keeping from an event on the notification row: references, not content. */
 function pickIds(data: Record<string, unknown>): Prisma.InputJsonValue {
   const out: Record<string, string | number> = {};
-  for (const key of ['appointmentId', 'giftCardId', 'paymentId', 'customerId', 'offsetMinutes']) {
+  for (const key of [
+    'appointmentId',
+    'giftCardId',
+    'paymentId',
+    'paymentTransactionId',
+    'customerId',
+    'invoiceId',
+    'offsetMinutes',
+  ]) {
     const value = data[key];
     if (typeof value === 'string' || typeof value === 'number') out[key] = value;
   }

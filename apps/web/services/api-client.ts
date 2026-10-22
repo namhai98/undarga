@@ -97,6 +97,63 @@ class ApiClient {
   }
 
   /**
+   * POST multipart form data, reporting upload progress (0–1).
+   *
+   * `XMLHttpRequest` rather than `fetch` because fetch has no upload progress.
+   * Same rules as every other call: the token is attached here, a 401 gets one
+   * single-flighted refresh and one retry, errors are `ApiError`s. Never
+   * retried otherwise — an upload is not idempotent.
+   */
+  async upload<T>(
+    path: string,
+    form: FormData,
+    options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+    isRetryAfterRefresh = false,
+  ): Promise<T> {
+    const url = this.buildUrl(path);
+    const { status, payload } = await new Promise<{ status: number; payload: unknown }>(
+      (resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('Accept', 'application/json');
+        const token = tokenStore.accessToken;
+        if (token) xhr.setRequestHeader(API_HEADERS.AUTHORIZATION, `Bearer ${token}`);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);
+        };
+        xhr.onload = () => {
+          let payload: unknown = null;
+          try {
+            payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+          } catch {
+            payload = null;
+          }
+          resolve({ status: xhr.status, payload });
+        };
+        xhr.onerror = () => reject(new ApiNetworkError(new Error('Upload failed.')));
+        xhr.onabort = () => reject(new ApiAbortError('cancelled'));
+        if (options.signal) {
+          if (options.signal.aborted) return reject(new ApiAbortError('cancelled'));
+          options.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+        }
+        xhr.send(form);
+      },
+    );
+
+    if (status >= 200 && status < 300) return (payload as ApiEnvelope<T>).data;
+    if (status === 401 && !isRetryAfterRefresh && (await this.refresh())) {
+      return this.upload<T>(path, form, options, true);
+    }
+    throw ApiError.fromResponse(status, payload);
+  }
+
+  /** Where a PUBLIC file (booking-page image) is served. Null in, null out. */
+  publicFileUrl(fileId: string | null | undefined): string | null {
+    return fileId ? `${this.baseUrl}/public/files/${fileId}` : null;
+  }
+
+  /**
    * Restore a session from the refresh cookie, if there is one.
    *
    * Called once at startup. It delegates to the same single-flighted `refresh`

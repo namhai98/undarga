@@ -38,12 +38,30 @@ export interface OutgoingMessage {
    * a duplicate; the worker also refuses one before getting here.
    */
   readonly dedupeKey?: string;
+  /**
+   * Where this provider should report delivery for THIS message, when it
+   * supports per-message callbacks (Twilio). Absent when receipts are not
+   * configured; the message is then tracked to ACCEPTED only.
+   */
+  readonly statusCallbackUrl?: string;
 }
 
+/**
+ * What a provider said.
+ *
+ *   SENT       ACCEPTED by the provider for delivery — not yet delivered. A
+ *              signed delivery receipt later moves it to DELIVERED or FAILED.
+ *   DELIVERED  The provider confirmed delivery synchronously (rare).
+ *   FAILED     Refused; `retryable` says whether trying again could help.
+ *   UNKNOWN    The request left and no answer came back (a timeout). It may
+ *              or may not have been sent, so it is NOT retried automatically.
+ */
 export interface DeliveryResult {
-  readonly status: 'SENT' | 'FAILED';
+  readonly status: 'SENT' | 'DELIVERED' | 'FAILED' | 'UNKNOWN';
   readonly provider: string;
   readonly providerMessageId?: string;
+  /** The provider's own word for the state, e.g. "queued", "accepted". */
+  readonly providerStatus?: string;
   readonly failureReason?: string;
   /**
    * False for a permanent failure — a malformed address, an unsubscribed
@@ -63,6 +81,11 @@ export interface NotificationProvider {
    */
   isValidAddress(address: string): boolean;
   send(message: OutgoingMessage): Promise<DeliveryResult>;
+  /**
+   * Check the credentials without sending anything. Real providers implement
+   * it; the log and mock providers have nothing to check.
+   */
+  verify?(): Promise<{ ok: boolean; error?: string }>;
 }
 
 export const NOTIFICATION_PROVIDERS = Symbol('NOTIFICATION_PROVIDERS');

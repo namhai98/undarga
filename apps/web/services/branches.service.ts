@@ -25,6 +25,8 @@ export interface Branch {
   latitude: string | null;
   longitude: string | null;
   sortOrder: number;
+  /** Public image (booking page). Change it through the files API, not by setting this. */
+  imageFileId: string | null;
   createdAt: string;
   updatedAt: string;
 }

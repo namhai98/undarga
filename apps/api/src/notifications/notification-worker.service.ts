@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { NotificationChannel } from '@prisma/client';
+import { AppConfig } from '../config';
 import { PlatformPrismaService } from '../database/platform-prisma.service';
-import { NotificationProviderRegistry } from './providers/provider.registry';
+import type { NotificationProvider } from './providers/notification-provider';
+import {
+  NotificationProviderRegistry,
+  type ProviderConfigRow,
+} from './providers/provider.registry';
 
 /** Exponential, capped. A vendor outage should not be retried every second. */
 export const RETRY_BACKOFF_SECONDS = [60, 300, 1800];
@@ -46,6 +52,7 @@ export class NotificationWorkerService {
   constructor(
     private readonly platformDb: PlatformPrismaService,
     private readonly providers: NotificationProviderRegistry,
+    private readonly config: AppConfig,
   ) {}
 
   /**
@@ -76,20 +83,55 @@ export class NotificationWorkerService {
     let sent = 0;
     let failed = 0;
     let skipped = 0;
+    const configs = await this.companyConfigs(due);
 
     for (const notification of due) {
+      // The company's own account when it has an enabled one, else the
+      // platform's. Recorded on the row at claim time, so a receipt — which can
+      // arrive before the send call returns — is verified against the same
+      // credentials that sent it.
+      const config = configs.get(`${notification.companyId}:${notification.channel}`) ?? null;
       const claimed = await this.platformDb.notification.updateMany({
         where: { id: notification.id, status: { in: ['PENDING', 'RETRYING'] } },
-        data: { status: 'SENDING' },
+        data: { status: 'SENDING', providerConfigId: config?.id ?? null },
       });
       if (claimed.count === 0) {
         skipped += 1;
         continue;
       }
 
-      const provider = this.providers.forChannel(notification.channel);
+      let provider: NotificationProvider | null;
+      try {
+        provider = config
+          ? this.providers.forCompanyConfig(config)
+          : this.providers.forChannel(notification.channel);
+      } catch {
+        // Wrong or rotated SECRETS_ENCRYPTION_KEY. Flag the configuration so the
+        // settings screen says so; the message itself cannot be sent.
+        if (config) {
+          await this.platformDb.notificationProviderConfig.updateMany({
+            where: { id: config.id },
+            data: {
+              status: 'FAILED',
+              lastError: 'Stored credentials could not be decrypted.',
+              lastCheckedAt: new Date(),
+            },
+          });
+        }
+        await this.markFailed(
+          notification,
+          'The company’s stored provider credentials could not be read.',
+          false,
+        );
+        failed += 1;
+        continue;
+      }
       if (!provider) {
-        await this.markFailed(notification, `No provider for ${notification.channel}.`, false);
+        await this.markFailed(
+          notification,
+          `No ${notification.channel} provider is configured.`,
+          false,
+        );
         failed += 1;
         continue;
       }
@@ -102,21 +144,50 @@ export class NotificationWorkerService {
           body: notification.body ?? notification.bodyPreview ?? '',
           notificationId: notification.id,
           dedupeKey: notification.dedupeKey ?? undefined,
+          statusCallbackUrl: this.receiptUrl(provider.name, config?.id ?? null, notification.id),
         });
 
-        if (result.status === 'SENT') {
-          await this.platformDb.notification.update({
-            where: { id: notification.id },
+        if (result.status === 'SENT' || result.status === 'DELIVERED') {
+          // SENT is "accepted by the provider", not delivered. DELIVERED only
+          // when the provider confirmed delivery in the same answer.
+          const now = new Date();
+          await this.platformDb.notification.updateMany({
+            where: { id: notification.id, status: 'SENDING' },
             data: {
-              status: 'SENT',
-              sentAt: new Date(),
+              status: result.status,
+              sentAt: now,
+              ...(result.status === 'DELIVERED' ? { deliveredAt: now } : {}),
               provider: result.provider,
+              providerConfigId: config?.id ?? null,
               providerMessageId: result.providerMessageId ?? null,
+              providerStatus: result.providerStatus ?? null,
               failureReason: null,
               nextRetryAt: null,
             },
           });
           sent += 1;
+          continue;
+        }
+
+        if (result.status === 'UNKNOWN') {
+          // Retrying might send it twice; a person decides (POST …/retry).
+          await this.platformDb.notification.updateMany({
+            where: { id: notification.id, status: 'SENDING' },
+            data: {
+              status: 'UNKNOWN',
+              provider: result.provider,
+              providerConfigId: config?.id ?? null,
+              failureReason: (result.failureReason ?? 'The provider did not answer.').slice(
+                0,
+                1000,
+              ),
+              nextRetryAt: null,
+            },
+          });
+          this.logger.warn(
+            `Notification ${notification.id}: outcome unknown (${result.provider}).`,
+          );
+          failed += 1;
           continue;
         }
 
@@ -142,6 +213,39 @@ export class NotificationWorkerService {
     }
 
     return { sent, failed, skipped };
+  }
+
+  /** Each company's enabled own-account configs for the channels in a batch. */
+  private async companyConfigs(batch: Array<{ companyId: string; channel: NotificationChannel }>) {
+    const map = new Map<string, ProviderConfigRow>();
+    if (batch.length === 0) return map;
+    const rows = await this.platformDb.notificationProviderConfig.findMany({
+      where: {
+        isEnabled: true,
+        companyId: { in: [...new Set(batch.map((n) => n.companyId))] },
+      },
+      select: {
+        id: true,
+        companyId: true,
+        channel: true,
+        provider: true,
+        credentials: true,
+        settings: true,
+        updatedAt: true,
+      },
+    });
+    for (const row of rows) map.set(`${row.companyId}:${row.channel}`, row);
+    return map;
+  }
+
+  /**
+   * The per-message receipt URL for providers that take one (Twilio). The
+   * source segment says whose credentials verify it: `platform` or a config id.
+   */
+  private receiptUrl(provider: string, configId: string | null, notificationId: string) {
+    const base = this.config.notificationProviders.webhookBaseUrl;
+    if (!base || provider !== 'twilio') return undefined;
+    return `${base}/${this.config.app.apiPrefix}/v1/notifications/receipts/twilio/${configId ?? 'platform'}?n=${notificationId}`;
   }
 
   private async recoverStale(now: Date, scope: { companyId?: string }) {

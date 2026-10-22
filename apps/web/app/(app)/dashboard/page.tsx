@@ -134,6 +134,30 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Booking page images</CardTitle>
+          <CardDescription>Your logo and branch pictures.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/booking-page-images" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Manage images
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Calendar integration</CardTitle>
+          <CardDescription>Put appointments in staff Google or Outlook calendars.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/calendar" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Connect calendars
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Services</CardTitle>
           <CardDescription>What customers can book, and how it is grouped.</CardDescription>
         </CardHeader>

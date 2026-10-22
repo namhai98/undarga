@@ -10,10 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCan } from '@/features/auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCan, useSession } from '@/features/auth';
+import { ImageUpload } from '@/features/media';
 import { currencyFormat } from '@/lib/currency';
 import { ApiError } from '@/services/api-error';
-import { useCustomer, useCustomerAppointments, useDeleteCustomer } from '../api/use-customers';
+import {
+  customerKeys,
+  useCustomer,
+  useCustomerAppointments,
+  useDeleteCustomer,
+} from '../api/use-customers';
 import { CustomerForm } from './customer-form';
 
 /**
@@ -41,6 +48,8 @@ export function CustomerDetail({
   const [error, setError] = useState<string | null>(null);
 
   const canWrite = useCan('customer:write');
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
   const canReadHistory = useCan('appointment:read:any');
 
   const customer = useCustomer(customerId);
@@ -131,6 +140,23 @@ export function CustomerDetail({
           </div>
         ) : null}
       </header>
+
+      <ImageUpload
+        purpose="CUSTOMER_PHOTO"
+        targetId={customerId}
+        fileId={detail.photoFileId}
+        label="Photo"
+        hint="Staff only — never shown on the booking page."
+        visibility="PRIVATE"
+        shape="round"
+        canEdit={canWrite}
+        onChange={() => {
+          if (activeCompanyId)
+            void queryClient.invalidateQueries({
+              queryKey: customerKeys.detail(activeCompanyId, customerId),
+            });
+        }}
+      />
 
       {error ? (
         <Alert variant="destructive" role="alert">

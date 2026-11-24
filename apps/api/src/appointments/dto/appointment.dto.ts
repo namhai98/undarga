@@ -65,13 +65,17 @@ export const rescheduleAppointmentSchema = z
     resourceId: z.string().uuid().optional(),
     // Stored as `RESCHEDULED: <reason>` in a 512-character column.
     reason: z.string().trim().max(400).optional(),
+    /** Confirms a move after the rescheduling deadline. Recorded as a late change. */
+    lateChange: z.boolean().optional(),
   })
   .strict();
 export type RescheduleAppointmentDto = z.infer<typeof rescheduleAppointmentSchema>;
 
 export const cancelAppointmentSchema = z
   .object({
-    reason: z.string().trim().min(1, 'A cancellation reason is required.').max(512),
+    reason: z.string().trim().min(1, 'A cancellation reason is required.').max(480),
+    /** Confirms a cancellation after the deadline. Recorded as a late cancellation. */
+    lateCancellation: z.boolean().optional(),
   })
   .strict();
 export type CancelAppointmentDto = z.infer<typeof cancelAppointmentSchema>;
@@ -121,3 +125,70 @@ export function parseStatuses(value: string | undefined) {
     ? (value.split(',').map((s) => s.trim()) as Array<(typeof appointmentStatuses)[number]>)
     : undefined;
 }
+
+// ===========================================================================
+// Recurring series
+// ===========================================================================
+
+export const recurrenceSchema = z
+  .object({
+    frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
+    /** Every N days / weeks / months. */
+    interval: z.number().int().min(1).max(12).default(1),
+    /** WEEKLY only: 0 = Sunday … 6 = Saturday. Default: the first date's weekday. */
+    weekdays: z
+      .array(z.number().int().min(0).max(6))
+      .max(7)
+      .refine((v) => new Set(v).size === v.length, 'Each weekday may appear once.')
+      .optional(),
+    /** End on this date (inclusive), or after `count` occurrences — exactly one. */
+    endDate: date.optional(),
+    count: z.number().int().min(1).max(52).optional(),
+  })
+  .strict()
+  .refine((r) => (r.endDate === undefined) !== (r.count === undefined), {
+    message: 'Give either an end date or a number of occurrences.',
+    path: ['endDate'],
+  })
+  .refine((r) => r.frequency === 'WEEKLY' || !r.weekdays?.length, {
+    message: 'Weekdays apply to weekly series only.',
+    path: ['weekdays'],
+  });
+
+export const createSeriesSchema = z
+  .object({
+    branchId: z.string().uuid(),
+    customerId: z.string().uuid(),
+    serviceId: z.string().uuid(),
+    employeeId: z.string().uuid().optional(),
+    resourceId: z.string().uuid().optional(),
+    /** The FIRST occurrence. Its wall-clock time in the branch zone is what recurs. */
+    startsAt: instant,
+    recurrence: recurrenceSchema,
+    /**
+     * `fail` (default): if any occurrence cannot be booked, nothing is created.
+     * `skip`: create the bookable ones; the rest are reported, never forced.
+     */
+    onConflict: z.enum(['fail', 'skip']).default('fail'),
+    source: z.enum(bookingSources).default('STAFF'),
+    customerNote: note.nullable().optional(),
+    internalNote: note.nullable().optional(),
+  })
+  .strict();
+export type CreateSeriesDto = z.infer<typeof createSeriesSchema>;
+
+export const cancelSeriesSchema = z
+  .object({
+    /** `occurrence`: one (`appointmentId`). `future`: every occurrence from `from` (default now). */
+    scope: z.enum(['occurrence', 'future']),
+    appointmentId: z.string().uuid().optional(),
+    from: instant.optional(),
+    reason: z.string().trim().min(1, 'A cancellation reason is required.').max(480),
+    lateCancellation: z.boolean().optional(),
+  })
+  .strict()
+  .refine((v) => v.scope !== 'occurrence' || !!v.appointmentId, {
+    message: 'Say which occurrence to cancel.',
+    path: ['appointmentId'],
+  });
+export type CancelSeriesDto = z.infer<typeof cancelSeriesSchema>;

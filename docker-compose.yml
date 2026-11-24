@@ -26,7 +26,8 @@ services:
       # Deterministic collation, so index ordering matches across machines.
       POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
     ports:
-      - '5432:5432'
+      # Loopback only: the dev database has a well-known password.
+      - '127.0.0.1:5432:5432'
     volumes:
       # Mounted at /var/lib/postgresql, NOT .../data.
       #
@@ -57,7 +58,8 @@ services:
     # appendonly so booking holds and rate-limit counters survive a restart.
     command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1']
     ports:
-      - '6379:6379'
+      # Loopback only: Redis has no password in development.
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis-data:/data
     healthcheck:

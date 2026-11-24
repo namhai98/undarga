@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, type AppointmentStatus } from '@prisma/client';
+import { loadBookingRules } from '../booking-rules/booking-rules';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AvailabilityService } from '../availability/availability.service';
 import {
@@ -180,7 +181,7 @@ export class CustomerPortalService {
             coupon: { select: { code: true } },
           },
         }),
-        this.rules(tx, actor.companyId, row.branchId),
+        this.rules(tx, actor.companyId, row.branchId, appointmentId),
         this.hasOpenOnlinePayment(tx, actor.companyId, appointmentId),
       ]);
 
@@ -250,7 +251,11 @@ export class CustomerPortalService {
         customer: {
           customerId: actor.companyCustomerId,
           guard: (startsAt) =>
-            assertBeforeDeadline('reschedule', startsAt, rules.cancellationWindowHours),
+            assertBeforeDeadline(
+              'reschedule',
+              startsAt,
+              rules.rescheduleWindowHours ?? rules.cancellationWindowHours,
+            ),
         },
       },
     );
@@ -429,7 +434,7 @@ export class CustomerPortalService {
       await this.me(tx, actor);
       const row = await this.ownAppointment(tx, actor, appointmentId);
       const [rules, openOnline] = await Promise.all([
-        this.rules(tx, actor.companyId, row.branchId),
+        this.rules(tx, actor.companyId, row.branchId, appointmentId),
         this.hasOpenOnlinePayment(tx, actor.companyId, appointmentId),
       ]);
       const verdict = customerActions(row, rules, {
@@ -496,27 +501,28 @@ export class CustomerPortalService {
     return row;
   }
 
-  /** The business's rules, branch overrides first — as the engine reads them. */
-  private async rules(tx: TenantTx, companyId: string, branchId: string): Promise<Rules> {
-    const [company, branch] = await Promise.all([
-      tx.companySettings.findFirst({
-        where: { companyId },
-        select: {
-          allowCustomerCancel: true,
-          allowCustomerReschedule: true,
-          cancellationWindowHours: true,
-        },
-      }),
-      tx.branchSettings.findFirst({
-        where: { companyId, branchId },
-        select: { cancellationWindowHours: true },
-      }),
-    ]);
+  /**
+   * The business's rules for this appointment — service, then branch, then
+   * company — through the same resolver staff and public booking use.
+   */
+  private async rules(
+    tx: TenantTx,
+    companyId: string,
+    branchId: string,
+    appointmentId: string,
+  ): Promise<Rules> {
+    const item = await tx.appointmentItem.findFirst({
+      where: { companyId, appointmentId },
+      orderBy: { sequence: 'asc' },
+      select: { serviceId: true },
+    });
+    const rules = await loadBookingRules(tx, companyId, { branchId, serviceId: item?.serviceId });
     return {
-      allowCancel: company?.allowCustomerCancel ?? true,
-      allowReschedule: company?.allowCustomerReschedule ?? true,
-      cancellationWindowHours:
-        branch?.cancellationWindowHours ?? company?.cancellationWindowHours ?? 24,
+      allowCancel: rules.allowCustomerCancel,
+      // The business-wide switch binds customers as much as staff.
+      allowReschedule: rules.allowCustomerReschedule && rules.reschedulingAllowed,
+      cancellationWindowHours: rules.cancellationDeadlineHours,
+      rescheduleWindowHours: rules.rescheduleDeadlineHours,
     };
   }
 
@@ -536,6 +542,8 @@ interface Rules {
   allowCancel: boolean;
   allowReschedule: boolean;
   cancellationWindowHours: number;
+  /** Defaults to the cancellation window. */
+  rescheduleWindowHours?: number;
 }
 
 /**
@@ -555,8 +563,12 @@ export function customerActions(
   money: { paidMinor: bigint; openOnline: boolean },
   now = new Date(),
 ): { cancel: ActionVerdict; reschedule: ActionVerdict } {
-  const deadline = new Date(row.startsAt.getTime() - rules.cancellationWindowHours * 3_600_000);
   const verdict = (action: 'cancel' | 'reschedule'): ActionVerdict => {
+    const hours =
+      action === 'reschedule'
+        ? (rules.rescheduleWindowHours ?? rules.cancellationWindowHours)
+        : rules.cancellationWindowHours;
+    const deadline = new Date(row.startsAt.getTime() - hours * 3_600_000);
     const no = (
       reason: CustomerActionRefusal,
       message: string,
@@ -593,7 +605,7 @@ export function customerActions(
     if (now > deadline) {
       return no(
         'PAST_DEADLINE',
-        `Appointments can be ${verb} online until ${rules.cancellationWindowHours} hours before they start. Please contact the business.`,
+        `Appointments can be ${verb} online until ${hours} hours before they start. Please contact the business.`,
         true,
       );
     }

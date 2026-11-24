@@ -185,12 +185,7 @@ export class AuthService {
     }
 
     if (session.revokedAt || session.replacedById) {
-      const killed = await this.identity.revokeStaffSessionFamily(session.familyId);
-      killed.forEach((id) => this.denyList.revoke(id));
-      this.logger.warn(
-        `Refresh token reuse detected for family ${session.familyId}; ${killed.length} sessions revoked`,
-      );
-      throw new RefreshTokenReusedError();
+      return this.rejectReuse(session.familyId);
     }
 
     if (session.expiresAt.getTime() <= Date.now()) {
@@ -237,6 +232,8 @@ export class AuthService {
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
+    // Another request rotated this token between our read and our write.
+    if (!next) return this.rejectReuse(session.familyId);
 
     this.denyList.revoke(session.id);
 
@@ -257,6 +254,16 @@ export class AuthService {
       activeCompanyId: active?.companyId,
       memberships: memberships.map(toSummary),
     };
+  }
+
+  /** A rotated token came back: kill the family and refuse. */
+  private async rejectReuse(familyId: string): Promise<never> {
+    const killed = await this.identity.revokeStaffSessionFamily(familyId);
+    killed.forEach((id) => this.denyList.revoke(id));
+    this.logger.warn(
+      `Refresh token reuse detected for family ${familyId}; ${killed.length} sessions revoked`,
+    );
+    throw new RefreshTokenReusedError();
   }
 
   async logoutStaff(sessionId: string): Promise<void> {
@@ -293,8 +300,20 @@ export class AuthService {
       throw new InvalidCredentialsError();
     }
 
+    // Locked out: the same error and the same work as a wrong password, so the
+    // response says nothing about whether the account exists or is locked.
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      await this.passwords.verify(null, password);
+      throw new InvalidCredentialsError();
+    }
+
     const ok = await this.passwords.verify(user.passwordHash, password);
-    if (!ok || user.status !== 'ACTIVE') {
+    if (!ok) {
+      await this.identity.recordPlatformLoginFailure(user.id);
+      this.logger.warn(`Failed platform sign-in for operator ${user.id}`);
+      throw new InvalidCredentialsError();
+    }
+    if (user.status !== 'ACTIVE') {
       throw new InvalidCredentialsError();
     }
 

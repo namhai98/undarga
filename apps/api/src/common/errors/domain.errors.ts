@@ -338,8 +338,62 @@ export class ServiceNotBookableError extends DomainError {
 export class SlotUnavailableError extends DomainError {
   readonly code = 'SLOT_UNAVAILABLE' as const;
   readonly status = 409;
-  constructor(details: { reason: string; startsAt: string }) {
-    super('That time is no longer available. Choose another slot.', details);
+  constructor(details: { reason: string; startsAt: string; [key: string]: unknown }) {
+    super(SLOT_UNAVAILABLE_MESSAGES[details.reason] ?? 'That time is no longer available. Choose another slot.', details);
+  }
+}
+
+/** Why a time cannot be booked, in words a front desk can repeat to a customer. */
+const SLOT_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  MINIMUM_NOTICE: 'That time is too soon: bookings need more notice. Choose a later time.',
+  BEYOND_BOOKING_WINDOW: 'That date is too far ahead to book yet.',
+  DATE_IN_PAST: 'That time has already passed.',
+  EMPLOYEE_TIME_OFF: 'The chosen staff member is away at that time.',
+  EMPLOYEE_NOT_AVAILABLE: 'The chosen staff member is not available at that time.',
+  RESOURCE_UNAVAILABLE: 'The room or equipment this service needs is unavailable at that time.',
+  RESOURCE_NOT_AVAILABLE: 'The chosen room or equipment is not available at that time.',
+  MAX_CONCURRENT_BOOKINGS: 'That time is fully booked for this service.',
+  BRANCH_CLOSED: 'The branch is closed at that time.',
+  NO_ELIGIBLE_EMPLOYEE: 'Nobody who performs this service is available at that time.',
+};
+
+/** A cancellation or rescheduling rule refuses the change. */
+export class BookingRuleViolationError extends DomainError {
+  readonly code = 'BOOKING_RULE_VIOLATION' as const;
+  readonly status = 422;
+  constructor(
+    rule: 'CANCELLATION_DEADLINE' | 'RESCHEDULE_DEADLINE' | 'RESCHEDULING_DISABLED',
+    details: Record<string, unknown> = {},
+  ) {
+    super(
+      rule === 'RESCHEDULING_DISABLED'
+        ? 'This business does not allow appointments to be rescheduled. Cancel and book again instead.'
+        : rule === 'CANCELLATION_DEADLINE'
+          ? 'The cancellation deadline for this appointment has passed. Confirm it as a late cancellation to go ahead.'
+          : 'The rescheduling deadline for this appointment has passed. Confirm it as a late change to go ahead.',
+      { rule, ...details },
+    );
+  }
+}
+
+/** Some occurrences of a recurring series cannot be booked; nothing was created. */
+export class SeriesConflictError extends DomainError {
+  readonly code = 'SERIES_CONFLICT' as const;
+  readonly status = 409;
+  constructor(occurrences: unknown[]) {
+    super('Some dates in this series cannot be booked. Nothing was created.', { occurrences });
+  }
+}
+
+/** Approved time off would overlap appointments that are already booked. */
+export class TimeOffConflictError extends DomainError {
+  readonly code = 'TIME_OFF_CONFLICT' as const;
+  readonly status = 409;
+  constructor(appointments: unknown[]) {
+    super(
+      'This time off overlaps booked appointments. Move or cancel them first, or confirm to record it anyway.',
+      { appointments },
+    );
   }
 }
 

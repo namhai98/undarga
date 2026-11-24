@@ -187,6 +187,32 @@ describe('customer portal', () => {
       await as().post(`/customer/auth/${SLUG}/verify`, { email, code }).expect(401);
     });
 
+    it('counts every one of many parallel wrong guesses', async () => {
+      const email = newEmail('parallel-guess');
+      await bookAs(email, at(19, '10:00'));
+      const spy = jest.spyOn(mailer, 'sendCustomerSignInCode').mockResolvedValue();
+      await as().post(`/customer/auth/${SLUG}/request-code`, { email }).expect(202);
+      const code = spy.mock.calls[0]![0].code;
+      const wrong = (n: number) => String((Number(code) + 1 + n) % 1_000_000).padStart(6, '0');
+
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_, n) =>
+          as().post(`/customer/auth/${SLUG}/verify`, { email, code: wrong(n) }),
+        ),
+      );
+      expect(results.every((r) => r.status === 401)).toBe(true);
+
+      const customer = await customerByEmail(email);
+      const row = await harness.prisma.customerLoginCode.findFirstOrThrow({
+        where: { companyCustomerId: customer.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      // Read-then-write would lose most of these to one another.
+      expect(row.attempts).toBeGreaterThanOrEqual(5);
+      expect(row.consumedAt).not.toBeNull();
+      await as().post(`/customer/auth/${SLUG}/verify`, { email, code }).expect(401);
+    });
+
     it('stops sending codes after five an hour, without saying so', async () => {
       const email = newEmail('cap');
       await bookAs(email, at(9, '17:00'));
@@ -229,6 +255,37 @@ describe('customer portal', () => {
       expect(reused.body.error.code).toBe('REFRESH_TOKEN_REUSED');
       await request(http).post(api(`/customer/auth/${SLUG}/refresh`)).set('Cookie', next).expect(401);
       await as(newToken).get('/customer/me').expect(401);
+    });
+
+    it('two refreshes racing on one cookie: one rotates, the other is caught as reuse', async () => {
+      const email = newEmail('race');
+      await bookAs(email, at(19, '12:00'));
+      const { token, cookie } = await signIn(email);
+      const refresh = () =>
+        request(http).post(api(`/customer/auth/${SLUG}/refresh`)).set('Cookie', cookie);
+
+      const results = await Promise.all([refresh(), refresh(), refresh()]);
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      expect(results.filter((r) => r.status === 401)).toHaveLength(2);
+      expect(results.map((r) => r.body.error?.code)).toContain('REFRESH_TOKEN_REUSED');
+
+      const winner = results.find((r) => r.status === 200)!;
+      // The family is gone, and so is the old access token.
+      await as(winner.body.data.accessToken as string).get('/customer/me').expect(401);
+      await as(token).get('/customer/me').expect(401);
+    });
+
+    it('stops the old access token as soon as the session rotates', async () => {
+      const email = newEmail('rotate-deny');
+      await bookAs(email, at(19, '14:00'));
+      const { token, cookie } = await signIn(email);
+      await as(token).get('/customer/me').expect(200);
+      const refreshed = await request(http)
+        .post(api(`/customer/auth/${SLUG}/refresh`))
+        .set('Cookie', cookie)
+        .expect(200);
+      await as(token).get('/customer/me').expect(401);
+      await as(refreshed.body.data.accessToken as string).get('/customer/me').expect(200);
     });
 
     it('ends the session on sign-out', async () => {

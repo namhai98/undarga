@@ -45,6 +45,30 @@ describe('session cookie', () => {
     expect(res.body.data.refreshToken).toBeUndefined();
   });
 
+  it('two refreshes racing on one cookie: one rotates, the other is caught as reuse', async () => {
+    const login = await request(http)
+      .post('/api/v1/auth/login')
+      .send({ email: world.userA.email, password: TEST_PASSWORD })
+      .expect(200);
+    const cookie = asCookies(login.headers['set-cookie']);
+
+    const results = await Promise.all(
+      [1, 2, 3].map(() => request(http).post('/api/v1/auth/refresh').set('Cookie', cookie)),
+    );
+    // Never two live sessions from one token, however the requests interleave.
+    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+    const refused = results.filter((r) => r.status === 401);
+    expect(refused).toHaveLength(2);
+    expect(refused.map((r) => r.body.error.code)).toContain('REFRESH_TOKEN_REUSED');
+
+    // Reuse kills the family, including the winner's new session.
+    const winner = results.find((r) => r.status === 200)!;
+    await request(http)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', asCookies(winner.headers['set-cookie']))
+      .expect(401);
+  });
+
   it('refuses a refresh with no cookie', async () => {
     await request(http).post('/api/v1/auth/refresh').expect(401);
   });

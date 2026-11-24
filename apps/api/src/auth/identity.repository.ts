@@ -345,6 +345,17 @@ export class IdentityRepository {
     userAgent?: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
+      // Claim the old session first, conditionally. Two refreshes racing on one
+      // token both read it as live; only one of these updates can match, and
+      // the loser gets null — which the caller treats as reuse, exactly like a
+      // token presented after it was rotated.
+      const now = new Date();
+      const claimed = await tx.userSession.updateMany({
+        where: { id: input.previousSessionId, revokedAt: null, replacedById: null },
+        data: { revokedAt: now },
+      });
+      if (claimed.count === 0) return null;
+
       const next = await tx.userSession.create({
         data: {
           userAccountId: input.userAccountId,
@@ -360,7 +371,7 @@ export class IdentityRepository {
 
       await tx.userSession.update({
         where: { id: input.previousSessionId },
-        data: { revokedAt: new Date(), replacedById: next.id },
+        data: { replacedById: next.id },
       });
 
       return next;
@@ -439,6 +450,7 @@ export class IdentityRepository {
         passwordHash: true,
         status: true,
         mfaEnrolledAt: true,
+        lockedUntil: true,
       },
     });
   }
@@ -474,7 +486,26 @@ export class IdentityRepository {
   async recordPlatformLogin(platformUserId: string): Promise<void> {
     await this.prisma.platformUser.update({
       where: { id: platformUserId },
-      data: { lastLoginAt: new Date() },
+      data: { lastLoginAt: new Date(), failedLoginCount: 0, lockedUntil: null },
     });
+  }
+
+  /**
+   * Count a failed platform sign-in and lock the account after a threshold.
+   * Stricter than staff (5, not 10): these accounts can reach every company.
+   */
+  async recordPlatformLoginFailure(platformUserId: string, threshold = 5): Promise<void> {
+    const updated = await this.prisma.platformUser.update({
+      where: { id: platformUserId },
+      data: { failedLoginCount: { increment: 1 } },
+      select: { failedLoginCount: true },
+    });
+
+    if (updated.failedLoginCount >= threshold) {
+      await this.prisma.platformUser.update({
+        where: { id: platformUserId },
+        data: { lockedUntil: new Date(Date.now() + 15 * 60_000), failedLoginCount: 0 },
+      });
+    }
   }
 }

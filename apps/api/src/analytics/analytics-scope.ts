@@ -85,6 +85,12 @@ export class AnalyticsScopeService {
   }
 
   async resolve(tx: TenantTx, companyId: string, query: ReportQueryDto): Promise<ReportScope> {
+    // Plan every report query for its actual dates and filters. Prisma runs
+    // raw SQL as prepared statements, and after a few executions Postgres may
+    // switch to a generic plan that ignores the parameter values; for these
+    // joins that plan was measured 4–15x slower (docs/PERFORMANCE.md).
+    // Transaction-local: nothing outside this report is affected.
+    await tx.$executeRaw`SET LOCAL plan_cache_mode = force_custom_plan`;
     const timezone = this.timezone;
     const { branchIds, branchRestricted } = await this.branchIds(tx, companyId, query.branchId);
 
@@ -162,7 +168,7 @@ export function appointmentWhere(scope: ReportScope): Prisma.Sql {
         a.company_id = ${scope.companyId}::uuid
     AND a.starts_at >= ${scope.start}
     AND a.starts_at <  ${scope.end}
-    AND a.status::text = ANY(${scope.statuses}::text[])
+    AND a.status = ANY(${scope.statuses}::appointment_status[])
     ${branchOn(scope, Prisma.sql`a.branch_id`)}
     ${itemExists(scope)}
   `;
@@ -171,13 +177,22 @@ export function appointmentWhere(scope: ReportScope): Prisma.Sql {
 /**
  * Conditions on `appointment_item i JOIN appointment a` for item-level
  * breakdowns: the employee/service filters apply to the item itself.
+ *
+ * The `i.starts_at` bounds are redundant, for the planner: an item never
+ * starts before its appointment (both are written with the same start), and
+ * the upper bound leaves a week of margin, so they drop nothing the
+ * appointment range keeps. They let the item side be read by date range
+ * instead of in full, so a report costs what its period holds, not the
+ * company's whole history (docs/PERFORMANCE.md).
  */
 export function itemWhere(scope: ReportScope): Prisma.Sql {
   return Prisma.sql`
         i.company_id = ${scope.companyId}::uuid
     AND a.starts_at >= ${scope.start}
     AND a.starts_at <  ${scope.end}
-    AND a.status::text = ANY(${scope.statuses}::text[])
+    AND i.starts_at >= ${scope.start}
+    AND i.starts_at <  ${scope.end}::timestamptz + interval '7 days'
+    AND a.status = ANY(${scope.statuses}::appointment_status[])
     ${branchOn(scope, Prisma.sql`a.branch_id`)}
     ${scope.employeeId ? Prisma.sql`AND i.employee_id = ${scope.employeeId}::uuid` : Prisma.empty}
     ${scope.serviceId ? Prisma.sql`AND i.service_id = ${scope.serviceId}::uuid` : Prisma.empty}

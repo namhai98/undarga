@@ -6,6 +6,9 @@ import {
   appointmentsService,
   type AppointmentDetail,
   type AppointmentQuery,
+  type AppointmentSeries,
+  type CancelSeriesInput,
+  type CreateSeriesInput,
   type CreateAppointmentInput,
   type StatusAction,
 } from '@/services/appointments.service';
@@ -17,6 +20,8 @@ export const appointmentKeys = {
     [...appointmentKeys.all(companyId), 'list', query] as const,
   detail: (companyId: string, appointmentId: string) =>
     [...appointmentKeys.all(companyId), appointmentId] as const,
+  series: (companyId: string, seriesId: string) =>
+    [...appointmentKeys.all(companyId), 'series', seriesId] as const,
 };
 
 export function useAppointments(query: AppointmentQuery = {}) {
@@ -90,8 +95,16 @@ export function useCancelAppointment(appointmentId: string) {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateBookings();
 
-  return useMutation<AppointmentDetail, unknown, string>({
-    mutationFn: (reason) => appointmentsService.cancel(activeCompanyId!, appointmentId, reason),
+  // A plain reason, or { reason, lateCancellation } to confirm a late cancellation.
+  return useMutation<
+    AppointmentDetail,
+    unknown,
+    string | { reason: string; lateCancellation?: boolean }
+  >({
+    mutationFn: (input) =>
+      typeof input === 'string'
+        ? appointmentsService.cancel(activeCompanyId!, appointmentId, input)
+        : appointmentsService.cancel(activeCompanyId!, appointmentId, input.reason, input.lateCancellation),
     onSuccess: (appointment) => {
       queryClient.setQueryData(appointmentKeys.detail(activeCompanyId!, appointmentId), appointment);
       void invalidate();
@@ -106,10 +119,47 @@ export function useRescheduleAppointment(appointmentId: string) {
   return useMutation<
     AppointmentDetail,
     unknown,
-    { startsAt: string; employeeId?: string; reason?: string }
+    { startsAt: string; employeeId?: string; reason?: string; lateChange?: boolean }
   >({
     mutationFn: (input) => appointmentsService.reschedule(activeCompanyId!, appointmentId, input),
     onSuccess: () => invalidate(),
     onError: () => invalidate(),
+  });
+}
+
+/** Checks every date of a recurring series; creates nothing. */
+export function usePreviewSeries() {
+  const { activeCompanyId } = useSession();
+  return useMutation({
+    mutationFn: (input: CreateSeriesInput) => appointmentsService.previewSeries(activeCompanyId!, input),
+  });
+}
+
+export function useCreateSeries() {
+  const { activeCompanyId } = useSession();
+  const invalidate = useInvalidateBookings();
+  return useMutation({
+    mutationFn: (input: CreateSeriesInput) => appointmentsService.createSeries(activeCompanyId!, input),
+    onSuccess: () => invalidate(),
+    onError: () => invalidate(),
+  });
+}
+
+export function useSeries(seriesId: string | null | undefined) {
+  const { activeCompanyId } = useSession();
+  return useQuery<AppointmentSeries>({
+    queryKey: appointmentKeys.series(activeCompanyId ?? 'none', seriesId ?? 'none'),
+    queryFn: ({ signal }) => appointmentsService.getSeries(activeCompanyId!, seriesId!, signal),
+    enabled: Boolean(activeCompanyId && seriesId),
+  });
+}
+
+export function useCancelSeries(seriesId: string) {
+  const { activeCompanyId } = useSession();
+  const invalidate = useInvalidateBookings();
+  return useMutation({
+    mutationFn: (input: CancelSeriesInput) =>
+      appointmentsService.cancelSeries(activeCompanyId!, seriesId, input),
+    onSuccess: () => invalidate(),
   });
 }

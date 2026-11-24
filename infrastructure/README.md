@@ -1,14 +1,15 @@
 # Infrastructure
 
     docker/
-      postgres/init/   first-start SQL, creates the e2e database
-      api.Dockerfile   production image for apps/api
-      web.Dockerfile   production image for apps/web
+      postgres/init/                       first-start SQL, creates the e2e database
+      api.Dockerfile                       API image; `--target migrate` = migration job
+      web.Dockerfile                       web image (Next standalone; NEXT_PUBLIC_API_URL build arg)
+      compose.production.example.yml       single-host production layout — an example to adapt
 
-`docker-compose.yml` at the repository root runs PostgreSQL and Redis only. The
-apps run on the host during development — see the note at the top of that file
-for why.
+`docker-compose.yml` at the repository root runs PostgreSQL and Redis only, for
+development (bound to 127.0.0.1). The apps run on the host — see the note at
+the top of that file.
 
-Neither Dockerfile is exercised by CI yet, so treat both as a starting point
-rather than a verified build. `web.Dockerfile` additionally needs
-`output: 'standalone'` in `apps/web/next.config.ts`.
+CI (`.github/workflows/ci.yml`) builds all three images after every check
+passes. Building, releasing, migrations, backups and monitoring:
+[docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).

@@ -1,8 +1,11 @@
-import { INestApplication, VersioningType } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../../src/app.module';
 import { AuthService } from '../../src/auth/auth.service';
+import { configureApp } from '../../src/bootstrap/configure-app';
+import { AppConfig } from '../../src/config';
 import { ProbeModule } from './probe.module';
 import { TEST_PASSWORD } from './seed';
 
@@ -63,9 +66,9 @@ export async function createTestHarness(options: HarnessOptions = {}): Promise<T
   const moduleRef = await (options.override ? options.override(builder) : builder).compile();
 
   // rawBody, as in main.ts: webhook signatures are verified over raw bytes.
-  const app = moduleRef.createNestApplication({ rawBody: true });
-  app.setGlobalPrefix('api');
-  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ rawBody: true });
+  // The production HTTP setup: security headers, trust proxy, CORS, prefix.
+  configureApp(app, app.get(AppConfig));
   await app.init();
 
   const auth = app.get(AuthService);

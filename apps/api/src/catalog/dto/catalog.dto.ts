@@ -152,6 +152,17 @@ const serviceFields = {
 
   color: hexColor.nullable().optional(),
   sortOrder: z.number().int().min(0).max(32_767).optional(),
+
+  /**
+   * Service-specific booking rules. `null` = use the branch's, then the
+   * company's (GET /booking-settings). Applied to staff and public booking,
+   * rescheduling and recurring series alike.
+   */
+  bookingLeadTimeMin: z.number().int().min(0).max(43_200).nullable().optional(),
+  maxAdvanceBookingDays: z.number().int().min(1).max(730).nullable().optional(),
+  cancellationWindowHours: z.number().int().min(0).max(720).nullable().optional(),
+  /** At most this many appointments of this service may overlap at a branch. */
+  maxConcurrentBookings: z.number().int().min(1).max(500).nullable().optional(),
 };
 
 export const createServiceSchema = z

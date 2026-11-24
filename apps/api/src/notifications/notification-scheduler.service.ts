@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { drain } from '../common/jobs/drain';
 import { AppConfig } from '../config';
 import { NotificationDispatcherService } from './notification-dispatcher.service';
 import { NotificationReminderService } from './notification-reminder.service';
@@ -61,9 +62,10 @@ export class NotificationSchedulerService implements OnApplicationBootstrap, OnM
     this.logger.log(`Notification worker polling every ${workerIntervalMs} ms.`);
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await drain(this.running, 'notification run', this.logger);
   }
 
   /**

@@ -7,7 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
 import { useBranches } from '@/features/branches';
 import { useEmployees } from '@/features/employees';
-import type { AvailabilityUnavailableReason } from '@/services/availability.service';
+import type {
+  AvailabilityDay,
+  AvailabilityUnavailableReason,
+} from '@/services/availability.service';
 import { useAvailability, useBookableServices } from '../api/use-availability';
 
 const selectClass =
@@ -206,6 +209,55 @@ export function AvailabilityExplorer() {
           <p className="text-muted-foreground mt-1 text-sm">Try another date or branch.</p>
         </div>
       )}
+
+      {ready && day ? (
+        <DayDetails
+          day={day}
+          nameOf={(id) =>
+            employees.data?.items.find((e) => e.id === id)?.displayName ?? 'Staff member'
+          }
+        />
+      ) : null}
     </section>
   );
+}
+
+/** The rules behind the day, and who is away — so an empty day explains itself. */
+function DayDetails({ day, nameOf }: { day: AvailabilityDay; nameOf: (id: string) => string }) {
+  const away = day.employeesUnavailable ?? [];
+  if (!day.rules && away.length === 0) return null;
+  return (
+    <div className="grid gap-2 text-sm" aria-label="Booking rules and absences">
+      {day.rules ? (
+        <p className="text-muted-foreground text-xs">
+          Rules: at least {describeNotice(day.rules.minimumNoticeMinutes)} notice · up to{' '}
+          {day.rules.maximumAdvanceDays} days ahead
+          {day.rules.maxConcurrentBookings
+            ? ` · at most ${day.rules.maxConcurrentBookings} at once`
+            : ''}
+        </p>
+      ) : null}
+      {away.length ? (
+        <div className="grid gap-1">
+          <p className="font-medium">Unavailable staff</p>
+          <ul className="text-muted-foreground grid gap-0.5 text-xs">
+            {away.map((a, i) => (
+              <li key={`${a.employeeId}-${i}`} className="tabular-nums">
+                {nameOf(a.employeeId)}: {a.from.slice(0, 10)} {hhmm(a.from)} → {a.to.slice(0, 10)}{' '}
+                {hhmm(a.to)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** 90 → "90 minutes", 120 → "2 hours", 1440 → "1 day". */
+function describeNotice(minutes: number): string {
+  const unit = (n: number, u: string) => `${n} ${u}${n === 1 ? '' : 's'}`;
+  if (minutes > 0 && minutes % 1440 === 0) return unit(minutes / 1440, 'day');
+  if (minutes > 0 && minutes % 60 === 0) return unit(minutes / 60, 'hour');
+  return unit(minutes, 'minute');
 }

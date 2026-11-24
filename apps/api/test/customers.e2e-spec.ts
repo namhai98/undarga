@@ -516,6 +516,43 @@ describe('customers', () => {
       expect(res.body.data.appointmentCount).toBe(1);
     });
 
+    // The list counts appointments for the page's customers in one grouped
+    // query (docs/PERFORMANCE.md); each row must still get its own count.
+    it('counts appointments per customer in the list', async () => {
+      const tag = `cnt${Date.now()}`;
+      const busy = await makeCustomer({ firstName: `${tag}Busy` });
+      const idle = await makeCustomer({ firstName: `${tag}Idle` });
+      for (const n of [1, 2]) {
+        await harness.prisma.appointment.create({
+          data: {
+            companyId: world.companyA.id,
+            branchId: world.companyA.branchId,
+            customerId: busy.id,
+            appointmentNumber: `LST-${Date.now()}-${n}`,
+            status: 'CONFIRMED',
+            paymentStatus: 'UNPAID',
+            source: 'STAFF',
+            startsAt: new Date(`2026-12-0${n + 1}T02:00:00Z`),
+            endsAt: new Date(`2026-12-0${n + 1}T03:00:00Z`),
+            bookedTimezoneName: 'Asia/Ulaanbaatar',
+            currencyCode: 'MNT',
+            totalMinor: 0n,
+          },
+        });
+      }
+
+      const res = await request(http)
+        .get(url())
+        .query({ search: tag })
+        .set('Authorization', `Bearer ${ownerA}`)
+        .expect(200);
+      const count = (id: string) =>
+        res.body.data.items.find((c: { id: string }) => c.id === id)?.appointmentCount;
+      expect(res.body.data.total).toBe(2);
+      expect(count(busy.id)).toBe(2);
+      expect(count(idle.id)).toBe(0);
+    });
+
     it('the database refuses an appointment pointing at another company’s customer', async () => {
       /**
        * The property the brief asks for, asserted where it is actually

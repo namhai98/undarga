@@ -113,29 +113,32 @@ export function StackedBarChart({
         })}
       </svg>
       {series.length > 1 ? <Legend series={series} /> : null}
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Day</th>
-            {series.map((s) => (
-              <th key={s.key} scope="col">
-                {s.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.label}>
-              <th scope="row">{formatLabel(d.label)}</th>
+      {/* sr-only on the wrapper, not the table: table layout ignores the 1px width, so a hidden table still widens the page on a phone. */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
               {series.map((s) => (
-                <td key={s.key}>{d.values[s.key] ?? 0}</td>
+                <th key={s.key} scope="col">
+                  {s.label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.label}>
+                <th scope="row">{formatLabel(d.label)}</th>
+                {series.map((s) => (
+                  <td key={s.key}>{d.values[s.key] ?? 0}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

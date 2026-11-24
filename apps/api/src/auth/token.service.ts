@@ -130,6 +130,8 @@ export class TokenService {
       claims = this.jwt.verify<AccessClaims>(token, {
         secret: this.config.auth.jwtAccessSecret,
         issuer: ISSUER,
+        // Pinned: a token may not choose its own algorithm (alg confusion, 'none').
+        algorithms: ['HS256'],
         // Checked explicitly below so the failure is a typed domain error
         // rather than a generic jsonwebtoken message.
         audience: undefined,
@@ -149,6 +151,7 @@ export class TokenService {
     return this.jwt.sign(claims, {
       secret: this.config.auth.jwtAccessSecret,
       issuer: ISSUER,
+      algorithm: 'HS256',
       expiresIn: this.config.auth.jwtAccessTtlSeconds,
     });
   }

@@ -46,9 +46,8 @@ export default function HomePage() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Not built yet</h2>
         <p className="text-muted-foreground max-w-prose text-sm">
-          Member and role administration, appointments, availability, payments, promotions, gift
-          cards and notifications. The feature directories under <Code>features/</Code> are
-          placeholders that mark where each will live.
+          Member and role administration. Invitations exist in the API; listing members and
+          changing their roles has neither an endpoint nor a screen yet.
         </p>
       </section>
     </main>

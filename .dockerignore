@@ -1,0 +1,37 @@
+# Keeps secrets and local state out of the Docker build context.
+#
+# The Dockerfiles in infrastructure/docker/ run `COPY . .` from the repository
+# root. Without this file the root `.env` (database passwords, JWT secrets,
+# provider keys) would be sent to the builder and baked into a build layer.
+# Production configuration is supplied as environment variables at run time.
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# Version control and editor state
+.git
+.gitignore
+.vscode
+.idea
+.claude
+
+# Dependencies and build output (rebuilt inside the image)
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+.pnpm-store
+
+# Local data
+**/uploads
+*.log

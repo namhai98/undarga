@@ -30,6 +30,9 @@ function makeService(overrides: Partial<ResolvedServiceRow> = {}): ResolvedServi
     requiresEmployee: false,
     requiresResource: false,
     isOnlineBookable: true,
+    bookingLeadTimeMin: null,
+    maxAdvanceBookingDays: null,
+    maxConcurrentBookings: null,
     ...overrides,
   };
 }
@@ -63,6 +66,9 @@ function makeDay(overrides: Partial<ResolvedDay> = {}): ResolvedDay {
     requirements: [],
     resources: [],
     resourceReservations: [],
+    resourceRules: [],
+    resourceUnavailability: [],
+    serviceBookings: [],
     ...overrides,
   };
 }

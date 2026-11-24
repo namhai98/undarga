@@ -17,18 +17,14 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "clean": "turbo run clean && rimraf node_modules/.cache .turbo",
-
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
-
     "dev:api": "pnpm --filter @undarga/api start:dev",
     "dev:web": "pnpm --filter @undarga/web dev",
-
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
     "infra:reset": "docker compose down -v && docker compose up -d",
-
     "db:migrate": "pnpm --filter @undarga/api db:migrate",
     "db:deploy": "pnpm --filter @undarga/api db:deploy",
     "db:harden": "pnpm --filter @undarga/api db:harden",
@@ -42,5 +38,23 @@
     "rimraf": "6.0.1",
     "turbo": "2.10.12",
     "typescript": "5.6.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "proxy-addr@<2.0.8": "^2.0.8",
+      "js-yaml@>=5.0.0 <5.4.1": "^5.4.1",
+      "brace-expansion@<1.1.21": "~1.1.21",
+      "brace-expansion@>=4.0.0 <5.0.12": "^5.0.12",
+      "source-map-js@<1.2.2": "^1.2.2",
+      "undici@>=7.0.0 <7.29.1": "^7.29.1",
+      "fast-uri@>=3.0.0 <3.1.8": "^3.1.8",
+      "ip-address@<10.7.1": "^10.7.1",
+      "hono@<4.13.11": "^4.13.11",
+      "@modelcontextprotocol/sdk@<1.32.0": "^1.32.0",
+      "brace-expansion@>=2.0.0 <2.1.7": "^2.1.7",
+      "multer@<2.5.0": "^2.5.0",
+      "body-parser@>=2.0.0 <2.4.0": "^2.4.0",
+      "qs@>=6.7.0 <6.16.1": "^6.16.1"
+    }
   }
 }

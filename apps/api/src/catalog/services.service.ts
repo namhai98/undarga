@@ -728,6 +728,10 @@ interface ServiceSummaryRow {
   color: string | null;
   sortOrder: number;
   imageFileId?: string | null;
+  bookingLeadTimeMin?: number | null;
+  maxAdvanceBookingDays?: number | null;
+  cancellationWindowHours?: number | null;
+  maxConcurrentBookings?: number | null;
   category?: { id: string; name: string; parentId?: string | null } | null;
   _count?: { branches: number; employees: number };
 }
@@ -761,6 +765,13 @@ function toServiceResponse(service: ServiceSummaryRow) {
     requiresDeposit: service.requiresDeposit,
     /** Public image, served at /public/files/:id. Changed through /files. */
     imageFileId: service.imageFileId ?? null,
+    /** This service's own booking rules; null fields fall back to branch / company. */
+    bookingRules: {
+      bookingLeadTimeMin: service.bookingLeadTimeMin ?? null,
+      maxAdvanceBookingDays: service.maxAdvanceBookingDays ?? null,
+      cancellationWindowHours: service.cancellationWindowHours ?? null,
+      maxConcurrentBookings: service.maxConcurrentBookings ?? null,
+    },
     depositMinor: service.depositMinor?.toString() ?? null,
     color: service.color,
     sortOrder: service.sortOrder,

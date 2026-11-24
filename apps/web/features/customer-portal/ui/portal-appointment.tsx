@@ -180,7 +180,7 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
         <CardTitle>Need to change it?</CardTitle>
         {cancel.allowed && cancel.deadline ? (
           <CardDescription>
-            You can change or cancel online until {new Date(cancel.deadline).toLocaleString()}.
+            You can change or cancel online until {when(cancel.deadline, data.timezone)}.
           </CardDescription>
         ) : null}
       </CardHeader>

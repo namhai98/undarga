@@ -463,12 +463,15 @@ CREATE INDEX IF NOT EXISTS notification_dispatch_idx
 CREATE INDEX IF NOT EXISTS outbox_unpublished_idx
   ON outbox_event (occurred_at) WHERE published_at IS NULL;
 
--- Customer search. Tenant-partitioned by the leading company_id predicate in
--- every query; the trigram index accelerates the name match.
-CREATE INDEX IF NOT EXISTS company_customer_name_trgm_idx
-  ON company_customer USING gin (
-    (coalesce(first_name,'') || ' ' || coalesce(last_name,'')) gin_trgm_ops
-  );
+-- Customer search: no trigram index. Under row-level security Postgres uses
+-- an index only for leakproof operators, and LIKE/ILIKE are not leakproof, so
+-- a trigram index here is never chosen for the app role (measured:
+-- docs/PERFORMANCE.md). The former name index matched no query; dropped.
+DROP INDEX IF EXISTS company_customer_name_trgm_idx;
+
+-- "Rescheduled to" on the appointment detail: the reverse of rescheduled_from.
+CREATE INDEX IF NOT EXISTS appointment_rescheduled_from_idx
+  ON appointment (company_id, rescheduled_from_id) WHERE rescheduled_from_id IS NOT NULL;
 
 -- Live catalog only.
 CREATE INDEX IF NOT EXISTS service_active_idx
@@ -540,6 +543,7 @@ DECLARE
     'gift_card','gift_card_transaction',
     'notification','notification_preference','appointment_reminder',
     'notification_provider_config',
+    'resource_availability_rule','resource_unavailability','appointment_series',
     'calendar_connection','calendar_oauth_state','calendar_event_link','calendar_sync_job',
     'calendar_busy_block',
     'subscription','subscription_entitlement_override','subscription_invoice',

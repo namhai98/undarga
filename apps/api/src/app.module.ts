@@ -16,6 +16,9 @@ import { CustomersModule } from './customers/customers.module';
 import { GiftCardsModule } from './giftcards/giftcards.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { MediaModule } from './media/media.module';
+import { BookingRulesModule } from './booking-rules/booking-rules.module';
+import { ResourcesModule } from './resources/resources.module';
+import { TimeOffModule } from './time-off/time-off.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PromotionsModule } from './promotions/promotions.module';
@@ -39,6 +42,8 @@ import { CustomerPortalModule } from './customer-portal/customer-portal.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { PlatformModule } from './platform/platform.module';
 import { RedisModule } from './redis/redis.module';
+import { RedisService } from './redis/redis.service';
+import { RedisThrottlerStorage } from './common/throttle/redis-throttler.storage';
 import { FeatureGuard } from './subscriptions/feature.guard';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { TenantGuard } from './tenancy/guards/tenant.guard';
@@ -99,6 +104,9 @@ import { TenancyModule } from './tenancy/tenancy.module';
     NotificationsModule,
     CalendarModule,
     MediaModule,
+    BookingRulesModule,
+    TimeOffModule,
+    ResourcesModule,
     PaymentsModule,
     AnalyticsModule,
     AvailabilityModule,
@@ -122,25 +130,30 @@ import { TenancyModule } from './tenancy/tenancy.module';
      * security control is the per-route limits and the per-account ceilings in
      * AccountService.
      */
-    ThrottlerModule.forRoot({
-      throttlers: [{ name: 'default', ttl: 60_000, limit: 300 }],
-      /**
-       * Evaluated per request, and reading `process.env` directly — the one
-       * place in this codebase that does.
-       *
-       * The rule is that configuration goes through AppConfig so a
-       * misconfiguration fails at boot. `THROTTLE_ENABLED` still does: it is
-       * declared and validated in env.schema.ts, and production reads it there.
-       * What this needs on top is to be togglable AFTER the module graph is
-       * built, and AppConfig cannot provide that — `ConfigModule.forRoot()` is
-       * evaluated once when this file is first imported, so every test harness
-       * in a process shares the value captured before the first one ran.
-       *
-       * The alternative was overriding the guard in the test module, which
-       * silently does nothing for an APP_GUARD, and a security control that
-       * appears disabled but is not (or vice versa) is worse than either state.
-       */
-      skipIf: () => process.env.THROTTLE_ENABLED === 'false',
+    ThrottlerModule.forRootAsync({
+      inject: [RedisService],
+      useFactory: (redis: RedisService) => ({
+        // Shared across replicas: see RedisThrottlerStorage.
+        storage: new RedisThrottlerStorage(redis),
+        throttlers: [{ name: 'default', ttl: 60_000, limit: 300 }],
+        /**
+         * Evaluated per request, and reading `process.env` directly — the one
+         * place in this codebase that does.
+         *
+         * The rule is that configuration goes through AppConfig so a
+         * misconfiguration fails at boot. `THROTTLE_ENABLED` still does: it is
+         * declared and validated in env.schema.ts, and production reads it there.
+         * What this needs on top is to be togglable AFTER the module graph is
+         * built, and AppConfig cannot provide that — `ConfigModule.forRoot()` is
+         * evaluated once when this file is first imported, so every test harness
+         * in a process shares the value captured before the first one ran.
+         *
+         * The alternative was overriding the guard in the test module, which
+         * silently does nothing for an APP_GUARD, and a security control that
+         * appears disabled but is not (or vice versa) is worse than either state.
+         */
+        skipIf: () => process.env.THROTTLE_ENABLED === 'false',
+      }),
     }),
   ],
   providers: [

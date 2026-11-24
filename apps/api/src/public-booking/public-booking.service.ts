@@ -174,7 +174,11 @@ export class PublicBookingService {
           startsAt: input.startsAt,
           source: 'ONLINE',
           customerNote: input.note ?? null,
-          internalNote: null,
+          // Anyone can type anyone's phone number. When the record it matched
+          // disagrees with what was typed, staff see who actually booked.
+          internalNote: customer.submittedDiffers
+            ? `Booked online as: ${customer.submittedDiffers}. These details differ from the customer record, which was matched by phone or email and not verified.`
+            : null,
           promotionCode: input.promotionCode,
         },
         { publicOnly: true },

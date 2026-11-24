@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { drain } from '../common/jobs/drain';
 import { AppConfig } from '../config';
 import { CalendarSyncService } from './calendar-sync.service';
 
@@ -17,7 +18,7 @@ import { CalendarSyncService } from './calendar-sync.service';
 export class CalendarSchedulerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(CalendarSchedulerService.name);
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private running: Promise<void> | null = null;
 
   constructor(
     private readonly config: AppConfig,
@@ -32,9 +33,10 @@ export class CalendarSchedulerService implements OnApplicationBootstrap, OnModul
     this.logger.log(`Calendar sync polling every ${syncIntervalMs} ms.`);
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await drain(this.running, 'calendar sync', this.logger);
   }
 
   async runOnce(options: { companyId?: string } = {}) {
@@ -45,13 +47,16 @@ export class CalendarSchedulerService implements OnApplicationBootstrap, OnModul
 
   private async tick(): Promise<void> {
     if (this.running) return;
-    this.running = true;
+    this.running = this.runOnce().then(
+      () => undefined,
+      (error: unknown) => {
+        this.logger.error(`Calendar tick failed: ${(error as Error).message}`);
+      },
+    );
     try {
-      await this.runOnce();
-    } catch (error) {
-      this.logger.error(`Calendar tick failed: ${(error as Error).message}`);
+      await this.running;
     } finally {
-      this.running = false;
+      this.running = null;
     }
   }
 }

@@ -53,7 +53,22 @@ const formSchema = z.object({
   requiresEmployee: z.string().optional(),
   requiresResource: z.string().optional(),
   sortOrder: z.coerce.number().int().min(0).max(32767),
+  // Optional overrides: empty means "use the company's rule".
+  bookingLeadTimeMin: optionalInt(0, 43_200),
+  maxAdvanceBookingDays: optionalInt(1, 730),
+  cancellationWindowHours: optionalInt(0, 720),
+  maxConcurrentBookings: optionalInt(1, 500),
 });
+
+function optionalInt(min: number, max: number) {
+  return z
+    .string()
+    .trim()
+    .refine((v) => v === '' || (/^d+$/.test(v) && Number(v) >= min && Number(v) <= max), {
+      message: `Leave empty, or a whole number from ${min} to ${max}.`,
+    })
+    .transform((v) => (v === '' ? null : Number(v)));
+}
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -134,6 +149,10 @@ export function ServiceForm({
       requiresEmployee: values.requiresEmployee === 'on',
       requiresResource: values.requiresResource === 'on',
       sortOrder: values.sortOrder,
+      bookingLeadTimeMin: values.bookingLeadTimeMin,
+      maxAdvanceBookingDays: values.maxAdvanceBookingDays,
+      cancellationWindowHours: values.cancellationWindowHours,
+      maxConcurrentBookings: values.maxConcurrentBookings,
     };
 
     try {
@@ -394,6 +413,42 @@ export function ServiceForm({
         />
       </fieldset>
 
+      <fieldset className="grid gap-4 sm:grid-cols-2">
+        <legend className="mb-2 text-sm font-medium">Booking rules for this service</legend>
+        <p className="text-muted-foreground -mt-1 text-xs sm:col-span-2">
+          Leave a field empty to use the company’s booking rules.
+        </p>
+        <RuleField
+          name="bookingLeadTimeMin"
+          label="Minimum notice"
+          unit="minutes"
+          value={service?.bookingRules?.bookingLeadTimeMin}
+          error={errors.bookingLeadTimeMin}
+        />
+        <RuleField
+          name="maxAdvanceBookingDays"
+          label="Book up to"
+          unit="days ahead"
+          value={service?.bookingRules?.maxAdvanceBookingDays}
+          error={errors.maxAdvanceBookingDays}
+        />
+        <RuleField
+          name="cancellationWindowHours"
+          label="Cancellation deadline"
+          unit="hours before"
+          value={service?.bookingRules?.cancellationWindowHours}
+          error={errors.cancellationWindowHours}
+        />
+        <RuleField
+          name="maxConcurrentBookings"
+          label="At most at the same time"
+          unit="bookings per branch"
+          hint="Across all staff, e.g. limited equipment or a capped class."
+          value={service?.bookingRules?.maxConcurrentBookings}
+          error={errors.maxConcurrentBookings}
+        />
+      </fieldset>
+
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
@@ -473,5 +528,33 @@ function Checkbox({
         {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
       </div>
     </div>
+  );
+}
+
+function RuleField(props: {
+  name: string;
+  label: string;
+  unit: string;
+  hint?: string;
+  value: number | null | undefined;
+  error?: string;
+}) {
+  return (
+    <Field id={props.name} label={props.label} hint={props.hint} error={props.error}>
+      <div className="flex items-center gap-2">
+        <Input
+          id={props.name}
+          name={props.name}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          step={1}
+          placeholder="Default"
+          defaultValue={props.value ?? ''}
+          className="w-28"
+        />
+        <span className="text-muted-foreground text-sm">{props.unit}</span>
+      </div>
+    </Field>
   );
 }

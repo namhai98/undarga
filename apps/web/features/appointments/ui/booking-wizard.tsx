@@ -19,6 +19,7 @@ import { useEmployees } from '@/features/employees';
 import type { AvailabilitySlot } from '@/services/availability.service';
 import { useCreateAppointment } from '../api/use-appointments';
 import { bookingErrorMessage, localTime, todayIso } from '../model/appointment-display';
+import { RecurringBooking } from './recurring-booking';
 import { SlotPicker } from './slot-picker';
 
 const selectClass =
@@ -56,6 +57,8 @@ export function BookingWizard() {
   // A code is only sent for the basket it was previewed against.
   const [promo, setPromo] = useState<{ basket: string; code: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Repeat as a recurring series instead of one appointment.
+  const [repeat, setRepeat] = useState(false);
 
   const customers = useCustomers({ search: customerSearch || undefined, limit: 10 });
   const create = useCreateAppointment();
@@ -313,30 +316,61 @@ export function BookingWizard() {
                 />
               </div>
             </div>
-            {/* Any booker may check a code: the endpoint accepts appointment:write. */}
-            <div className="max-w-md">
-              <PromotionCodeField
-                key={basket}
-                id="book-promotion-code"
-                disabled={create.isPending}
-                validate={(code) =>
-                  validatePromotion.mutateAsync({
-                    code,
-                    branchId,
-                    serviceId,
-                    customerId,
-                    ...(employeeId ? { employeeId } : {}),
-                  })
-                }
-                onApplied={(code) => setPromo(code ? { basket, code } : null)}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={repeat}
+                onChange={(e) => setRepeat(e.target.checked)}
               />
-            </div>
-            <div>
-              <Button disabled={create.isPending} onClick={() => void submit()}>
-                {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Book appointment
-              </Button>
-            </div>
+              Repeat this appointment (recurring)
+            </label>
+            {repeat ? (
+              <RecurringBooking
+                key={basket + slot.startAt}
+                startDate={date}
+                base={{
+                  branchId,
+                  serviceId,
+                  customerId,
+                  startsAt: slot.startAt,
+                  ...(employeeId ? { employeeId } : {}),
+                  customerNote: customerNote.trim() || null,
+                  internalNote: internalNote.trim() || null,
+                }}
+                onBooked={({ firstAppointmentId }) =>
+                  router.push(
+                    firstAppointmentId ? `/appointments/${firstAppointmentId}` : '/appointments',
+                  )
+                }
+              />
+            ) : (
+              <>
+                {/* Any booker may check a code: the endpoint accepts appointment:write. */}
+                <div className="max-w-md">
+                  <PromotionCodeField
+                    key={basket}
+                    id="book-promotion-code"
+                    disabled={create.isPending}
+                    validate={(code) =>
+                      validatePromotion.mutateAsync({
+                        code,
+                        branchId,
+                        serviceId,
+                        customerId,
+                        ...(employeeId ? { employeeId } : {}),
+                      })
+                    }
+                    onApplied={(code) => setPromo(code ? { basket, code } : null)}
+                  />
+                </div>
+                <div>
+                  <Button disabled={create.isPending} onClick={() => void submit()}>
+                    {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
+                    Book appointment
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">Choose a time and a customer.</p>

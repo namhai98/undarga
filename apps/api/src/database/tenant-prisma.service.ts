@@ -4,6 +4,7 @@ import { AppConfig } from '../config';
 import { MissingTenantContextError } from '../common/errors';
 import { RequestContextService } from '../tenancy/context/request-context.service';
 import { assertTenantScoped } from './tenant-scope.guard-extension';
+import { forwardPrismaLogs, PRISMA_LOG_LEVELS } from './prisma-logging';
 import { tenantModelSummary } from './tenant-models';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -11,8 +12,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function createTenantClient(config: AppConfig) {
   const base = new PrismaClient({
     datasources: { db: { url: config.database.url } },
-    log: config.app.isProduction ? ['warn', 'error'] : ['warn', 'error'],
+    log: PRISMA_LOG_LEVELS,
   });
+  forwardPrismaLogs(base, 'TenantPrismaService');
 
   return base.$extends({
     name: 'tenant-scope-assertion',

@@ -302,7 +302,7 @@ function AppointmentHistory({ customerId }: { customerId: string }) {
         ) : null}
 
         {items.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
                 <tr>

@@ -35,6 +35,9 @@ export interface AppointmentSummary {
   /** Minor units as a string. Format with `formatMoney`, never parse. */
   totalMinor: string;
   currencyCode: string;
+  /** Set when the appointment is one occurrence of a recurring series. */
+  seriesId?: string | null;
+  seriesIndex?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -154,20 +157,130 @@ export const appointmentsService = {
       reason ? { reason } : {},
     ),
 
-  cancel: (companyId: string, appointmentId: string, reason: string) =>
+  /** `lateCancellation` confirms a cancellation after the deadline (needs appointment:cancel:any). */
+  cancel: (companyId: string, appointmentId: string, reason: string, lateCancellation?: boolean) =>
     apiClient.post<AppointmentDetail>(
       `/companies/${companyId}/appointments/${appointmentId}/cancel`,
-      { reason },
+      lateCancellation ? { reason, lateCancellation } : { reason },
     ),
 
   /** Returns the NEW appointment; the original becomes CANCELLED. */
   reschedule: (
     companyId: string,
     appointmentId: string,
-    input: { startsAt: string; employeeId?: string; resourceId?: string; reason?: string },
+    input: {
+      startsAt: string;
+      employeeId?: string;
+      resourceId?: string;
+      reason?: string;
+      /** Confirms a change after the rescheduling deadline. */
+      lateChange?: boolean;
+    },
   ) =>
     apiClient.post<AppointmentDetail>(
       `/companies/${companyId}/appointments/${appointmentId}/reschedule`,
       input,
     ),
+
+  /** Checks every date of a series. Creates nothing. */
+  previewSeries: (companyId: string, input: CreateSeriesInput) =>
+    apiClient.post<SeriesPreview>(`/companies/${companyId}/appointments/recurring/preview`, input),
+
+  /** All occurrences in one go; with onConflict 'fail' nothing is created if any date is taken. */
+  createSeries: (companyId: string, input: CreateSeriesInput) =>
+    apiClient.post<AppointmentSeries & { skipped: SeriesOccurrencePreview[] }>(
+      `/companies/${companyId}/appointments/recurring`,
+      input,
+    ),
+
+  getSeries: (companyId: string, seriesId: string, signal?: AbortSignal) =>
+    apiClient.get<AppointmentSeries>(`/companies/${companyId}/appointment-series/${seriesId}`, {
+      signal,
+    }),
+
+  cancelSeries: (companyId: string, seriesId: string, input: CancelSeriesInput) =>
+    apiClient.post<AppointmentSeries>(
+      `/companies/${companyId}/appointment-series/${seriesId}/cancel`,
+      input,
+    ),
 };
+
+// ===========================================================================
+// Recurring series
+// ===========================================================================
+
+export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface RecurrenceInput {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  /** WEEKLY only. 0 = Sunday … 6 = Saturday. */
+  weekdays?: number[];
+  /** Exactly one of endDate / count. */
+  endDate?: string;
+  count?: number;
+}
+
+export interface CreateSeriesInput {
+  branchId: string;
+  serviceId: string;
+  customerId: string;
+  employeeId?: string;
+  resourceId?: string;
+  /** The first occurrence; its wall-clock time is what recurs. */
+  startsAt: string;
+  recurrence: RecurrenceInput;
+  onConflict?: 'fail' | 'skip';
+  customerNote?: string | null;
+  internalNote?: string | null;
+}
+
+export interface SeriesOccurrencePreview {
+  index: number;
+  date: string;
+  startsAt: string;
+  endsAt: string | null;
+  bookable: boolean;
+  /** Why it cannot be booked, e.g. EMPLOYEE_TIME_OFF, SLOT_TAKEN. */
+  reason: string | null;
+  message: string | null;
+}
+
+export interface SeriesPreview {
+  timezone: string;
+  occurrences: SeriesOccurrencePreview[];
+  /** Dates the rule names that do not exist, e.g. 31 February. */
+  skippedDates: string[];
+  bookableCount: number;
+  conflictCount: number;
+  employeeId: string | null;
+}
+
+export interface AppointmentSeries {
+  id: string;
+  status: 'ACTIVE' | 'ENDED' | 'CANCELLED';
+  recurrence: {
+    frequency: RecurrenceFrequency;
+    interval: number;
+    weekdays: number[];
+    localStartTime: string;
+    endDate: string | null;
+    count: number | null;
+  };
+  startsAt: string;
+  timezone: string;
+  branch: { id: string; name: string };
+  customer: { id: string; name: string };
+  service: { id: string; name: string };
+  employeeId: string | null;
+  resourceId: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+  counts: { total: number; upcoming: number; cancelled: number };
+  occurrences: AppointmentSummary[];
+}
+
+export type CancelSeriesInput =
+  | { scope: 'occurrence'; appointmentId: string; reason: string; lateCancellation?: boolean }
+  | { scope: 'future'; from?: string; reason: string; lateCancellation?: boolean };

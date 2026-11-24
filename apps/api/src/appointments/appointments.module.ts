@@ -3,7 +3,7 @@ import { AvailabilityModule } from '../availability/availability.module';
 import { DatabaseModule } from '../database/database.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { AppointmentsController } from './appointments.controller';
+import { AppointmentSeriesController, AppointmentsController } from './appointments.controller';
 import { AppointmentRepository, AppointmentsService } from './appointments.service';
 
 /**
@@ -17,7 +17,7 @@ import { AppointmentRepository, AppointmentsService } from './appointments.servi
  */
 @Module({
   imports: [DatabaseModule, AvailabilityModule, PromotionsModule, NotificationsModule],
-  controllers: [AppointmentsController],
+  controllers: [AppointmentsController, AppointmentSeriesController],
   providers: [AppointmentsService, AppointmentRepository],
   exports: [AppointmentsService],
 })

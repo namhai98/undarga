@@ -72,6 +72,13 @@ export class NotificationReminderService {
        WHERE s.reminders_enabled
          AND a.status IN ('PENDING', 'CONFIRMED')
          AND a.starts_at > ${now}
+         -- Nothing further ahead than the largest offset can be due. Implied by
+         -- the condition below, but as a constant bound it lets the index read
+         -- only that window instead of every future booking of every company.
+         AND a.starts_at <= ${now}::timestamptz + (
+               SELECT make_interval(mins => COALESCE(max(m), 0))
+                 FROM company_settings cs, unnest(cs.reminder_offsets_minutes) AS m
+                WHERE cs.reminders_enabled)
          AND a.starts_at - make_interval(mins => o.offset_minutes) <= ${now}
          AND a.created_at < a.starts_at - make_interval(mins => o.offset_minutes)
          ${companyFilter}

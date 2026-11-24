@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/decorators/public.decorator';
 import { ZodValidationPipe } from '../common/pipes';
 import { NoTenant } from '../tenancy/decorators/tenant.decorators';
@@ -50,6 +51,7 @@ export class InvitationAcceptController {
 
   @Post('preview')
   @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({
     summary: 'What this invitation is for',
     description:
@@ -85,6 +87,7 @@ export class InvitationAcceptController {
    */
   @Post('accept')
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Accept an invitation and join the company',
     description:

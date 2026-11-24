@@ -155,4 +155,12 @@ export interface AvailabilityDayDto {
   /** Present only when `slots` is empty and the reason is structural. */
   readonly unavailableReason: AvailabilityUnavailableReason | null;
   readonly slots: readonly AvailabilitySlotDto[];
+  /** The booking rules that applied (service → branch → company). */
+  readonly rules: {
+    readonly minimumNoticeMinutes: number;
+    readonly maximumAdvanceDays: number;
+    readonly maxConcurrentBookings: number | null;
+  } | null;
+  /** Staff view only: when employees are away that day. Times only. */
+  readonly employeesUnavailable?: ReadonlyArray<{ employeeId: string; from: string; to: string }>;
 }

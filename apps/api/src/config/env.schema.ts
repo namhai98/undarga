@@ -45,9 +45,33 @@ export const envSchema = z.object({
   PORT: int(3000, 1),
   API_PREFIX: z.string().default('api'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  /** json: one JSON object per line (production default). text: coloured, for development. */
+  LOG_FORMAT: z.enum(['json', 'text']).optional(),
   /** Comma-separated. Empty means same-origin only — never a wildcard. */
   CORS_ORIGINS: z.string().default(''),
-  SWAGGER_ENABLED: bool(true),
+  /**
+   * The OpenAPI document and UI. Unset means on in development and test, OFF in
+   * production: the document maps every route and error code for anyone
+   * probing the API. Set it to true in production only for a deliberately
+   * public API.
+   */
+  SWAGGER_ENABLED: z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true' || v === '1')),
+  /**
+   * Which proxies to trust for the client address (X-Forwarded-For).
+   *
+   *   unset / false   none: req.ip is the TCP peer (no proxy in front)
+   *   1, 2, …         that many hops (one load balancer = 1)
+   *   loopback, 10.0.0.0/8, …   Express trust-proxy names or subnets
+   *
+   * Behind a load balancer this MUST be set, or every request appears to come
+   * from the balancer: per-IP rate limits then lock out everyone at once, and
+   * audit logs record the wrong address. `true` (trust everything) is refused:
+   * it lets any client choose its own address and walk around the limits.
+   */
+  TRUST_PROXY: optionalString,
   /**
    * Edge rate limiting.
    *
@@ -395,6 +419,21 @@ export function validateEnv(raw: Record<string, unknown>): Env {
     }
   }
 
+  for (const origin of corsOrigins(env.CORS_ORIGINS)) {
+    if (!isOrigin(origin)) {
+      problems.push(
+        `CORS_ORIGINS entry "${origin}" is not an origin. Use scheme://host[:port] with no path; ` +
+          'wildcards are not supported.',
+      );
+    }
+  }
+  if (env.TRUST_PROXY !== undefined && parseTrustProxy(env.TRUST_PROXY) === null) {
+    problems.push(
+      'TRUST_PROXY must be false, a hop count (e.g. 1), or Express trust-proxy names/subnets; ' +
+        '"true" (trust any client-supplied address) is refused.',
+    );
+  }
+
   // --- production-only ------------------------------------------------------
   if (env.NODE_ENV === 'production') {
     for (const key of ['EMAIL_PROVIDER', 'SMS_PROVIDER', 'PUSH_PROVIDER'] as const) {
@@ -435,6 +474,14 @@ export function validateEnv(raw: Record<string, unknown>): Env {
           'depend on it, and starting without it fails open.',
       );
     }
+    if (!env.THROTTLE_ENABLED) {
+      problems.push('THROTTLE_ENABLED=false turns off brute-force protection; refused in production.');
+    }
+    for (const origin of corsOrigins(env.CORS_ORIGINS)) {
+      if (!origin.startsWith('https://')) {
+        problems.push(`CORS origin "${origin}" must be https:// in production.`);
+      }
+    }
     if (env.CORS_ORIGINS.trim() === '') {
       problems.push(
         'CORS_ORIGINS is empty in production. Set the exact browser origins that may call ' +
@@ -450,4 +497,40 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
 
   return env;
+}
+
+/** The comma-separated CORS_ORIGINS list, trimmed. */
+export function corsOrigins(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+}
+
+/** scheme://host[:port], nothing else — exactly what a browser sends in Origin. */
+function isOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.origin === value &&
+      !value.includes('*')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * TRUST_PROXY → Express `trust proxy`. `null` = invalid. `true` is refused on
+ * purpose: trusting every hop lets a client set its own req.ip.
+ */
+export function parseTrustProxy(raw: string | undefined): false | number | string | null {
+  if (raw === undefined) return false;
+  const value = raw.trim().toLowerCase();
+  if (value === '' || value === 'false' || value === '0') return false;
+  if (value === 'true') return null;
+  if (/^\d+$/.test(value)) return Math.min(Number(value), 10);
+  if (/^[a-z0-9.:/,\s-]+$/.test(value)) return value;
+  return null;
 }

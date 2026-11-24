@@ -158,6 +158,24 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Booking rules</CardTitle>
+          <CardDescription>Notice, how far ahead, cancellation and rescheduling deadlines.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/booking-settings" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            Booking rules
+          </Link>
+          <Link href="/time-off" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            Time off
+          </Link>
+          <Link href="/resources" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            Rooms and equipment
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Services</CardTitle>
           <CardDescription>What customers can book, and how it is grouped.</CardDescription>
         </CardHeader>
@@ -189,7 +207,7 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Not built yet</CardTitle>
-          <CardDescription>Members and roles, then scheduling and booking.</CardDescription>
+          <CardDescription>Managing members and roles from this app.</CardDescription>
         </CardHeader>
       </Card>
     </div>

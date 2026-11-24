@@ -119,8 +119,29 @@ function partsFormatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+/**
+ * Memo of exact (zone, millisecond) → wall-clock fields.
+ *
+ * `formatToParts` is the single hottest call in availability (it runs for
+ * every rule edge of every employee, mostly on the same few instants), and its
+ * answer for a given zone and instant never changes. Keys are exact, so a hit
+ * returns precisely what recomputing would. Bounded: cleared when full.
+ */
+const partsMemo = new Map<string, ZonedParts>();
+const PARTS_MEMO_LIMIT = 20_000;
+
 /** Break an instant down into the wall-clock fields a given zone shows for it. */
 function zonedPartsAt(instant: Date, timeZone: string): ZonedParts {
+  const key = `${timeZone}|${instant.getTime()}`;
+  const hit = partsMemo.get(key);
+  if (hit) return hit;
+  const parts = computeZonedParts(instant, timeZone);
+  if (partsMemo.size >= PARTS_MEMO_LIMIT) partsMemo.clear();
+  partsMemo.set(key, Object.freeze(parts));
+  return parts;
+}
+
+function computeZonedParts(instant: Date, timeZone: string): ZonedParts {
   const map: Record<string, string> = {};
   for (const part of partsFormatter(timeZone).formatToParts(instant)) {
     if (part.type !== 'literal') map[part.type] = part.value;

@@ -1,0 +1,91 @@
+# Single-host production layout — an EXAMPLE to adapt, not a turnkey deploy
+# (docs/DEPLOYMENT.md). Managed PostgreSQL / Redis / object storage are
+# preferable when available: drop those services and point the URLs at them.
+#
+#   docker compose -f infrastructure/docker/compose.production.example.yml \
+#     --env-file .env.production up -d
+#
+# Startup order: postgres + redis healthy → migrate runs to completion →
+# api starts (healthy = database reachable) → web starts.
+# Nothing but the web and API ports is published; put a TLS-terminating
+# reverse proxy (or load balancer) in front of both and set TRUST_PROXY=1.
+
+name: undarga
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_OWNER_USER:?set POSTGRES_OWNER_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?set POSTGRES_OWNER_PASSWORD}
+      POSTGRES_DB: undarga
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d undarga']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No published port: only the containers on this network reach it.
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # Password required; AOF so rate-limit windows and session revocations
+    # survive a restart.
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD:?set REDIS_PASSWORD}",
+        "--appendonly",
+        "yes",
+      ]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli -a "$${REDIS_PASSWORD}" --no-auth-warning ping | grep PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  migrate:
+    image: ${REGISTRY:-undarga}/api-migrate:${TAG:?set TAG}
+    env_file: ../../.env.production
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ${REGISTRY:-undarga}/api:${TAG}
+    env_file: ../../.env.production
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      # Only used with STORAGE_DRIVER=local; harmless with S3.
+      - uploads:/app/storage
+    ports:
+      - "127.0.0.1:3000:3000"
+    stop_grace_period: 30s
+
+  web:
+    image: ${REGISTRY:-undarga}/web:${TAG}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3001:3001"
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

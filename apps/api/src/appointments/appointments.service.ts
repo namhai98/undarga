@@ -4,14 +4,23 @@ import { Prisma, type ActorType, type AppointmentStatus } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { COMPANY_PERMISSIONS } from '../authz/permissions';
 import {
+  BookingRuleViolationError,
   InvalidStatusTransitionError,
+  PermissionDeniedError,
   ResourceNotFoundError,
+  SeriesConflictError,
   ServiceNotBookableError,
   SlotTakenError,
   SlotUnavailableError,
   ValidationFailedError,
 } from '../common/errors';
-import { todayInZone, toIsoWithOffset } from '../common/time';
+import { daysBetween, parsePlainDate, todayInZone, toIsoWithOffset } from '../common/time';
+import {
+  assertStaffCanCancel,
+  assertStaffCanReschedule,
+  loadBookingRules,
+  type BookingRules,
+} from '../booking-rules/booking-rules';
 import { AvailabilityService } from '../availability/availability.service';
 import { enqueueCalendarSync } from '../calendar/calendar-sync.queue';
 import { bookingPrice } from '../catalog/service-price';
@@ -35,9 +44,13 @@ import {
   parseStatuses,
   type AppointmentQueryDto,
   type CancelAppointmentDto,
+  type CancelSeriesDto,
   type CreateAppointmentDto,
+  type CreateSeriesDto,
   type RescheduleAppointmentDto,
 } from './dto/appointment.dto';
+import { employeeLockKey, lockKeys, resourceLockKey } from './booking-locks';
+import { planOccurrences } from './recurrence';
 import { EntitlementsService } from '../subscriptions/entitlements.service';
 
 interface AppointmentRow {
@@ -215,6 +228,7 @@ export class AppointmentsService {
       this.resolveBooking(tx, companyId, input, options.publicOnly ?? false),
     );
 
+    this.checkTiming(booking, startsAt);
     const slot = await this.offeredSlot(booking, startsAt, undefined, options.publicOnly ?? false);
 
     const {
@@ -223,7 +237,7 @@ export class AppointmentsService {
       promotion,
     } = await this.writeGuarded(async (tx, companyId) => {
       const assignment = await this.assign(tx, companyId, booking, slot);
-      await this.lockAndCheck(tx, companyId, assignment, slot);
+      await this.lockAndCheck(tx, companyId, assignment, slot, undefined, capOf(booking));
       // The plan's monthly appointment allowance. A reschedule does not count.
       await this.entitlements.assertCanAdd(tx, companyId, 'APPOINTMENT');
 
@@ -381,6 +395,25 @@ export class AppointmentsService {
       ),
     );
 
+    // Rescheduling rules. Customers' own rules (portal) run in `guard`; the
+    // business switch and, for staff, the deadline are checked here — and again
+    // under the row lock below.
+    const late = input.lateChange ?? false;
+    if (
+      !customer &&
+      late &&
+      !this.context.hasPermission(COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY)
+    ) {
+      throw new PermissionDeniedError([COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY]);
+    }
+    if (customer) {
+      if (!booking.rules.reschedulingAllowed)
+        throw new BookingRuleViolationError('RESCHEDULING_DISABLED');
+    } else {
+      assertStaffCanReschedule(booking.rules, current.startsAt, late);
+    }
+    this.checkTiming(booking, startsAt);
+
     // The appointment being moved must not count as busy against its own new
     // time — nudging a booking by fifteen minutes is the commonest reschedule.
     const slot = await this.offeredSlot(booking, startsAt, current.id, Boolean(customer));
@@ -394,16 +427,20 @@ export class AppointmentsService {
         throw new InvalidStatusTransitionError(locked.status, 'RESCHEDULED');
       }
       customer?.guard(locked.startsAt);
+      const lateChange = customer
+        ? false
+        : assertStaffCanReschedule(booking.rules, locked.startsAt, late).isLate;
 
       // Release the old slot first, in the same transaction: the new booking
       // may overlap it, and the constraint must see it gone.
+      const reasonText = input.reason ? `RESCHEDULED: ${input.reason}` : 'RESCHEDULED';
       await this.applyStatus(tx, companyId, appointmentId, locked.status, 'CANCELLED', {
-        reason: input.reason ? `RESCHEDULED: ${input.reason}` : 'RESCHEDULED',
+        reason: lateChange ? `${reasonText} (late change)` : reasonText,
         cancellation: true,
       });
 
       const assignment = await this.assign(tx, companyId, booking, slot);
-      await this.lockAndCheck(tx, companyId, assignment, slot, appointmentId);
+      await this.lockAndCheck(tx, companyId, assignment, slot, appointmentId, capOf(booking));
 
       const replacement = await this.insert(tx, companyId, {
         booking,
@@ -416,6 +453,9 @@ export class AppointmentsService {
         internalNote: current.internalNote,
         rescheduledFromId: current.id,
         historyReason: `Rescheduled from ${current.appointmentNumber}`,
+        // An occurrence moved stays in its series.
+        seriesId: current.seriesId,
+        seriesIndex: current.seriesIndex,
         // The customer was quoted a price; moving the time does not change it
         // — nor does it change the discount they were given.
         priceMinor: item.unitPriceMinor,
@@ -442,6 +482,8 @@ export class AppointmentsService {
       });
       // The old booking's event goes, the new one's appears.
       await enqueueCalendarSync(tx, companyId, [current.id, replacement.id]);
+      // After the insert, so the replacement counts as the live occurrence.
+      if (current.seriesId) await syncSeriesStatus(tx, companyId, current.seriesId, null);
 
       return { replacement, before: locked };
     });
@@ -498,12 +540,26 @@ export class AppointmentsService {
     });
   }
 
-  cancel(appointmentId: string, input: CancelAppointmentDto) {
+  /** `seriesId`: the appointment must be an occurrence of it, checked under the lock. */
+  cancel(appointmentId: string, input: CancelAppointmentDto, seriesId?: string) {
+    const late = input.lateCancellation ?? false;
+    // Overriding the deadline is for people who may cancel anyone's booking.
+    if (late && !this.context.hasPermission(COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY)) {
+      throw new PermissionDeniedError([COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY]);
+    }
     return this.transition(appointmentId, 'CANCELLED', 'appointment.cancelled', {
       reason: input.reason,
       cancellation: true,
       // `appointment:cancel:own` narrows cancellation to your own bookings.
       ownPermission: COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY,
+      seriesId,
+      // The cancellation deadline, under the row lock.
+      guardTx: async (tx, companyId, locked) => {
+        const rules = await this.rulesForAppointment(tx, companyId, appointmentId);
+        return assertStaffCanCancel(rules, locked.startsAt, late).isLate
+          ? ' (late cancellation)'
+          : '';
+      },
     });
   }
 
@@ -536,17 +592,28 @@ export class AppointmentsService {
       cancellation?: boolean;
       ownPermission?: string;
       guard?: (startsAt: Date) => void;
+      /** Like `guard`, with the transaction; returns text appended to the reason. */
+      guardTx?: (
+        tx: TenantTx,
+        companyId: string,
+        locked: { startsAt: Date; status: AppointmentStatus },
+      ) => Promise<string>;
       /**
        * The customer portal: the appointment must be this customer's, checked
        * under the row lock. Another customer's id is a 404, never a 403.
        */
       customerId?: string;
+      /** The appointment must be an occurrence of this series. */
+      seriesId?: string;
     },
   ) {
     const from = await this.writeGuarded(async (tx, companyId) => {
       const locked = await lockAppointment(tx, companyId, appointmentId);
 
       if (options.customerId !== undefined && locked.customerId !== options.customerId) {
+        throw new ResourceNotFoundError('Appointment', appointmentId);
+      }
+      if (options.seriesId !== undefined && locked.seriesId !== options.seriesId) {
         throw new ResourceNotFoundError('Appointment', appointmentId);
       }
 
@@ -565,11 +632,17 @@ export class AppointmentsService {
         throw new InvalidStatusTransitionError(locked.status, to);
       }
       options.guard?.(locked.startsAt);
+      const suffix = options.guardTx ? await options.guardTx(tx, companyId, locked) : '';
 
       await this.applyStatus(tx, companyId, appointmentId, locked.status, to, {
-        reason: options.reason,
+        reason: options.reason ? `${options.reason}${suffix}` : suffix.trim() || undefined,
         cancellation: options.cancellation,
       });
+      // However the occurrence changed (staff, the portal, the series card),
+      // the series' own status follows it in the same transaction.
+      if (locked.seriesId) {
+        await syncSeriesStatus(tx, companyId, locked.seriesId, options.reason ?? null);
+      }
 
       const event = STATUS_EVENTS[to];
       if (event) await this.events.emitWithin(tx, companyId, event, { appointmentId });
@@ -798,6 +871,8 @@ export class AppointmentsService {
         name: [customer.firstName, customer.lastName].filter(Boolean).join(' '),
       },
       service,
+      rules: await loadBookingRules(tx, companyId, { branchId: branch.id, serviceId: service.id }),
+      publicOnly,
       branchPriceMinor: serviceBranch.priceOverrideMinor,
       employeeId: request.employeeId,
       resourceId: request.resourceId,
@@ -814,6 +889,22 @@ export class AppointmentsService {
     startsAt: Date,
     excludeAppointmentId?: string,
     publicOnly = false,
+  ): Promise<AvailabilitySlotDto> {
+    try {
+      return await this.findOfferedSlot(booking, startsAt, excludeAppointmentId, publicOnly);
+    } catch (error) {
+      if (!(error instanceof SlotUnavailableError)) throw error;
+      // Say WHY, where it can be said exactly: time off, an unavailable
+      // resource, or the service's concurrency cap.
+      throw (await this.explainUnavailable(booking, startsAt, excludeAppointmentId)) ?? error;
+    }
+  }
+
+  private async findOfferedSlot(
+    booking: ResolvedBooking,
+    startsAt: Date,
+    excludeAppointmentId: string | undefined,
+    publicOnly: boolean,
   ): Promise<AvailabilitySlotDto> {
     const date = todayInZone(booking.branch.timezoneName, startsAt);
     const day = await this.availability.getDay(
@@ -941,14 +1032,13 @@ export class AppointmentsService {
     assignment: Assignment,
     slot: AvailabilitySlotDto,
     excludeAppointmentId?: string,
+    cap: { branchId: string; serviceId: string; limit: number } | null = null,
   ) {
-    const keys = [
-      ...(assignment.employeeId ? [`appt:${companyId}:employee:${assignment.employeeId}`] : []),
-      ...assignment.resources.map((r) => `appt:${companyId}:resource:${r.id}`),
-    ].sort();
-    for (const key of keys) {
-      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
-    }
+    await lockKeys(tx, [
+      ...(assignment.employeeId ? [employeeLockKey(companyId, assignment.employeeId)] : []),
+      ...assignment.resources.map((r) => resourceLockKey(companyId, r.id)),
+      ...(cap ? [`appt:${companyId}:cap:${cap.branchId}:${cap.serviceId}`] : []),
+    ]);
 
     const reserved: Interval = {
       start: Date.parse(slot.reservedFrom),
@@ -977,6 +1067,26 @@ export class AppointmentsService {
         }),
       );
       if (clash) throw new SlotTakenError('employee');
+
+      // Time off approved after the availability check: it took the same lock
+      // (TimeOffService), so it is either visible now or will see this booking.
+      const away = await tx.employeeTimeOff.findFirst({
+        where: {
+          companyId,
+          employeeId: assignment.employeeId,
+          status: 'APPROVED',
+          startsAt: { lt: new Date(reserved.end) },
+          endsAt: { gt: new Date(reserved.start) },
+        },
+        select: { id: true },
+      });
+      // Generic reason: the public booking page must not learn about absences.
+      if (away) {
+        throw new SlotUnavailableError({
+          reason: 'EMPLOYEE_NOT_AVAILABLE',
+          startsAt: slot.startAt,
+        });
+      }
     }
 
     if (assignment.resources.length > 0) {
@@ -997,6 +1107,43 @@ export class AppointmentsService {
         overlaps(reserved, { start: r.startsAt.getTime(), end: r.endsAt.getTime() }),
       );
       if (clash) throw new SlotTakenError('resource');
+
+      // A block added after the availability check (same lock, ResourcesService).
+      const blocked = await tx.resourceUnavailability.findFirst({
+        where: {
+          companyId,
+          resourceId: { in: assignment.resources.map((r) => r.id) },
+          startsAt: { lt: new Date(reserved.end) },
+          endsAt: { gt: new Date(reserved.start) },
+        },
+        select: { id: true },
+      });
+      if (blocked) {
+        throw new SlotUnavailableError({ reason: 'RESOURCE_UNAVAILABLE', startsAt: slot.startAt });
+      }
+    }
+
+    // The service's concurrency cap: serialised on (branch, service) above, so
+    // two bookings racing for the last place cannot both see room.
+    if (cap) {
+      const overlapping = await tx.appointmentItem.count({
+        where: {
+          companyId,
+          branchId: cap.branchId,
+          serviceId: cap.serviceId,
+          blocksCalendar: true,
+          startsAt: { lt: new Date(slot.endAt) },
+          endsAt: { gt: new Date(slot.startAt) },
+          ...notSelf,
+        },
+      });
+      if (overlapping >= cap.limit) {
+        throw new SlotUnavailableError({
+          reason: 'MAX_CONCURRENT_BOOKINGS',
+          startsAt: slot.startAt,
+          maxConcurrentBookings: cap.limit,
+        });
+      }
     }
   }
 
@@ -1014,6 +1161,8 @@ export class AppointmentsService {
       internalNote: string | null;
       rescheduledFromId: string | null;
       historyReason: string;
+      seriesId?: string | null;
+      seriesIndex?: number | null;
       priceMinor?: bigint;
       /**
        * A discount already granted, carried over by a reschedule along with its
@@ -1064,6 +1213,8 @@ export class AppointmentsService {
         createdById: actor.id,
         confirmedAt: status === 'CONFIRMED' ? now : null,
         rescheduledFromId: args.rescheduledFromId,
+        seriesId: args.seriesId ?? null,
+        seriesIndex: args.seriesIndex ?? null,
       },
     });
 
@@ -1133,6 +1284,441 @@ export class AppointmentsService {
     });
 
     return { ...appointment, itemId: item.id };
+  }
+
+  // ===========================================================================
+  // Booking rules
+  // ===========================================================================
+
+  /**
+   * Notice and advance window, with a reason a person can act on. The
+   * availability engine applies the same two rules (same resolver), so this
+   * only turns "not offered" into "too soon" / "too far ahead".
+   */
+  private checkTiming(booking: ResolvedBooking, startsAt: Date) {
+    const now = Date.now();
+    const at = startsAt.toISOString();
+    if (startsAt.getTime() < now)
+      throw new SlotUnavailableError({ reason: 'DATE_IN_PAST', startsAt: at });
+    if (startsAt.getTime() < now + booking.rules.minimumNoticeMinutes * MINUTE_MS) {
+      throw new SlotUnavailableError({
+        reason: 'MINIMUM_NOTICE',
+        startsAt: at,
+        minimumNoticeMinutes: booking.rules.minimumNoticeMinutes,
+      });
+    }
+    const tz = booking.branch.timezoneName;
+    if (
+      daysBetween(todayInZone(tz), todayInZone(tz, startsAt)) > booking.rules.maximumAdvanceDays
+    ) {
+      throw new SlotUnavailableError({
+        reason: 'BEYOND_BOOKING_WINDOW',
+        startsAt: at,
+        maximumAdvanceDays: booking.rules.maximumAdvanceDays,
+      });
+    }
+  }
+
+  private async rulesForAppointment(tx: TenantTx, companyId: string, appointmentId: string) {
+    const row = await tx.appointment.findFirst({
+      where: { id: appointmentId, companyId },
+      select: {
+        branchId: true,
+        items: { orderBy: { sequence: 'asc' }, take: 1, select: { serviceId: true } },
+      },
+    });
+    return loadBookingRules(tx, companyId, {
+      branchId: row?.branchId,
+      serviceId: row?.items[0]?.serviceId,
+    });
+  }
+
+  /**
+   * Why a time is not offered, when it can be said exactly. Staff screens
+   * only: a public caller is never told that a named employee is away.
+   */
+  private async explainUnavailable(
+    booking: ResolvedBooking,
+    startsAt: Date,
+    excludeAppointmentId: string | undefined,
+  ): Promise<SlotUnavailableError | null> {
+    const end = new Date(startsAt.getTime() + booking.service.durationMin * MINUTE_MS);
+    const at = startsAt.toISOString();
+    const overlapping = { startsAt: { lt: end }, endsAt: { gt: startsAt } };
+    return this.appointments.transaction(async (tx, companyId) => {
+      if (booking.employeeId && !booking.publicOnly) {
+        const away = await tx.employeeTimeOff.findFirst({
+          where: { companyId, employeeId: booking.employeeId, status: 'APPROVED', ...overlapping },
+          select: { id: true },
+        });
+        if (away) return new SlotUnavailableError({ reason: 'EMPLOYEE_TIME_OFF', startsAt: at });
+      }
+      if (booking.resourceId) {
+        const blocked = await tx.resourceUnavailability.findFirst({
+          where: { companyId, resourceId: booking.resourceId, ...overlapping },
+          select: { id: true },
+        });
+        if (blocked)
+          return new SlotUnavailableError({ reason: 'RESOURCE_UNAVAILABLE', startsAt: at });
+      } else {
+        // Any free resource of each required type will do: unavailable only
+        // when too few of a type are left once blocked periods are removed.
+        for (const req of booking.requirements) {
+          const pool = await tx.resource.findMany({
+            where: {
+              companyId,
+              branchId: booking.branch.id,
+              resourceTypeId: req.resourceTypeId,
+              status: 'ACTIVE',
+              isBookable: true,
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              unavailability: { where: overlapping, select: { id: true }, take: 1 },
+            },
+          });
+          const free = pool.filter((r) => r.unavailability.length === 0).length;
+          if (pool.length >= req.quantity && free < req.quantity) {
+            return new SlotUnavailableError({ reason: 'RESOURCE_UNAVAILABLE', startsAt: at });
+          }
+        }
+      }
+      const cap = booking.rules.maxConcurrentBookings;
+      if (cap) {
+        const count = await tx.appointmentItem.count({
+          where: {
+            companyId,
+            branchId: booking.branch.id,
+            serviceId: booking.service.id,
+            blocksCalendar: true,
+            ...overlapping,
+            ...(excludeAppointmentId ? { appointmentId: { not: excludeAppointmentId } } : {}),
+          },
+        });
+        if (count >= cap) {
+          return new SlotUnavailableError({
+            reason: 'MAX_CONCURRENT_BOOKINGS',
+            startsAt: at,
+            maxConcurrentBookings: cap,
+          });
+        }
+      }
+      return null;
+    });
+  }
+
+  // ===========================================================================
+  // Recurring series
+  // ===========================================================================
+
+  /** Every occurrence, checked exactly as a single booking would be. Writes nothing. */
+  async previewSeries(input: CreateSeriesDto) {
+    return seriesPreview(await this.planSeries(input));
+  }
+
+  /**
+   * Create a recurring series: every occurrence is an ordinary appointment,
+   * validated by the same availability check, rules, locks and exclusion
+   * constraint as any other booking — and all of them are written in ONE
+   * transaction. If any is taken in the meantime, none are created.
+   *
+   * `onConflict: 'fail'` (default) refuses the whole series when any date
+   * cannot be booked; `'skip'` books the others and reports the rest. A
+   * conflicting appointment is never created.
+   */
+  async createSeries(input: CreateSeriesDto) {
+    const planned = await this.planSeries(input);
+    const preview = seriesPreview(planned);
+    const bookable = planned.checked.filter((c) => c.slot !== null);
+    if (
+      bookable.length === 0 ||
+      (bookable.length < planned.checked.length && input.onConflict === 'fail')
+    ) {
+      throw new SeriesConflictError(preview.occurrences.filter((o) => !o.bookable));
+    }
+    const actor = this.actor();
+    const total = bookable.length;
+
+    const { series, created } = await this.writeGuarded(async (tx, companyId) => {
+      const settings = await tx.companySettings.findFirst({
+        where: { companyId },
+        select: { autoConfirmBookings: true },
+      });
+      const status: AppointmentStatus =
+        settings?.autoConfirmBookings === false ? 'PENDING' : 'CONFIRMED';
+      const series = await tx.appointmentSeries.create({
+        data: {
+          companyId,
+          branchId: planned.booking.branch.id,
+          customerId: planned.booking.customer.id,
+          serviceId: planned.booking.service.id,
+          employeeId: input.employeeId ?? null,
+          resourceId: input.resourceId ?? null,
+          frequency: input.recurrence.frequency,
+          interval: input.recurrence.interval,
+          weekdays: input.recurrence.weekdays ?? [],
+          startsAt: planned.firstStart,
+          localStartTime: planned.localStartTime,
+          timezoneName: planned.booking.branch.timezoneName,
+          untilDate: input.recurrence.endDate
+            ? new Date(`${input.recurrence.endDate}T00:00:00.000Z`)
+            : null,
+          occurrenceCount: input.recurrence.endDate ? null : (input.recurrence.count ?? null),
+          createdByType: actor.type,
+          createdById: actor.id,
+        },
+      });
+
+      const created: Array<{ id: string; appointmentNumber: string; startsAt: Date }> = [];
+      for (const occurrence of bookable) {
+        const slot = occurrence.slot!;
+        // The series' employee where they are free for this date, else the slot's own choice.
+        const employeeId =
+          planned.employeeId && slot.employeeIds.includes(planned.employeeId)
+            ? planned.employeeId
+            : planned.booking.employeeId;
+        const booking = { ...planned.booking, employeeId };
+        const assignment = await this.assign(tx, companyId, booking, slot);
+        await this.lockAndCheck(tx, companyId, assignment, slot, undefined, capOf(booking));
+        await this.entitlements.assertCanAdd(tx, companyId, 'APPOINTMENT');
+        const appointment = await this.insert(tx, companyId, {
+          booking,
+          slot,
+          assignment,
+          status,
+          source: input.source,
+          customerNote: input.customerNote ?? null,
+          internalNote: input.internalNote ?? null,
+          rescheduledFromId: null,
+          historyReason: `Recurring series: ${occurrence.index + 1} of ${planned.checked.length}`,
+          seriesId: series.id,
+          seriesIndex: occurrence.index,
+        });
+        created.push(appointment);
+      }
+
+      // ONE message about the series (its first visit), not one per date;
+      // each occurrence still gets its own reminder when it comes due.
+      await this.events.emitWithin(tx, companyId, NOTIFICATION_EVENTS.APPOINTMENT_CREATED, {
+        appointmentId: created[0]!.id,
+        seriesId: series.id,
+        occurrences: created.length,
+      });
+      await enqueueCalendarSync(
+        tx,
+        companyId,
+        created.map((a) => a.id),
+      );
+      return { series, created };
+    });
+
+    await this.audit.record({
+      action: 'appointment_series.created',
+      resourceType: 'appointment_series',
+      resourceId: series.id,
+      after: {
+        frequency: series.frequency,
+        interval: series.interval,
+        weekdays: series.weekdays,
+        occurrences: total,
+        skipped: planned.checked.length - total,
+        appointmentIds: created.map((a) => a.id),
+      },
+    });
+    this.logger.log(`Series ${series.id} created with ${total} occurrences`);
+
+    return {
+      ...(await this.findSeries(series.id)),
+      skipped: preview.occurrences.filter((o) => !o.bookable),
+    };
+  }
+
+  async findSeries(seriesId: string) {
+    return this.appointments.transaction(async (tx, companyId) => {
+      const own = await this.ownScope(tx, companyId, COMPANY_PERMISSIONS.APPOINTMENT_READ_ANY);
+      if (own === 'none') throw new ResourceNotFoundError('AppointmentSeries', seriesId);
+      const series = await tx.appointmentSeries.findFirst({
+        where: { id: seriesId, companyId },
+        include: {
+          branch: { select: { id: true, name: true } },
+          customer: { select: { id: true, firstName: true, lastName: true } },
+          service: { select: { id: true, name: true } },
+        },
+      });
+      if (!series) throw new ResourceNotFoundError('AppointmentSeries', seriesId);
+      const occurrences = await tx.appointment.findMany({
+        where: {
+          companyId,
+          seriesId,
+          ...(own ? { items: { some: { companyId, employeeId: own.employeeId } } } : {}),
+        },
+        orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+        include: summaryInclude(companyId),
+      });
+      if (own && occurrences.length === 0)
+        throw new ResourceNotFoundError('AppointmentSeries', seriesId);
+      return toSeries(series, occurrences.map(toSummary));
+    });
+  }
+
+  /**
+   * Cancel one occurrence, or every occurrence from a moment on. Each goes
+   * through the same status transition and cancellation deadline as a single
+   * cancellation, all in one transaction: if one is past its deadline and not
+   * confirmed as late, none are cancelled.
+   */
+  async cancelSeries(seriesId: string, input: CancelSeriesDto) {
+    const late = input.lateCancellation ?? false;
+    if (late && !this.context.hasPermission(COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY)) {
+      throw new PermissionDeniedError([COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY]);
+    }
+
+    if (input.scope === 'occurrence') {
+      // One transaction: series membership is checked under the row lock, and
+      // the transition syncs the series status itself.
+      await this.cancel(
+        input.appointmentId!,
+        { reason: input.reason, lateCancellation: late },
+        seriesId,
+      );
+      return this.findSeries(seriesId);
+    }
+
+    // Many bookings at once: for people who may cancel anyone's.
+    if (!this.context.hasPermission(COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY)) {
+      throw new PermissionDeniedError([COMPANY_PERMISSIONS.APPOINTMENT_CANCEL_ANY]);
+    }
+    const from = input.from ? new Date(input.from) : new Date();
+
+    const cancelled = await this.writeGuarded(async (tx, companyId) => {
+      const series = await tx.appointmentSeries.findFirst({ where: { id: seriesId, companyId } });
+      if (!series) throw new ResourceNotFoundError('AppointmentSeries', seriesId);
+      const rules = await loadBookingRules(tx, companyId, {
+        branchId: series.branchId,
+        serviceId: series.serviceId,
+      });
+      const targets = await tx.appointment.findMany({
+        where: { companyId, seriesId, startsAt: { gte: from } },
+        orderBy: { startsAt: 'asc' },
+        select: { id: true },
+      });
+
+      const ids: string[] = [];
+      for (const target of targets) {
+        const locked = await lockAppointment(tx, companyId, target.id);
+        if (!canTransition(locked.status, 'CANCELLED')) continue;
+        const { isLate } = assertStaffCanCancel(rules, locked.startsAt, late);
+        await this.applyStatus(tx, companyId, target.id, locked.status, 'CANCELLED', {
+          reason: `${input.reason} (series${isLate ? ', late cancellation' : ''})`,
+          cancellation: true,
+        });
+        ids.push(target.id);
+      }
+      if (ids.length > 0) {
+        // One message for the series, not one per date.
+        await this.events.emitWithin(tx, companyId, NOTIFICATION_EVENTS.APPOINTMENT_CANCELLED, {
+          appointmentId: ids[0],
+          seriesId,
+          occurrences: ids.length,
+        });
+        await enqueueCalendarSync(tx, companyId, ids);
+      }
+      await syncSeriesStatus(tx, companyId, seriesId, input.reason);
+      return ids;
+    });
+
+    await this.audit.record({
+      action: 'appointment_series.cancelled',
+      resourceType: 'appointment_series',
+      resourceId: seriesId,
+      after: { from: from.toISOString(), cancelled: cancelled.length, appointmentIds: cancelled },
+      metadata: { reason: input.reason },
+    });
+    return { ...(await this.findSeries(seriesId)), cancelledCount: cancelled.length };
+  }
+
+  /** Resolve, plan and check every occurrence. Shared by preview and create. */
+  private async planSeries(input: CreateSeriesDto) {
+    const firstStart = new Date(input.startsAt);
+    const booking = await this.appointments.transaction((tx, companyId) =>
+      this.resolveBooking(tx, companyId, {
+        branchId: input.branchId,
+        serviceId: input.serviceId,
+        customerId: input.customerId,
+        employeeId: input.employeeId,
+        resourceId: input.resourceId,
+      }),
+    );
+    const tz = booking.branch.timezoneName;
+    // The first occurrence's local date and wall-clock time: what recurs.
+    const local = toIsoWithOffset(firstStart, tz);
+    const startDate = parsePlainDate(local.slice(0, 10));
+    const localStartTime = local.slice(11, 16);
+    const startMinutes = Number(local.slice(11, 13)) * 60 + Number(local.slice(14, 16));
+    const untilDate = input.recurrence.endDate
+      ? parsePlainDate(input.recurrence.endDate)
+      : undefined;
+    if (untilDate && untilDate < startDate) {
+      throw new ValidationFailedError({
+        'recurrence.endDate': 'The end date is before the first appointment.',
+      });
+    }
+
+    const plan = planOccurrences(
+      {
+        frequency: input.recurrence.frequency,
+        interval: input.recurrence.interval,
+        weekdays: input.recurrence.weekdays ?? [],
+        startDate,
+        startMinutes,
+        untilDate,
+        count: input.recurrence.count,
+      },
+      tz,
+    );
+    if (plan.truncated) {
+      throw new ValidationFailedError({
+        recurrence: 'A series can have at most 52 appointments. Choose an earlier end date.',
+      });
+    }
+    if (plan.occurrences.length === 0) {
+      throw new ValidationFailedError({ recurrence: 'This repeat rule produces no dates.' });
+    }
+
+    const checked: Array<{
+      index: number;
+      date: string;
+      startsAt: Date;
+      slot: AvailabilitySlotDto | null;
+      reason: string | null;
+      message: string | null;
+    }> = [];
+    for (const occurrence of plan.occurrences) {
+      try {
+        this.checkTiming(booking, occurrence.startsAt);
+        const slot = await this.offeredSlot(booking, occurrence.startsAt);
+        checked.push({ ...occurrence, slot, reason: null, message: null });
+      } catch (error) {
+        if (!(error instanceof SlotUnavailableError)) throw error;
+        checked.push({
+          ...occurrence,
+          slot: null,
+          reason: typeof error.details?.reason === 'string' ? error.details.reason : 'NOT_OFFERED',
+          message: error.message,
+        });
+      }
+    }
+
+    // One person for the whole series when someone is free for every date.
+    let employeeId = booking.employeeId ?? null;
+    if (booking.service.requiresEmployee && !employeeId) {
+      const lists = checked.flatMap((c) => (c.slot ? [c.slot.employeeIds] : []));
+      const common = lists.length ? lists.reduce((a, b) => a.filter((id) => b.includes(id))) : [];
+      employeeId = [...common].sort()[0] ?? null;
+    }
+
+    return { booking, plan, checked, employeeId, firstStart, localStartTime, tz };
   }
 
   // ===========================================================================
@@ -1216,6 +1802,9 @@ interface ResolvedBooking {
     priceMinor: bigint;
     currencyCode: string;
   };
+  rules: BookingRules;
+  /** Resolved for the public booking page: never explain staff absences. */
+  publicOnly?: boolean;
   branchPriceMinor: bigint | null;
   employeeId?: string;
   resourceId?: string;
@@ -1255,18 +1844,41 @@ interface Assignment {
 // Module helpers
 // ===========================================================================
 
+/** The service's concurrency cap at the branch, for lockAndCheck. */
+function capOf(booking: ResolvedBooking) {
+  return booking.rules.maxConcurrentBookings
+    ? {
+        branchId: booking.branch.id,
+        serviceId: booking.service.id,
+        limit: booking.rules.maxConcurrentBookings,
+      }
+    : null;
+}
+
 async function lockAppointment(tx: TenantTx, companyId: string, appointmentId: string) {
   const rows = await tx.$queryRaw<
-    Array<{ id: string; status: AppointmentStatus; starts_at: Date; customer_id: string }>
+    Array<{
+      id: string;
+      status: AppointmentStatus;
+      starts_at: Date;
+      customer_id: string;
+      series_id: string | null;
+    }>
   >`
-    SELECT id, status, starts_at, customer_id
+    SELECT id, status, starts_at, customer_id, series_id
       FROM appointment
      WHERE id = ${appointmentId}::uuid AND company_id = ${companyId}::uuid
      FOR UPDATE
   `;
   const row = rows[0];
   if (!row) throw new ResourceNotFoundError('Appointment', appointmentId);
-  return { id: row.id, status: row.status, startsAt: row.starts_at, customerId: row.customer_id };
+  return {
+    id: row.id,
+    status: row.status,
+    startsAt: row.starts_at,
+    customerId: row.customer_id,
+    seriesId: row.series_id,
+  };
 }
 
 /**
@@ -1403,6 +2015,9 @@ function toSummary(row: SummaryRow) {
     resources: item?.resources.map((r) => ({ id: r.resource.id, name: r.resource.name })) ?? [],
     totalMinor: row.totalMinor.toString(),
     currencyCode: row.currencyCode,
+    /** The recurring series this belongs to, if any, and its place in it. */
+    seriesId: row.seriesId,
+    seriesIndex: row.seriesIndex,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1499,6 +2114,148 @@ function snapshotName(snapshot: Prisma.JsonValue): string | null {
     return typeof name === 'string' ? name : null;
   }
   return null;
+}
+
+// ===========================================================================
+// Series helpers
+// ===========================================================================
+
+const LIVE_STATUSES: AppointmentStatus[] = [
+  'HOLD',
+  'PENDING',
+  'CONFIRMED',
+  'CHECKED_IN',
+  'IN_PROGRESS',
+];
+
+/**
+ * ACTIVE while any occurrence is still live; CANCELLED when every one was
+ * cancelled; ENDED otherwise (some happened, none are left to come).
+ */
+async function syncSeriesStatus(
+  tx: TenantTx,
+  companyId: string,
+  seriesId: string,
+  reason: string | null,
+) {
+  const [live, notCancelled] = await Promise.all([
+    tx.appointment.count({ where: { companyId, seriesId, status: { in: LIVE_STATUSES } } }),
+    tx.appointment.count({ where: { companyId, seriesId, status: { not: 'CANCELLED' } } }),
+  ]);
+  const status = live > 0 ? 'ACTIVE' : notCancelled > 0 ? 'ENDED' : 'CANCELLED';
+  await tx.appointmentSeries.updateMany({
+    where: { id: seriesId, companyId },
+    data: {
+      status,
+      // Only a cancelled series has a cancellation; an ENDED one ran its course.
+      ...(status === 'CANCELLED'
+        ? { cancelledAt: new Date(), cancellationReason: reason?.slice(0, 512) ?? null }
+        : {}),
+    },
+  });
+}
+
+type PlannedSeries = {
+  booking: ResolvedBooking;
+  plan: { skippedDates: string[] };
+  checked: Array<{
+    index: number;
+    date: string;
+    startsAt: Date;
+    slot: AvailabilitySlotDto | null;
+    reason: string | null;
+    message: string | null;
+  }>;
+  employeeId: string | null;
+  tz: string;
+};
+
+/** What a person needs to decide: each date, bookable or why not. */
+function seriesPreview(planned: PlannedSeries) {
+  const occurrences = planned.checked.map((c) => ({
+    index: c.index,
+    date: c.date,
+    startsAt: toIsoWithOffset(c.startsAt, planned.tz),
+    endsAt: c.slot ? c.slot.endAt : null,
+    bookable: c.slot !== null,
+    reason: c.reason,
+    message: c.message,
+  }));
+  return {
+    timezone: planned.tz,
+    occurrences,
+    /** Dates the rule names that do not exist, e.g. the 31st of a 30-day month. */
+    skippedDates: planned.plan.skippedDates,
+    bookableCount: occurrences.filter((o) => o.bookable).length,
+    conflictCount: occurrences.filter((o) => !o.bookable).length,
+    /** The one employee who can take every bookable date, if any. */
+    employeeId: planned.employeeId,
+  };
+}
+
+function toSeries(
+  series: {
+    id: string;
+    frequency: string;
+    interval: number;
+    weekdays: number[];
+    startsAt: Date;
+    localStartTime: string;
+    timezoneName: string;
+    untilDate: Date | null;
+    occurrenceCount: number | null;
+    status: string;
+    cancelledAt: Date | null;
+    cancellationReason: string | null;
+    employeeId: string | null;
+    resourceId: string | null;
+    createdAt: Date;
+    branch: { id: string; name: string };
+    customer: { id: string; firstName: string; lastName: string | null };
+    service: { id: string; name: string };
+  },
+  occurrences: Array<ReturnType<typeof toSummary>>,
+) {
+  // A rescheduled occurrence keeps its seriesIndex: the cancelled original and
+  // its replacement are one slot of the series, counted by the newest record.
+  const slots = new Map<string, ReturnType<typeof toSummary>>();
+  for (const o of occurrences) {
+    const key = o.seriesIndex === null ? o.id : String(o.seriesIndex);
+    const seen = slots.get(key);
+    if (!seen || o.createdAt > seen.createdAt) slots.set(key, o);
+  }
+  const current = [...slots.values()];
+  return {
+    id: series.id,
+    status: series.status,
+    recurrence: {
+      frequency: series.frequency,
+      interval: series.interval,
+      weekdays: series.weekdays,
+      localStartTime: series.localStartTime,
+      endDate: series.untilDate ? series.untilDate.toISOString().slice(0, 10) : null,
+      count: series.occurrenceCount,
+    },
+    startsAt: toIsoWithOffset(series.startsAt, series.timezoneName),
+    timezone: series.timezoneName,
+    branch: series.branch,
+    customer: {
+      id: series.customer.id,
+      name: [series.customer.firstName, series.customer.lastName].filter(Boolean).join(' '),
+    },
+    service: series.service,
+    employeeId: series.employeeId,
+    resourceId: series.resourceId,
+    cancelledAt: series.cancelledAt,
+    cancellationReason: series.cancellationReason,
+    createdAt: series.createdAt,
+    counts: {
+      total: current.length,
+      upcoming: current.filter((o) => LIVE_STATUSES.includes(o.status)).length,
+      cancelled: current.filter((o) => o.status === 'CANCELLED').length,
+    },
+    occurrences,
+  };
 }
 
 /**

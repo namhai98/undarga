@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Env } from './env.schema';
+import { corsOrigins, parseTrustProxy, type Env } from './env.schema';
 
 /**
  * Typed, validated configuration, grouped by concern.
@@ -35,7 +35,12 @@ export class AppConfig {
       port: this.get('PORT'),
       apiPrefix: this.get('API_PREFIX'),
       logLevel: this.get('LOG_LEVEL'),
-      swaggerEnabled: this.get('SWAGGER_ENABLED'),
+      /** JSON lines in production unless LOG_FORMAT says otherwise. */
+      logFormat: this.get('LOG_FORMAT') ?? (nodeEnv === 'production' ? 'json' : 'text'),
+      /** Off in production unless explicitly enabled. */
+      swaggerEnabled: this.get('SWAGGER_ENABLED') ?? nodeEnv !== 'production',
+      /** Express `trust proxy`; see TRUST_PROXY in env.schema.ts. */
+      trustProxy: parseTrustProxy(this.get('TRUST_PROXY')) ?? false,
       throttleEnabled: this.get('THROTTLE_ENABLED'),
       /**
        * Where apps/web lives. Configured, never taken from the request Host
@@ -51,13 +56,7 @@ export class AppConfig {
   // ---------------------------------------------------------------------------
   get cors() {
     const raw = this.get('CORS_ORIGINS').trim();
-    const origins =
-      raw === ''
-        ? []
-        : raw
-            .split(',')
-            .map((o) => o.trim())
-            .filter(Boolean);
+    const origins = raw === '' ? [] : corsOrigins(raw);
     return {
       origins,
       /**

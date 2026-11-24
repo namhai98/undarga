@@ -526,7 +526,7 @@ function Ledger({
         {transactions.isPending ? (
           <Skeleton className="h-24 w-full" />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
                 <tr>

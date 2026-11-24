@@ -30,7 +30,9 @@ import {
   bookingErrorMessage,
   localDate,
   localTime,
+  ruleViolation,
 } from '../model/appointment-display';
+import { SeriesCard } from './series-card';
 import { SlotPicker } from './slot-picker';
 import { StatusBadge } from './status-badge';
 
@@ -94,6 +96,9 @@ function Loaded({ detail }: { detail: Detail }) {
   const [mode, setMode] = useState<'idle' | 'cancel' | 'reschedule'>('idle');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Set when the server refused because a deadline passed and the caller may
+  // confirm it as late (appointment:cancel:any). Never decided here alone.
+  const [lateOffer, setLateOffer] = useState<'cancel' | 'reschedule' | null>(null);
 
   const [newDate, setNewDate] = useState(localDate(detail.startsAt));
   const [newSlot, setNewSlot] = useState<AvailabilitySlot | null>(null);
@@ -110,30 +115,36 @@ function Loaded({ detail }: { detail: Detail }) {
     }
   };
 
-  const confirmCancel = async () => {
+  const confirmCancel = async (late = false) => {
     if (!reason.trim()) return;
     setError(null);
     try {
-      await cancel.mutateAsync(reason.trim());
+      await cancel.mutateAsync(late ? { reason: reason.trim(), lateCancellation: true } : reason.trim());
       setMode('idle');
       setReason('');
+      setLateOffer(null);
     } catch (caught) {
+      setLateOffer(ruleViolation(caught) === 'CANCELLATION_DEADLINE' && canCancelAny ? 'cancel' : null);
       setError(bookingErrorMessage(caught, 'Could not cancel this appointment.'));
     }
   };
 
-  const confirmReschedule = async () => {
+  const confirmReschedule = async (late = false) => {
     if (!newSlot) return;
     setError(null);
     try {
       const moved = await reschedule.mutateAsync({
         startsAt: newSlot.startAt,
         ...(reason.trim() ? { reason: reason.trim() } : {}),
+        ...(late ? { lateChange: true } : {}),
       });
       router.push(`/appointments/${moved.id}`);
     } catch (caught) {
+      const rule = ruleViolation(caught);
+      setLateOffer(rule === 'RESCHEDULE_DEADLINE' && canCancelAny ? 'reschedule' : null);
       setError(bookingErrorMessage(caught, 'Could not reschedule this appointment.'));
-      setNewSlot(null);
+      // A rule refusal leaves the chosen time valid; anything else means it is gone.
+      if (!rule) setNewSlot(null);
     }
   };
 
@@ -216,6 +227,16 @@ function Loaded({ detail }: { detail: Detail }) {
                 {cancel.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
                 Cancel appointment
               </Button>
+              {lateOffer === 'cancel' ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!reason.trim() || cancel.isPending}
+                  onClick={() => void confirmCancel(true)}
+                >
+                  Cancel anyway (late cancellation)
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"
@@ -281,6 +302,16 @@ function Loaded({ detail }: { detail: Detail }) {
                 {reschedule.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
                 Move to {newSlot ? localTime(newSlot.startAt) : '…'}
               </Button>
+              {lateOffer === 'reschedule' && newSlot ? (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={reschedule.isPending}
+                  onClick={() => void confirmReschedule(true)}
+                >
+                  Move anyway (late change)
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"
@@ -409,6 +440,8 @@ function Loaded({ detail }: { detail: Detail }) {
           </CardContent>
         </Card>
       </div>
+
+      {detail.seriesId ? <SeriesCard seriesId={detail.seriesId} currentId={detail.id} /> : null}
 
       {canTakePayment && paymentCard ? (
         <AppointmentOnlinePayment appointmentId={detail.id} canRefund={canRefund} />

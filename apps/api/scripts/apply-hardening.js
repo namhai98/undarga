@@ -45,8 +45,15 @@ async function main() {
     const tenantPassword = process.env.APP_TENANT_PASSWORD || 'app_tenant_dev';
     const platformPassword = process.env.APP_PLATFORM_PASSWORD || 'app_platform_dev';
 
-    if (process.env.NODE_ENV === 'production' && !process.env.APP_TENANT_PASSWORD) {
-      console.error('Refusing to set a default role password in production.');
+    // Both roles: app_platform bypasses row-level security, so a known default
+    // password on it would be worse than on the tenant role.
+    if (
+      process.env.NODE_ENV === 'production' &&
+      (!process.env.APP_TENANT_PASSWORD || !process.env.APP_PLATFORM_PASSWORD)
+    ) {
+      console.error(
+        'Refusing to set a default role password in production: set APP_TENANT_PASSWORD and APP_PLATFORM_PASSWORD.',
+      );
       process.exit(1);
     }
 

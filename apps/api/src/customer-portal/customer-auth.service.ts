@@ -13,7 +13,7 @@ import {
   TenantNotFoundError,
 } from '../common/errors';
 import { AppConfig } from '../config';
-import { TenantPrismaService } from '../database/tenant-prisma.service';
+import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.service';
 import { MailerService } from '../mail/mailer.service';
 import type { CustomerActor } from '../tenancy/context/context.types';
 import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.service';
@@ -156,19 +156,38 @@ export class CustomerAuthService {
       });
       if (!live) return null;
 
+      // Every write below is conditional and counts in the database, never from
+      // the value read above: parallel guesses all read the same `attempts`,
+      // and a read-then-write would let them overwrite one another's count.
       if (!this.hashes.matches(`customer-code:${customer.id}:${code}`, live.codeHash)) {
-        const attempts = live.attempts + 1;
         await tx.customerLoginCode.updateMany({
-          where: { id: live.id, companyId: company.id },
-          data: { attempts, ...(attempts >= MAX_ATTEMPTS ? { consumedAt: now } : {}) },
+          where: { id: live.id, companyId: company.id, consumedAt: null },
+          data: { attempts: { increment: 1 } },
+        });
+        await tx.customerLoginCode.updateMany({
+          where: {
+            id: live.id,
+            companyId: company.id,
+            consumedAt: null,
+            attempts: { gte: MAX_ATTEMPTS },
+          },
+          data: { consumedAt: now },
         });
         return null;
       }
 
-      await tx.customerLoginCode.updateMany({
-        where: { id: live.id, companyId: company.id, consumedAt: null },
+      // The right code still loses if the code was burnt, or used up its
+      // guesses, after we read it.
+      const consumed = await tx.customerLoginCode.updateMany({
+        where: {
+          id: live.id,
+          companyId: company.id,
+          consumedAt: null,
+          attempts: { lt: MAX_ATTEMPTS },
+        },
         data: { consumedAt: now },
       });
+      if (consumed.count === 0) return null;
       return customer;
     });
 
@@ -229,13 +248,16 @@ export class CustomerAuthService {
     const company = await this.company(slug);
     const now = new Date();
 
+    // Check, claim, open and link in ONE transaction. The claim is conditional
+    // on the old session still being live, so of two refreshes racing on one
+    // token only one rotates; the other is treated as reuse.
     const result = await this.db.runInCompany(company.id, async (tx) => {
       const session = await tx.customerSession.findFirst({
         where: { companyId: company.id, tokenHash: this.hashes.hash(refreshToken) },
       });
       if (!session) return { kind: 'invalid' as const };
 
-      if (session.revokedAt || session.replacedById) {
+      const revokeFamily = async () => {
         const family = await tx.customerSession.findMany({
           where: { companyId: company.id, familyId: session.familyId, revokedAt: null },
           select: { id: true },
@@ -245,7 +267,9 @@ export class CustomerAuthService {
           data: { revokedAt: now },
         });
         return { kind: 'reused' as const, killed: family.map((f) => f.id) };
-      }
+      };
+
+      if (session.revokedAt || session.replacedById) return revokeFamily();
       if (session.expiresAt <= now) return { kind: 'invalid' as const };
 
       const customer = await tx.companyCustomer.findFirst({
@@ -265,7 +289,26 @@ export class CustomerAuthService {
         });
         return { kind: 'invalid' as const };
       }
-      return { kind: 'ok' as const, session, customer };
+
+      const claimed = await tx.customerSession.updateMany({
+        where: { id: session.id, companyId: company.id, revokedAt: null, replacedById: null },
+        data: { revokedAt: now },
+      });
+      if (claimed.count === 0) return revokeFamily();
+
+      const next = await this.createSession(
+        tx,
+        company.id,
+        customer.id,
+        session.customerIdentityId,
+        session.familyId,
+        meta,
+      );
+      await tx.customerSession.updateMany({
+        where: { id: session.id, companyId: company.id },
+        data: { replacedById: next.id },
+      });
+      return { kind: 'ok' as const, session, customer, next };
     });
 
     if (result.kind === 'reused') {
@@ -277,19 +320,9 @@ export class CustomerAuthService {
     }
     if (result.kind === 'invalid') throw new SessionRevokedError();
 
-    const next = await this.openSession(
-      company.id,
-      result.customer.id,
-      result.session.customerIdentityId,
-      result.session.familyId,
-      meta,
-    );
-    await this.db.runInCompany(company.id, (tx) =>
-      tx.customerSession.updateMany({
-        where: { id: result.session.id, companyId: company.id },
-        data: { replacedById: next.id },
-      }),
-    );
+    // The old session's access token stops working now, as for staff.
+    this.denyList.revoke(result.session.id);
+    const next = result.next;
 
     return this.issue({
       companyId: company.id,
@@ -337,22 +370,33 @@ export class CustomerAuthService {
     familyId: string,
     meta: { ipAddress?: string; userAgent?: string },
   ) {
-    const refreshToken = this.hashes.generate();
-    const row = await this.db.runInCompany(companyId, (tx) =>
-      tx.customerSession.create({
-        data: {
-          companyId,
-          companyCustomerId,
-          customerIdentityId,
-          tokenHash: this.hashes.hash(refreshToken),
-          familyId,
-          ipAddress: meta.ipAddress ?? null,
-          userAgent: meta.userAgent?.slice(0, 512) ?? null,
-          expiresAt: new Date(Date.now() + this.config.auth.refreshTokenTtlDays * 86_400_000),
-        },
-        select: { id: true },
-      }),
+    return this.db.runInCompany(companyId, (tx) =>
+      this.createSession(tx, companyId, companyCustomerId, customerIdentityId, familyId, meta),
     );
+  }
+
+  private async createSession(
+    tx: TenantTx,
+    companyId: string,
+    companyCustomerId: string,
+    customerIdentityId: string,
+    familyId: string,
+    meta: { ipAddress?: string; userAgent?: string },
+  ) {
+    const refreshToken = this.hashes.generate();
+    const row = await tx.customerSession.create({
+      data: {
+        companyId,
+        companyCustomerId,
+        customerIdentityId,
+        tokenHash: this.hashes.hash(refreshToken),
+        familyId,
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent?.slice(0, 512) ?? null,
+        expiresAt: new Date(Date.now() + this.config.auth.refreshTokenTtlDays * 86_400_000),
+      },
+      select: { id: true },
+    });
     return { id: row.id, refreshToken };
   }
 

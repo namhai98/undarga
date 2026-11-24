@@ -1,0 +1,141 @@
+# Continuous integration (docs/DEPLOYMENT.md).
+#
+# verify  — install, Prisma, lint, typecheck, unit, e2e (real PostgreSQL with
+#           RLS + Redis), web tests, production builds, dependency audit
+# images  — builds the production Docker images (API, migration job, web);
+#           runs only when `verify` passed. Nothing is pushed or deployed.
+#
+# A deployment workflow must `needs: [verify, images]` so it cannot run when a
+# required check fails. None is defined here: deploying is a deliberate step
+# with its own credentials and environment approval.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: undarga
+          POSTGRES_PASSWORD: undarga_ci
+          POSTGRES_DB: undarga
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U undarga -d undarga"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    # CI-only values. Not secrets: they guard nothing outside this job.
+    env:
+      DATABASE_URL: postgresql://app_tenant:app_tenant_dev@localhost:5432/undarga?schema=public
+      PLATFORM_DATABASE_URL: postgresql://app_platform:app_platform_dev@localhost:5432/undarga?schema=public
+      MIGRATION_DATABASE_URL: postgresql://undarga:undarga_ci@localhost:5432/undarga?schema=public
+      TEST_DATABASE_URL: postgresql://app_tenant:app_tenant_dev@localhost:5432/undarga_test?schema=public
+      TEST_PLATFORM_DATABASE_URL: postgresql://app_platform:app_platform_dev@localhost:5432/undarga_test?schema=public
+      TEST_MIGRATION_DATABASE_URL: postgresql://undarga:undarga_ci@localhost:5432/undarga_test?schema=public
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else-0123456789
+      TOKEN_HASH_PEPPER: ci-only-pepper-0123456789
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGINS: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      TURBO_TELEMETRY_DISABLED: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version from package.json "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the shared package
+        run: pnpm --filter @undarga/shared build
+
+      - name: Prisma — validate and generate
+        working-directory: apps/api
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Lint and typecheck
+        run: pnpm turbo run lint typecheck
+
+      - name: Unit tests (API)
+        run: pnpm --filter @undarga/api test
+
+      - name: Test database — create, migrate, harden
+        working-directory: apps/api
+        run: |
+          PGPASSWORD=undarga_ci psql -h localhost -U undarga -d undarga -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE undarga_test"
+          DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" npx prisma migrate deploy
+          MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node scripts/apply-hardening.js
+
+      - name: Migrations apply cleanly to an empty database (deploy procedure)
+        working-directory: apps/api
+        run: sh scripts/migrate-deploy.sh
+
+      - name: End-to-end tests (API, real PostgreSQL + RLS)
+        working-directory: apps/api
+        run: npx jest --config jest.e2e.config.js --runInBand
+
+      - name: Web tests
+        run: pnpm --filter @undarga/web test
+
+      - name: Production builds
+        run: pnpm turbo run build
+
+      - name: Dependency audit (fails on critical production advisories)
+        run: |
+          pnpm audit --prod --audit-level critical
+          pnpm audit --prod || echo "::warning::Non-critical production advisories — see the log above."
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: API image
+        run: docker build -f infrastructure/docker/api.Dockerfile -t undarga-api:${{ github.sha }} .
+
+      - name: Migration job image
+        run: docker build -f infrastructure/docker/api.Dockerfile --target migrate -t undarga-api-migrate:${{ github.sha }} .
+
+      - name: Web image
+        run: >
+          docker build -f infrastructure/docker/web.Dockerfile
+          --build-arg NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
+          -t undarga-web:${{ github.sha }} .
+
+      - name: API image runs as a non-root user
+        run: test "$(docker run --rm --entrypoint id undarga-api:${{ github.sha }} -u)" != "0"

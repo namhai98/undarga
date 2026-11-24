@@ -73,6 +73,9 @@ export class AvailabilityRepository {
           requiresEmployee: true,
           requiresResource: true,
           isOnlineBookable: true,
+          bookingLeadTimeMin: true,
+          maxAdvanceBookingDays: true,
+          maxConcurrentBookings: true,
         },
       });
       if (!service) throw new ResourceNotFoundError('Service', serviceId);
@@ -280,6 +283,45 @@ export class AvailabilityRepository {
           })
         : [];
 
+      // Resource availability: weekly windows (a resource with none follows the
+      // branch's hours) and unavailable periods. Both become resource busy time.
+      const resourceIds = resources.map((r) => r.id);
+      const [resourceRules, resourceUnavailability] = resourceIds.length
+        ? await Promise.all([
+            tx.resourceAvailabilityRule.findMany({
+              where: { companyId, resourceId: { in: resourceIds } },
+              select: { resourceId: true, dayOfWeek: true, startsAt: true, endsAt: true },
+            }),
+            tx.resourceUnavailability.findMany({
+              where: {
+                companyId,
+                resourceId: { in: resourceIds },
+                startsAt: { lt: scanEnd },
+                endsAt: { gt: scanStart },
+              },
+              select: { resourceId: true, startsAt: true, endsAt: true },
+            }),
+          ])
+        : [[], []];
+
+      // A service capped at N simultaneous bookings per branch: its bookings here.
+      const serviceBookings = params.serviceCap
+        ? await tx.appointmentItem.findMany({
+            where: {
+              companyId,
+              branchId,
+              serviceId,
+              blocksCalendar: true,
+              startsAt: { lt: scanEnd },
+              endsAt: { gt: scanStart },
+              ...(params.excludeAppointmentId
+                ? { appointmentId: { not: params.excludeAppointmentId } }
+                : {}),
+            },
+            select: { startsAt: true, endsAt: true },
+          })
+        : [];
+
       return {
         serviceBranch,
         companySettings,
@@ -297,6 +339,9 @@ export class AvailabilityRepository {
         requirements,
         resources,
         resourceReservations,
+        resourceRules,
+        resourceUnavailability,
+        serviceBookings,
       };
     }, 'availability.loadDay');
   }
@@ -330,6 +375,9 @@ export interface ResolvedServiceRow {
   requiresEmployee: boolean;
   requiresResource: boolean;
   isOnlineBookable: boolean;
+  bookingLeadTimeMin: number | null;
+  maxAdvanceBookingDays: number | null;
+  maxConcurrentBookings: number | null;
 }
 
 export interface LoadDayParams {
@@ -342,6 +390,8 @@ export interface LoadDayParams {
    * booking being moved does not count as busy against its new time.
    */
   excludeAppointmentId?: string;
+  /** Load the service's own bookings at the branch, for its concurrency cap. */
+  serviceCap?: boolean;
   weekdays: number[];
   /** The requested date as a `Date` at UTC midnight — how `@db.Date` compares. */
   dateAsUtcMidnight: Date;
@@ -412,4 +462,7 @@ export interface ResolvedDay {
   requirements: Array<{ resourceTypeId: string; quantity: number }>;
   resources: Array<{ id: string; resourceTypeId: string }>;
   resourceReservations: Array<{ resourceId: string } & TimeRow>;
+  resourceRules: Array<{ resourceId: string; dayOfWeek: number; startsAt: Date; endsAt: Date }>;
+  resourceUnavailability: Array<{ resourceId: string } & TimeRow>;
+  serviceBookings: TimeRow[];
 }

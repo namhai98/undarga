@@ -73,3 +73,6 @@ apps/api/prisma/*.d.ts
 
 # Local file storage (STORAGE_DRIVER=local): uploaded images, never committed.
 apps/api/var/
+
+# Benchmark output (machine-specific; see docs/PERFORMANCE.md)
+apps/api/bench-results/

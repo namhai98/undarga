@@ -4,6 +4,11 @@ import { open, stat } from 'node:fs/promises';
 import sharp, { type Metadata, type OutputInfo } from 'sharp';
 import { FileInvalidError, FileTypeNotAllowedError } from '../common/errors';
 
+// Every upload is decoded exactly once from its own temporary file, so libvips'
+// operation/file cache never gets a hit. It only holds memory and open file
+// handles (which on Windows keep the temporary file from being deleted).
+sharp.cache(false);
+
 /** The only formats accepted. No SVG (it is a document that can run script), no GIF, no HEIC. */
 export const IMAGE_FORMATS = {
   jpeg: { mime: 'image/jpeg', ext: 'jpg' },

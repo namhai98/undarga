@@ -1,5 +1,6 @@
 import { clientEnv } from '@/lib/env';
 import { ApiError } from './api-error';
+import { customerRefreshLock, withCrossTabLock } from './cross-tab-lock';
 
 /**
  * ===========================================================================
@@ -126,9 +127,15 @@ async function send<T>(
     if (await refreshSession(true)) return send<T>(method, path, body, options, true);
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { data?: T; error?: { code: string; message: string; details?: Record<string, unknown>; requestId?: string } }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    data?: T;
+    error?: {
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+      requestId?: string;
+    };
+  } | null;
 
   if (!response.ok) {
     if (response.status === 401 && !options.anonymous) customerSession.signOut();
@@ -155,7 +162,7 @@ export function refreshSession(force = false): Promise<string | null> {
   if (!slug) return Promise.resolve(null);
   if (!force && customerSession.snapshot().status === 'signed-out') return Promise.resolve(null);
 
-  inFlight ??= (async () => {
+  inFlight ??= withCrossTabLock(customerRefreshLock(slug), async () => {
     try {
       const response = await fetch(`${base}${authPath(slug)}/refresh`, {
         method: 'POST',
@@ -166,7 +173,9 @@ export function refreshSession(force = false): Promise<string | null> {
         customerSession.signOut();
         return null;
       }
-      const payload = (await response.json()) as { data: { accessToken: string; expiresIn: number } };
+      const payload = (await response.json()) as {
+        data: { accessToken: string; expiresIn: number };
+      };
       customerSession.signIn(slug, payload.data.accessToken, payload.data.expiresIn);
       return payload.data.accessToken;
     } catch {
@@ -175,17 +184,24 @@ export function refreshSession(force = false): Promise<string | null> {
     } finally {
       inFlight = null;
     }
-  })();
+  });
   return inFlight;
 }
 
 export const customerApiClient = {
   get: <T>(path: string, options?: RequestOptions) => send<T>('GET', path, undefined, options),
-  post: <T>(path: string, body?: unknown, options?: RequestOptions) => send<T>('POST', path, body, options),
-  patch: <T>(path: string, body?: unknown, options?: RequestOptions) => send<T>('PATCH', path, body, options),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    send<T>('POST', path, body, options),
+  patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
+    send<T>('PATCH', path, body, options),
 
   requestCode: (slug: string, email: string) =>
-    send<{ sent: true; expiresInSeconds: number }>('POST', `${authPath(slug)}/request-code`, { email }, { anonymous: true }),
+    send<{ sent: true; expiresInSeconds: number }>(
+      'POST',
+      `${authPath(slug)}/request-code`,
+      { email },
+      { anonymous: true },
+    ),
 
   async verify(slug: string, email: string, code: string) {
     const session = await send<{ accessToken: string; expiresIn: number }>(

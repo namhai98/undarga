@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { drain } from '../common/jobs/drain';
 import { AppConfig } from '../config';
 import { PlatformPrismaService } from '../database/platform-prisma.service';
 import { StorageService } from './storage/storage.service';
@@ -27,7 +28,7 @@ import { StorageService } from './storage/storage.service';
 export class FileCleanupService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(FileCleanupService.name);
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private running: Promise<void> | null = null;
 
   constructor(
     private readonly platformDb: PlatformPrismaService,
@@ -42,8 +43,10 @@ export class FileCleanupService implements OnApplicationBootstrap, OnModuleDestr
     this.timer.unref();
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    await drain(this.running, 'file cleanup', this.logger);
   }
 
   async sweep(options: { now?: Date; limit?: number } = {}) {
@@ -111,13 +114,16 @@ export class FileCleanupService implements OnApplicationBootstrap, OnModuleDestr
 
   private async tick() {
     if (this.running) return;
-    this.running = true;
+    this.running = this.sweep().then(
+      () => undefined,
+      (error: unknown) => {
+        this.logger.error(`File cleanup failed: ${(error as Error).message}`);
+      },
+    );
     try {
-      await this.sweep();
-    } catch (error) {
-      this.logger.error(`File cleanup failed: ${(error as Error).message}`);
+      await this.running;
     } finally {
-      this.running = false;
+      this.running = null;
     }
   }
 }

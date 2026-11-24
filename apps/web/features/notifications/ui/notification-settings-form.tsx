@@ -143,7 +143,7 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
             themselves; push reaches nobody until an app registers devices.
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="relative overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>

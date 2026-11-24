@@ -312,7 +312,7 @@ export class ReportsService {
             r.company_id = ${companyId}::uuid
         AND r.redeemed_at >= ${scope.start}
         AND r.redeemed_at <  ${scope.end}
-        AND a.status::text = ANY(${scope.statuses}::text[])
+        AND a.status = ANY(${scope.statuses}::appointment_status[])
         ${branchOn(scope, Prisma.sql`a.branch_id`)}
         ${itemExists(scope)}
       `;

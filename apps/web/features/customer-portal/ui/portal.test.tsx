@@ -168,6 +168,21 @@ describe('PortalAppointment', () => {
     expect(screen.getByRole('button', { name: 'Cancel appointment' })).toBeInTheDocument();
   });
 
+  it('gives the change deadline in the business timezone, not the browser’s', async () => {
+    const browserTz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      signedIn();
+      route({ 'GET /api/v1/customer/appointments/a-1': () => json(envelope(detail())) });
+      renderWithProviders(<PortalAppointment slug={SLUG} id="a-1" />);
+
+      // 02:00Z is 10:00 in Ulaanbaatar — and 21:00 the evening before in New York.
+      expect(await screen.findByText(/online until Sun, Nov 1, 2026, 10:00 AM/)).toBeInTheDocument();
+    } finally {
+      process.env.TZ = browserTz;
+    }
+  });
+
   it('hides actions the server refuses, and says why', async () => {
     signedIn();
     const refused = {

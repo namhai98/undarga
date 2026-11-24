@@ -6,6 +6,7 @@ import {
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { drain } from '../common/jobs/drain';
 import { AppConfig, ConfigModule } from '../config';
 import { DatabaseModule } from '../database/database.module';
 import { TenancyModule } from '../tenancy/tenancy.module';
@@ -23,7 +24,7 @@ import { SubscriptionRepository, SubscriptionsService } from './subscriptions.se
 export class SubscriptionSchedulerService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(SubscriptionSchedulerService.name);
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private running: Promise<void> | null = null;
 
   constructor(
     private readonly config: AppConfig,
@@ -38,19 +39,24 @@ export class SubscriptionSchedulerService implements OnApplicationBootstrap, OnM
     this.logger.log(`Subscription sweep every ${sweepIntervalMs} ms.`);
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    await drain(this.running, 'subscription sweep', this.logger);
   }
 
   private async tick() {
     if (this.running) return;
-    this.running = true;
+    this.running = this.lifecycle.sweep().then(
+      () => undefined,
+      (error: unknown) => {
+        this.logger.error(`Subscription sweep failed: ${(error as Error).message}`);
+      },
+    );
     try {
-      await this.lifecycle.sweep();
-    } catch (error) {
-      this.logger.error(`Subscription sweep failed: ${(error as Error).message}`);
+      await this.running;
     } finally {
-      this.running = false;
+      this.running = null;
     }
   }
 }

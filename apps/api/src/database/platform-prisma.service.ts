@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AppConfig } from '../config';
+import { forwardPrismaLogs, PRISMA_LOG_LEVELS } from './prisma-logging';
 
 /**
  * The BYPASSRLS connection.
@@ -38,8 +39,9 @@ export class PlatformPrismaService extends PrismaClient implements OnModuleInit,
   constructor(private readonly config: AppConfig) {
     super({
       datasources: { db: { url: config.database.platformUrl } },
-      log: config.app.isProduction ? ['warn', 'error'] : ['warn', 'error'],
+      log: PRISMA_LOG_LEVELS,
     });
+    forwardPrismaLogs(this, PlatformPrismaService.name);
   }
 
   async onModuleInit(): Promise<void> {

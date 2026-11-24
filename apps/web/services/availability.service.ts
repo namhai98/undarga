@@ -41,6 +41,14 @@ export interface AvailabilityDay {
   bufferAfterMin: number;
   unavailableReason: AvailabilityUnavailableReason | null;
   slots: AvailabilitySlot[];
+  /** The booking rules that shaped this day (service → branch → company). */
+  rules?: {
+    minimumNoticeMinutes: number;
+    maximumAdvanceDays: number;
+    maxConcurrentBookings: number | null;
+  } | null;
+  /** Staff screens only: when each employee is away — times only, never why. */
+  employeesUnavailable?: Array<{ employeeId: string; from: string; to: string }>;
 }
 
 export interface AvailabilityQuery {

@@ -196,6 +196,8 @@ export class PlatformAuthController {
   @Post('login')
   @Public()
   @HttpCode(200)
+  // Stricter than staff sign-in: these accounts can reach every company.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto, @Req() req: Request) {
     return this.auth.loginPlatform(dto.email, dto.password, {
       ipAddress: req.ip,

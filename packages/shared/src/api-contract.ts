@@ -124,6 +124,13 @@ export const API_ERROR_CODES = [
   'SLOT_UNAVAILABLE',
   'SLOT_TAKEN',
   'INVALID_STATUS_TRANSITION',
+  // advanced booking
+  /** A cancellation or rescheduling rule refuses it. `details.rule` says which. */
+  'BOOKING_RULE_VIOLATION',
+  /** One or more occurrences of a recurring series cannot be booked. `details.occurrences`. */
+  'SERIES_CONFLICT',
+  /** Approved time off would overlap existing appointments. `details.appointments`. */
+  'TIME_OFF_CONFLICT',
   // public booking — one deliberately vague refusal for an anonymous caller
   'ONLINE_BOOKING_UNAVAILABLE',
   // promotions — `details.reason` says why (INVALID_CODE, ENDED, LIMIT_REACHED…)

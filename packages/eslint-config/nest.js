@@ -133,6 +133,11 @@ module.exports = function nest({ tsconfigRootDir, project = true } = {}) {
         // (in the WHERE, and in the lock key); RLS stays active. The exclusion
         // constraint remains the guarantee — the locks make it fail politely.
         'src/appointments/appointments.service.ts',
+        // The same per-employee/resource advisory locks, shared from one file
+        // so time off and resource blocks take the keys bookings take. Only
+        // `pg_advisory_xact_lock`, on the caller's TENANT transaction; the key
+        // carries company_id and no table is read.
+        'src/appointments/booking-locks.ts',
         // Consumes a promotion's redemption counter with a conditional UPDATE:
         //   SET redeemed_count = redeemed_count + 1 WHERE redeemed_count < max
         // Read-then-write would let a promotion capped at 100 be redeemed 103

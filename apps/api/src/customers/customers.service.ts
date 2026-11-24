@@ -98,16 +98,27 @@ export class CustomersService {
           orderBy: [{ [query.sortBy]: query.sortOrder }, { id: 'asc' }],
           skip: query.offset,
           take: query.limit,
-          include: {
-            preferredEmployee: { select: { id: true, displayName: true } },
-            _count: { select: { appointments: true } },
-          },
+          include: { preferredEmployee: { select: { id: true, displayName: true } } },
         }),
         tx.companyCustomer.count({ where }),
       ]);
 
+      // Appointment counts for this page only. Prisma's `_count` include would
+      // aggregate every appointment in the company and join it to every
+      // customer before the page is cut (measured: docs/PERFORMANCE.md).
+      const counts = rows.length
+        ? await tx.appointment.groupBy({
+            by: ['customerId'],
+            where: { companyId, customerId: { in: rows.map((r) => r.id) } },
+            _count: { _all: true },
+          })
+        : [];
+      const countOf = new Map(counts.map((c) => [c.customerId, c._count._all]));
+
       return {
-        items: rows.map(toCustomerResponse),
+        items: rows.map((row) =>
+          toCustomerResponse({ ...row, _count: { appointments: countOf.get(row.id) ?? 0 } }),
+        ),
         total,
         limit: query.limit,
         offset: query.offset,
@@ -363,6 +374,11 @@ export class CustomersService {
    * visitor typed — and the caller learns nothing about which case happened:
    * `reused` is for the server's audit trail, not for the response.
    *
+   * Nor are the visitor's details thrown away: when a match disagrees with what
+   * was typed (another name, email or phone), `submittedDiffers` carries what
+   * was typed, for the booking's staff-only note. Staff then see "booked online
+   * as …" on a booking linked to a record nobody proved they own.
+   *
    * The unique indexes on (company, phone) and (company, email) are the
    * authority. Two simultaneous first-time bookings with the same number both
    * miss the lookup and race to insert; the loser's P2002 aborts its
@@ -373,8 +389,13 @@ export class CustomersService {
     lastName?: string | null;
     phone: string;
     email?: string | null;
-  }): Promise<{ id: string; status: string; reused: boolean }> {
-    const lookup = (tx: TenantTx, companyId: string) => this.findByContact(tx, companyId, input);
+  }): Promise<{ id: string; status: string; reused: boolean; submittedDiffers: string | null }> {
+    const lookup = async (tx: TenantTx, companyId: string) => {
+      const found = await this.findByContact(tx, companyId, input);
+      return found
+        ? { id: found.id, status: found.status, submittedDiffers: differs(found, input) }
+        : null;
+    };
 
     try {
       const result = await this.customers.transaction(async (tx, companyId) => {
@@ -394,7 +415,7 @@ export class CustomersService {
           },
           select: { id: true, status: true },
         });
-        return { ...created, reused: false };
+        return { ...created, reused: false, submittedDiffers: null };
       });
 
       if (!result.reused) {
@@ -426,16 +447,24 @@ export class CustomersService {
     tx: TenantTx,
     companyId: string,
     contact: { phone: string; email?: string | null },
-  ): Promise<{ id: string; status: string } | null> {
+  ) {
+    const select = {
+      id: true,
+      status: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      email: true,
+    } as const;
     const byPhone = await tx.companyCustomer.findFirst({
       where: { companyId, deletedAt: null, phone: contact.phone },
-      select: { id: true, status: true },
+      select,
     });
     if (byPhone || !contact.email) return byPhone;
 
     return tx.companyCustomer.findFirst({
       where: { companyId, deletedAt: null, email: contact.email },
-      select: { id: true, status: true },
+      select,
     });
   }
 
@@ -512,9 +541,7 @@ export class CustomersService {
             // The id lets the UI offer "open that customer" instead of leaving
             // somebody to search for a record they were just told exists.
             existingCustomerId: existing.id,
-            existingCustomerName: [existing.firstName, existing.lastName]
-              .filter(Boolean)
-              .join(' '),
+            existingCustomerName: [existing.firstName, existing.lastName].filter(Boolean).join(' '),
           },
         );
       }
@@ -631,4 +658,35 @@ function toCustomerResponse(customer: {
     // `companyId` is omitted: the caller is already scoped to it, and echoing a
     // tenant key invites a client to start passing it back.
   };
+}
+
+/**
+ * What an online visitor typed, when it disagrees with the record their phone
+ * or email matched; null when it agrees. For a staff-only note, never for the
+ * anonymous response.
+ */
+function differs(
+  record: {
+    firstName: string;
+    lastName: string | null;
+    phone: string | null;
+    email: string | null;
+  },
+  typed: { firstName: string; lastName?: string | null; phone: string; email?: string | null },
+): string | null {
+  const norm = (v: string | null | undefined) => (v ?? '').trim().toLowerCase();
+  const fullName = (first: string, last: string | null | undefined) =>
+    [first, last].filter(Boolean).join(' ');
+  const nameDiffers =
+    norm(fullName(record.firstName, record.lastName)) !==
+    norm(fullName(typed.firstName, typed.lastName));
+  const emailDiffers = Boolean(
+    typed.email && record.email && norm(typed.email) !== norm(record.email),
+  );
+  const phoneDiffers = Boolean(record.phone && record.phone !== typed.phone);
+  if (!nameDiffers && !emailDiffers && !phoneDiffers) return null;
+
+  return [fullName(typed.firstName, typed.lastName), typed.phone, typed.email]
+    .filter(Boolean)
+    .join(', ');
 }

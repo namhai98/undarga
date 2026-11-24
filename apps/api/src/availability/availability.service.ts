@@ -14,6 +14,7 @@ import {
   daysBetween,
   type PlainDate,
 } from '../common/time';
+import { resolveBookingRules } from '../booking-rules/booking-rules';
 import { RedisService } from '../redis/redis.service';
 import { computeAvailability } from './availability.engine';
 import { AvailabilityRepository, type ResolvedDay } from './availability.repository';
@@ -39,10 +40,8 @@ export interface AvailabilityOptions {
   excludeAppointmentId?: string;
 }
 
-/** Company defaults for the three booking-policy numbers, per the schema. */
+/** Default slot step; notice and advance window come from booking-rules.ts. */
 const DEFAULT_SLOT_GRANULARITY_MIN = 15;
-const DEFAULT_LEAD_TIME_MIN = 60;
-const DEFAULT_MAX_ADVANCE_DAYS = 90;
 
 /**
  * The availability use case: resolve the request, convert wall-clock rules into
@@ -124,7 +123,7 @@ export class AvailabilityService {
     const tz = branch.timezoneName;
     const now = new Date();
     const empty = (reason: AvailabilityUnavailableReason | null): AvailabilityDayDto =>
-      this.toDayDto(query, date, tz, service, DEFAULT_SLOT_GRANULARITY_MIN, service.durationMin, [], reason);
+      this.toDayDto(query, date, tz, service, DEFAULT_SLOT_GRANULARITY_MIN, service.durationMin, [], reason, null, options);
 
     // Date bounds, in the branch's own calendar.
     const today = todayInZone(tz, now);
@@ -140,6 +139,7 @@ export class AvailabilityService {
       employeeId: query.employeeId,
       resourceId: query.resourceId,
       excludeAppointmentId: options.excludeAppointmentId,
+      serviceCap: service.maxConcurrentBookings !== null && service.maxConcurrentBookings > 0,
       weekdays,
       dateAsUtcMidnight: new Date(`${date}T00:00:00.000Z`),
       windowStart,
@@ -151,23 +151,22 @@ export class AvailabilityService {
       day.companySettings?.slotGranularityMin,
       DEFAULT_SLOT_GRANULARITY_MIN,
     );
-    const leadTimeMin = firstNonNegative(
-      day.branchSettings?.bookingLeadTimeMin,
-      day.companySettings?.bookingLeadTimeMin,
-      DEFAULT_LEAD_TIME_MIN,
-    );
-    const maxAdvanceDays = firstPositive(
-      day.branchSettings?.maxAdvanceBookingDays,
-      day.companySettings?.maxAdvanceBookingDays,
-      DEFAULT_MAX_ADVANCE_DAYS,
-    );
+    // Notice and advance window: service → branch → company, through the one
+    // resolver every booking path uses (booking-rules.ts).
+    const rules = resolveBookingRules({
+      company: day.companySettings,
+      branch: day.branchSettings,
+      service,
+    });
+    const leadTimeMin = rules.minimumNoticeMinutes;
+    const maxAdvanceDays = rules.maximumAdvanceDays;
     const durationMin = day.serviceBranch?.durationOverrideMin ?? service.durationMin;
 
     const dto = (
       slots: AvailabilitySlot[],
       reason: AvailabilityUnavailableReason | null,
     ): AvailabilityDayDto =>
-      this.toDayDto(query, date, tz, service, slotIntervalMin, durationMin, slots, reason);
+      this.toDayDto(query, date, tz, service, slotIntervalMin, durationMin, slots, reason, { rules, day }, options);
 
     if (daysBetween(today, date) > maxAdvanceDays) return dto([], 'BEYOND_BOOKING_WINDOW');
 
@@ -195,7 +194,9 @@ export class AvailabilityService {
     const employees = service.requiresEmployee ? buildEmployees(day, date, tz) : [];
     if (service.requiresEmployee && employees.length === 0) return dto([], 'NO_ELIGIBLE_EMPLOYEE');
 
-    const resourceRequirements = service.requiresResource ? buildResourceRequirements(day) : [];
+    const resourceRequirements = service.requiresResource
+      ? buildResourceRequirements(day, date, tz, windowStart, windowEnd)
+      : [];
     if (
       service.requiresResource &&
       (resourceRequirements.length === 0 ||
@@ -219,7 +220,19 @@ export class AvailabilityService {
       resourceRequirements,
     };
 
-    const slots = computeAvailability(engineInput);
+    // The service's concurrency cap: a slot already holding the maximum number
+    // of this service's bookings at this branch is not offered.
+    const cap = rules.maxConcurrentBookings;
+    const offered = computeAvailability(engineInput);
+    const slots =
+      cap === null
+        ? offered
+        : offered.filter(
+            (slot) =>
+              day.serviceBookings.filter(
+                (b) => b.startsAt.getTime() < slot.endAt && b.endsAt.getTime() > slot.startAt,
+              ).length < cap,
+          );
     return dto(slots, slots.length === 0 ? this.emptyReason(engineInput) : null);
   }
 
@@ -246,6 +259,8 @@ export class AvailabilityService {
     serviceDurationMin: number,
     slots: readonly AvailabilitySlot[],
     unavailableReason: AvailabilityUnavailableReason | null,
+    context: { rules: ReturnType<typeof resolveBookingRules>; day: ResolvedDay } | null,
+    options: AvailabilityOptions,
   ): AvailabilityDayDto {
     return {
       date,
@@ -266,6 +281,24 @@ export class AvailabilityService {
         employeeIds: slot.employeeIds,
         resourceIds: slot.resourceIds,
       })),
+      rules: context
+        ? {
+            minimumNoticeMinutes: context.rules.minimumNoticeMinutes,
+            maximumAdvanceDays: context.rules.maximumAdvanceDays,
+            maxConcurrentBookings: context.rules.maxConcurrentBookings,
+          }
+        : null,
+      // Staff only: when each employee is away (time off, or busy in their own
+      // calendar) — times only, never the reason. Never on the public page.
+      ...(options.publicOnly || !context
+        ? {}
+        : {
+            employeesUnavailable: context.day.timeOff.map((t) => ({
+              employeeId: t.employeeId,
+              from: toIsoWithOffset(t.startsAt, tz),
+              to: toIsoWithOffset(t.endsAt, tz),
+            })),
+          }),
     };
   }
 
@@ -496,16 +529,48 @@ function recurringWorkWindows(
   return windows;
 }
 
-function buildResourceRequirements(day: ResolvedDay): ResourceRequirementInput[] {
+/**
+ * Each requirement's pool of resources, with everything that makes one busy:
+ * existing reservations, unavailable periods (maintenance…), and — for a
+ * resource with weekly availability windows — every moment outside them.
+ * A resource with no windows follows the branch's hours, already applied.
+ */
+function buildResourceRequirements(
+  day: ResolvedDay,
+  date: PlainDate,
+  tz: string,
+  windowStart: Date,
+  windowEnd: Date,
+): ResourceRequirementInput[] {
   const reservationsByResource = groupBy(day.resourceReservations, (r) => r.resourceId);
+  const unavailableByResource = groupBy(day.resourceUnavailability, (r) => r.resourceId);
+  const rulesByResource = groupBy(day.resourceRules, (r) => r.resourceId);
   const resourcesByType = groupBy(day.resources, (r) => r.resourceTypeId);
+  const today = weekdayOf(date);
+  // Wide enough to cover any buffer reaching into the day.
+  const span: Interval = { start: windowStart.getTime() - DAY_MINUTES * MINUTE_MS, end: windowEnd.getTime() + DAY_MINUTES * MINUTE_MS };
+
+  const outsideRules = (resourceId: string): Interval[] => {
+    const rules = rulesByResource.get(resourceId);
+    if (!rules || rules.length === 0) return [];
+    const open = merge(
+      rules
+        .filter((r) => r.dayOfWeek === today)
+        .map((r) => spanOn(date, tz, prismaTimeToMinutes(r.startsAt), prismaTimeToMinutes(r.endsAt))),
+    );
+    return subtractAll([span], open);
+  };
 
   return day.requirements.map((requirement) => ({
     resourceTypeId: requirement.resourceTypeId,
     quantity: requirement.quantity,
     pool: (resourcesByType.get(requirement.resourceTypeId) ?? []).map((resource) => ({
       resourceId: resource.id,
-      busy: (reservationsByResource.get(resource.id) ?? []).map(toInterval),
+      busy: [
+        ...(reservationsByResource.get(resource.id) ?? []).map(toInterval),
+        ...(unavailableByResource.get(resource.id) ?? []).map(toInterval),
+        ...outsideRules(resource.id),
+      ],
     })),
   }));
 }
@@ -578,11 +643,6 @@ function groupBy<T, K>(rows: readonly T[], key: (row: T) => K): Map<K, T[]> {
 
 function firstPositive(...values: Array<number | null | undefined>): number {
   for (const v of values) if (typeof v === 'number' && v > 0) return v;
-  return 0;
-}
-
-function firstNonNegative(...values: Array<number | null | undefined>): number {
-  for (const v of values) if (typeof v === 'number' && v >= 0) return v;
   return 0;
 }
 

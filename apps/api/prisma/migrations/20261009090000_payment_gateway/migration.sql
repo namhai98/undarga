@@ -121,7 +121,19 @@ ALTER TABLE "payment_transaction" ADD CONSTRAINT "payment_transaction_currency_c
 ALTER TABLE "payment_webhook_event" ADD CONSTRAINT "payment_webhook_event_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+-- Only when missing: the init migration creates this key, and it is absent
+-- here only where 001_hardening.sql rebuilt audit_log (partitioned) before
+-- this migration ran. A fresh database applying every migration in one go
+-- still has it, and a plain ADD CONSTRAINT would fail the deploy.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'audit_log_company_id_fkey' AND conrelid = 'audit_log'::regclass
+  ) THEN
+    ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_company_id_fkey" FOREIGN KEY ("company_id") REFERENCES "company"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+  END IF;
+END $$;
 
 
 -- Money is positive, refunds never exceed it, fees never exceed it.

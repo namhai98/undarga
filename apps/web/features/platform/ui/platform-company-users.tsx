@@ -169,7 +169,7 @@ export function PlatformCompanyUsers({ companyId }: { companyId: string }) {
 /** Shared by this page and the preview on the company detail screen. */
 export function CompanyUserTable({ users }: { users: PlatformCompanyUser[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
           <tr>

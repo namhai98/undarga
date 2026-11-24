@@ -1,51 +1,29 @@
 import 'reflect-metadata';
-import { Logger, VersioningType } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import helmet from 'helmet';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { configureApp } from './bootstrap/configure-app';
+import { createAppLogger } from './bootstrap/logger';
 import { AppConfig } from './config';
 import { setupSwagger } from './common/swagger/setup-swagger';
 
 async function bootstrap(): Promise<void> {
   // rawBody: webhook signatures are computed over the exact bytes received
   // (req.rawBody); the parsed JSON is not the same thing.
-  const app = await NestFactory.create(AppModule, { bufferLogs: false, rawBody: true });
+  // bufferLogs: start-up lines wait for the configured logger (JSON in
+  // production) instead of going out in the default format first.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   const config = app.get(AppConfig);
+  app.useLogger(createAppLogger(config));
   const logger = new Logger('bootstrap');
 
-  app.use(helmet());
-  app.setGlobalPrefix(config.app.apiPrefix);
-  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
-
-  /**
-   * CORS is an explicit allow-list with no wildcard.
-   *
-   * `credentials: true` and `origin: '*'` are mutually exclusive in the browser
-   * anyway, but the deeper reason is that this API will eventually serve
-   * per-tenant custom domains — those origins get added once domain
-   * verification exists, not blanket-allowed now. An empty list means
-   * same-origin only, and production refuses to boot with one.
-   */
-  if (config.cors.enabled) {
-    app.enableCors({
-      origin: config.cors.origins,
-      credentials: true,
-      methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'X-Company-Id',
-        'X-Company-Slug',
-        'X-Request-Id',
-        'Idempotency-Key',
-      ],
-      exposedHeaders: ['X-Request-Id'],
-      maxAge: 600,
-    });
-    logger.log(`CORS enabled for: ${config.cors.origins.join(', ')}`);
-  } else {
-    logger.warn('CORS disabled (CORS_ORIGINS is empty) — same-origin requests only');
-  }
+  // Security headers, trust proxy, CORS, prefix and versioning — shared with
+  // the e2e harness so the tests run the same HTTP setup as production.
+  configureApp(app, config);
 
   /**
    * Graceful shutdown.

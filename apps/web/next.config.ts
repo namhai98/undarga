@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 /**
@@ -19,6 +20,15 @@ import type { NextConfig } from 'next';
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+
+  /**
+   * A self-contained server for the production image
+   * (infrastructure/docker/web.Dockerfile runs .next/standalone/apps/web/server.js).
+   * Tracing starts at the monorepo root so workspace packages are included and
+   * the output keeps the repository layout.
+   */
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../../'),
 
   /**
    * The browser allow-list.
@@ -47,6 +57,63 @@ const nextConfig: NextConfig = {
 
   // Do not advertise the framework version to every visitor.
   poweredByHeader: false,
+
+  async headers() {
+    return [{ source: '/:path*', headers: securityHeaders() }];
+  },
 };
+
+/**
+ * Security headers for every page.
+ *
+ * - No framing at all: the dashboard is a target for clickjacking (a hidden
+ *   "Cancel appointment" or "Refund" button under a decoy page).
+ * - A Content-Security-Policy that only lets the page talk to itself and the
+ *   API. Next's App Router injects inline bootstrap scripts, so script-src
+ *   needs 'unsafe-inline' without a nonce-based middleware; the rest of the
+ *   policy (no foreign scripts, no plugins, no foreign form targets, no
+ *   <base> hijack) still applies. Development additionally needs eval and a
+ *   websocket for hot reload.
+ * - HSTS only in production, where the site is served over HTTPS.
+ */
+function securityHeaders(): Array<{ key: string; value: string }> {
+  const production = process.env.NODE_ENV === 'production';
+  const api = apiOrigin();
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${production ? '' : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    // Images come from the API (public files) or object storage it signs for.
+    `img-src 'self' data: blob: https:${api ? ` ${api}` : ''}`,
+    "font-src 'self' data:",
+    `connect-src 'self'${api ? ` ${api}` : ''}${production ? '' : ' ws: wss:'}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(production ? ['upgrade-insecure-requests'] : []),
+  ].join('; ');
+
+  return [
+    { key: 'Content-Security-Policy', value: csp },
+    { key: 'X-Frame-Options', value: 'DENY' },
+    { key: 'X-Content-Type-Options', value: 'nosniff' },
+    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
+    { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+    ...(production
+      ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }]
+      : []),
+  ];
+}
+
+/** The API's origin, from NEXT_PUBLIC_API_URL (which includes a path). */
+function apiOrigin(): string | null {
+  try {
+    return process.env.NEXT_PUBLIC_API_URL ? new URL(process.env.NEXT_PUBLIC_API_URL).origin : null;
+  } catch {
+    return null;
+  }
+}
 
 export default nextConfig;

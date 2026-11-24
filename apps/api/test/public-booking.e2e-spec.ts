@@ -324,6 +324,21 @@ describe('public booking', () => {
       expect(appt.customerId).toBe(existing.id);
       const unchanged = await harness.prisma.companyCustomer.findUniqueOrThrow({ where: { id: existing.id } });
       expect(unchanged.firstName).toBe(existing.firstName);
+      // …but staff can see who actually booked, since nobody proved the match.
+      expect(appt.internalNote).toMatch(/^Booked online as: Somebody Else, \+976/);
+      // Never the anonymous visitor.
+      expect(JSON.stringify(res.body)).not.toMatch(/Booked online as|differ/);
+    });
+
+    it('adds no note when the returning customer typed the details on file', async () => {
+      const details = customer({ phone: '+97699001133', email: `same-${Date.now()}@example.com` });
+      const first = await book({ employeeId: e2, startsAt: at(day(7), '09:00'), customer: details });
+      const second = await book({ employeeId: e2, startsAt: at(day(7), '11:00'), customer: details });
+      expect([first.status, second.status]).toEqual([201, 201]);
+      const appt = await harness.prisma.appointment.findFirstOrThrow({
+        where: { appointmentNumber: second.body.data.appointmentNumber },
+      });
+      expect(appt.internalNote).toBeNull();
     });
 
     it('reuses by email when the phone is new', async () => {

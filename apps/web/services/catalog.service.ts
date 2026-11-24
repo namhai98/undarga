@@ -70,6 +70,15 @@ export interface ServiceSummary {
   sortOrder: number;
   branchCount: number;
   employeeCount: number;
+  /** This service's own booking rules; null = the company's (or branch's) rule applies. */
+  bookingRules?: ServiceBookingRules;
+}
+
+export interface ServiceBookingRules {
+  bookingLeadTimeMin: number | null;
+  maxAdvanceBookingDays: number | null;
+  cancellationWindowHours: number | null;
+  maxConcurrentBookings: number | null;
 }
 
 export interface ServiceDetail extends ServiceSummary {
@@ -130,6 +139,11 @@ export interface ServiceInput {
   requiresResource?: boolean;
   color?: string | null;
   sortOrder?: number;
+  /** Rule overrides; null clears one back to the company setting. */
+  bookingLeadTimeMin?: number | null;
+  maxAdvanceBookingDays?: number | null;
+  cancellationWindowHours?: number | null;
+  maxConcurrentBookings?: number | null;
   branchIds?: string[];
   employeeIds?: string[];
 }

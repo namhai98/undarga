@@ -91,6 +91,10 @@ export function applyTestDatabaseEnv(): void {
   process.env.STORAGE_LOCAL_ROOT ??= join(tmpdir(), `undarga-test-storage-${process.pid}`);
   process.env.API_PUBLIC_URL ??= 'https://api.undarga.test';
 
+  // Rate-limit counters and session revocations live in Redis. A prefix per
+  // run keeps one run's counters (and the dev server's) out of the next.
+  process.env.REDIS_KEY_PREFIX = `undarga-test:${process.pid}-${Date.now()}:`;
+
   process.env[APPLIED] = '1';
 }
 

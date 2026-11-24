@@ -4,13 +4,15 @@ A SaaS booking platform where many independent companies each run multiple
 branches, staff, services and appointments, with strict data isolation between
 them.
 
-**Status: identity.** The monorepo, the API, the database with tenant isolation
-and the web shell are in place, and on top of them: company provisioning,
-invitations, and a working sign-in that survives a reload and resolves which
-company you are in.
+**Status: feature-complete for a first release; deployment prepared, not yet
+deployed.** Companies, branches, staff, services, customers, availability,
+appointments (including recurring series, booking rules, time off and
+resources), public booking, customer portal, payments (QPay), gift cards,
+promotions, subscriptions, notifications (SendGrid, Twilio), calendar sync,
+file storage and the platform console.
 
-No booking features yet — no appointments, availability, payments, promotions,
-gift cards or notifications. Member and role administration is next.
+Deploying: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Security and the
+production settings: [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
 
@@ -240,6 +242,10 @@ Full detail in [docs/MULTI-TENANCY.md](docs/MULTI-TENANCY.md).
 | [docs/NOTIFICATION-PROVIDERS.md](docs/NOTIFICATION-PROVIDERS.md) | Real email/SMS delivery: SendGrid, Twilio, receipts, company accounts, setup |
 | [docs/CALENDAR-INTEGRATION.md](docs/CALENDAR-INTEGRATION.md) | Google / Outlook calendars: OAuth, one-way sync, busy times, setup |
 | [docs/FILE-STORAGE.md](docs/FILE-STORAGE.md) | Image uploads: validation, local/S3 storage, signed URLs, cleanup, setup |
+| [docs/ADVANCED-BOOKING.md](docs/ADVANCED-BOOKING.md) | Recurring series, booking rules, time off, resource availability, caps |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Configuration, images, releases, first admin, backups, monitoring, troubleshooting, CI |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security model, hardening, production configuration, remaining risks |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Benchmarks, measured optimizations, RLS and indexes, remaining bottlenecks |
 | [docs/CUSTOMER-PORTAL.md](docs/CUSTOMER-PORTAL.md) | Customers managing their own bookings: code sign-in, rules, isolation |
 | [docs/PLATFORM-ADMIN.md](docs/PLATFORM-ADMIN.md) | The operator console, and why platform access is not company RBAC |
 
@@ -263,7 +269,7 @@ renamed code is a build error rather than a branch that stops firing.
   with placeholders is tracked.
 - Passwords are argon2id. Refresh tokens are opaque, HMAC-peppered, and rotate
   with reuse detection — there is no refresh JWT to steal.
-- Tokens are held in memory in the browser, never in `localStorage`. A reload
-  currently signs you out; the fix is an `HttpOnly` cookie and is listed as an
-  open decision.
+- Access tokens are held in memory in the browser, never in `localStorage`;
+  the refresh token is an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in
+  production), so a reload keeps you signed in.
 - The audit trail is append-only and hash-chained per company.

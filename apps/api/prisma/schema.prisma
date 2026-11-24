@@ -181,12 +181,32 @@ enum ConsentType {
 enum TimeOffType {
   VACATION
   SICK
+  PERSONAL
   UNPAID
   TRAINING
   PUBLIC_HOLIDAY
   OTHER
 
   @@map("time_off_type")
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+
+  @@map("recurrence_frequency")
+}
+
+enum AppointmentSeriesStatus {
+  /// Occurrences still to come.
+  ACTIVE
+  /// Future occurrences were cancelled; past ones stand.
+  ENDED
+  /// Every occurrence was cancelled.
+  CANCELLED
+
+  @@map("appointment_series_status")
 }
 
 enum TimeOffStatus {
@@ -616,9 +636,12 @@ model PlatformUser {
   status       UserStatus @default(INVITED)
 
   // MFA is mandatory for this realm; the column records enrolment, not choice.
-  mfaSecret     String?   @map("mfa_secret") @db.VarChar(255)
-  mfaEnrolledAt DateTime? @map("mfa_enrolled_at") @db.Timestamptz(3)
-  lastLoginAt   DateTime? @map("last_login_at") @db.Timestamptz(3)
+  mfaSecret        String?   @map("mfa_secret") @db.VarChar(255)
+  mfaEnrolledAt    DateTime? @map("mfa_enrolled_at") @db.Timestamptz(3)
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
+  /// Lockout after repeated failed sign-ins, as for staff accounts.
+  failedLoginCount Int       @default(0) @map("failed_login_count") @db.SmallInt
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(3)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -993,6 +1016,7 @@ model Company {
   notificationPreferences NotificationPreference[]
   notificationProviders   NotificationProviderConfig[]
   calendarConnections     CalendarConnection[]
+  appointmentSeries       AppointmentSeries[]
   appointmentReminders    AppointmentReminder[]
   subscription            Subscription?
   entitlementOverrides    SubscriptionEntitlementOverride[]
@@ -1026,6 +1050,11 @@ model CompanySettings {
   allowOnlineBooking      Boolean @default(true) @map("allow_online_booking")
   allowCustomerCancel     Boolean @default(true) @map("allow_customer_cancel")
   allowCustomerReschedule Boolean @default(true) @map("allow_customer_reschedule")
+  /// Whether an appointment may be moved at all (staff and customers alike).
+  reschedulingAllowed     Boolean @default(true) @map("rescheduling_allowed")
+  /// Hours before the start after which a move is a late change. NULL = the
+  /// cancellation window.
+  rescheduleDeadlineHours Int?    @map("reschedule_deadline_hours") @db.SmallInt
 
   requireDeposit          Boolean @default(false) @map("require_deposit")
   depositPercentBps       Int     @default(0) @map("deposit_percent_bps")
@@ -1446,6 +1475,7 @@ model Branch {
   promotionBranches PromotionBranch[]
   giftCards         GiftCard[]
   payments          Payment[]
+  appointmentSeries AppointmentSeries[]
 
   // NOTE: (companyId, code) uniqueness is PARTIAL — see 001_hardening.sql.
   @@unique([companyId, id])
@@ -1794,6 +1824,14 @@ model Service {
   /// enabling it later is not a constraint migration.
   capacity Int @default(1) @db.SmallInt
 
+  /// Service-specific booking rules. NULL = the branch's, then the company's.
+  bookingLeadTimeMin      Int? @map("booking_lead_time_min")
+  maxAdvanceBookingDays   Int? @map("max_advance_booking_days") @db.SmallInt
+  cancellationWindowHours Int? @map("cancellation_window_hours") @db.SmallInt
+  /// At most this many appointments of this service may overlap at one branch
+  /// (e.g. three massage beds, whoever performs it). NULL = no cap.
+  maxConcurrentBookings   Int? @map("max_concurrent_bookings") @db.SmallInt
+
   requiresEmployee Boolean @default(true) @map("requires_employee")
   requiresResource Boolean @default(false) @map("requires_resource")
   isOnlineBookable Boolean @default(true) @map("is_online_bookable")
@@ -1824,6 +1862,7 @@ model Service {
   appointmentItems     AppointmentItem[]
   promotionServices    PromotionService[]
   waitlistEntries      WaitlistEntry[]
+  appointmentSeries    AppointmentSeries[]
 
   // NOTE: (companyId, code) uniqueness is PARTIAL — see 001_hardening.sql.
   @@unique([companyId, id])
@@ -1946,13 +1985,54 @@ model Resource {
   branch       Branch       @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
   resourceType ResourceType @relation(fields: [companyId, resourceTypeId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
 
-  reservations AppointmentResource[]
+  reservations      AppointmentResource[]
+  availabilityRules ResourceAvailabilityRule[]
+  unavailability    ResourceUnavailability[]
 
   // NOTE: (companyId, branchId, code) uniqueness is PARTIAL — see 001_hardening.sql.
   @@unique([companyId, id])
   @@index([companyId, branchId, status])
   @@index([companyId, resourceTypeId])
   @@map("resource")
+}
+
+/// When a resource may be booked, in LOCAL WALL-CLOCK time of its branch. A
+/// resource with no rules follows the branch's opening hours.
+model ResourceAvailabilityRule {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  resourceId String   @map("resource_id") @db.Uuid
+  /// 0 = Sunday … 6 = Saturday.
+  dayOfWeek  Int      @map("day_of_week") @db.SmallInt
+  startsAt   DateTime @map("starts_at") @db.Time(0)
+  endsAt     DateTime @map("ends_at") @db.Time(0)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  resource Resource @relation(fields: [companyId, resourceId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([companyId, resourceId, dayOfWeek])
+  @@map("resource_availability_rule")
+}
+
+/// A period a resource cannot be booked: maintenance, out of service, held.
+model ResourceUnavailability {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  resourceId    String    @map("resource_id") @db.Uuid
+  startsAt      DateTime  @map("starts_at") @db.Timestamptz(3)
+  endsAt        DateTime  @map("ends_at") @db.Timestamptz(3)
+  /// MAINTENANCE | OUT_OF_SERVICE | RESERVED | OTHER (CHECK in the migration).
+  reason        String    @default("OTHER") @db.VarChar(16)
+  note          String?   @db.VarChar(512)
+  createdByType ActorType @map("created_by_type")
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  resource Resource @relation(fields: [companyId, resourceId], references: [companyId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([companyId, resourceId, startsAt])
+  @@map("resource_unavailability")
 }
 
 /// How many of which resource TYPE a service consumes. Configuration.
@@ -2120,6 +2200,7 @@ model CompanyCustomer {
   promotionTargets    PromotionCustomer[]
   redemptions         PromotionRedemption[]
   waitlistEntries     WaitlistEntry[]
+  appointmentSeries   AppointmentSeries[]
 
   // NOTE: (companyId, email) and (companyId, phone) uniqueness are PARTIAL
   //       (WHERE deleted_at IS NULL AND value IS NOT NULL) — see 001_hardening.sql.
@@ -2184,6 +2265,52 @@ model CustomerConsent {
 /// Aggregate root. TWO independent status fields (see docs/DATABASE.md §5.3).
 /// startsAt/endsAt are the envelope of the items, maintained in the same
 /// transaction so calendar queries need no aggregation.
+/// A recurring booking: the rule that produced a set of appointments. Each
+/// occurrence is an ordinary appointment (seriesId, seriesIndex), validated and
+/// protected exactly like any other booking; this row only remembers the rule.
+model AppointmentSeries {
+  id         String  @id @default(uuid(7)) @db.Uuid
+  companyId  String  @map("company_id") @db.Uuid
+  branchId   String  @map("branch_id") @db.Uuid
+  customerId String  @map("customer_id") @db.Uuid
+  serviceId  String  @map("service_id") @db.Uuid
+  /// As requested; each occurrence records who was actually assigned.
+  employeeId String? @map("employee_id") @db.Uuid
+  resourceId String? @map("resource_id") @db.Uuid
+
+  frequency       RecurrenceFrequency
+  /// Every N days / weeks / months.
+  interval        Int                 @default(1) @db.SmallInt
+  /// WEEKLY only: 0 = Sunday … 6 = Saturday.
+  weekdays        Int[]               @default([])
+  /// The first occurrence, and its wall-clock time in the branch's zone.
+  startsAt        DateTime            @map("starts_at") @db.Timestamptz(3)
+  localStartTime  String              @map("local_start_time") @db.VarChar(5)
+  timezoneName    String              @map("timezone_name") @db.VarChar(64)
+  /// Exactly one of the two ends the series (CHECK in the migration).
+  untilDate       DateTime?           @map("until_date") @db.Date
+  occurrenceCount Int?                @map("occurrence_count") @db.SmallInt
+
+  status             AppointmentSeriesStatus @default(ACTIVE)
+  cancelledAt        DateTime?               @map("cancelled_at") @db.Timestamptz(3)
+  cancellationReason String?                 @map("cancellation_reason") @db.VarChar(512)
+
+  createdByType ActorType @map("created_by_type")
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       Branch          @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  customer     CompanyCustomer @relation(fields: [companyId, customerId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  service      Service         @relation(fields: [companyId, serviceId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  appointments Appointment[]
+
+  @@unique([companyId, id])
+  @@index([companyId, customerId])
+  @@map("appointment_series")
+}
+
 model Appointment {
   id                String @id @default(uuid(7)) @db.Uuid
   companyId         String @map("company_id") @db.Uuid
@@ -2235,6 +2362,10 @@ model Appointment {
   /// Reschedule is cancel-and-create, never an in-place time change.
   rescheduledFromId String? @map("rescheduled_from_id") @db.Uuid
 
+  /// The recurring series this occurrence belongs to, and its place in it.
+  seriesId    String? @map("series_id") @db.Uuid
+  seriesIndex Int?    @map("series_index") @db.SmallInt
+
   /// HOLD rows expire and are swept to EXPIRED, releasing the slot.
   holdExpiresAt DateTime? @map("hold_expires_at") @db.Timestamptz(3)
 
@@ -2250,8 +2381,9 @@ model Appointment {
   currency       Currency        @relation(fields: [currencyCode], references: [code], onDelete: Restrict, onUpdate: NoAction)
   bookedTimezone Timezone        @relation(fields: [bookedTimezoneName], references: [name], onDelete: Restrict, onUpdate: NoAction)
 
-  rescheduledFrom Appointment?  @relation("AppointmentReschedule", fields: [companyId, rescheduledFromId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
-  rescheduledTo   Appointment[] @relation("AppointmentReschedule")
+  rescheduledFrom Appointment?       @relation("AppointmentReschedule", fields: [companyId, rescheduledFromId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
+  rescheduledTo   Appointment[]      @relation("AppointmentReschedule")
+  series          AppointmentSeries? @relation(fields: [companyId, seriesId], references: [companyId, id], onDelete: NoAction, onUpdate: NoAction)
 
   items                AppointmentItem[]
   statusHistory        AppointmentStatusHistory[]
@@ -2273,6 +2405,7 @@ model Appointment {
   @@index([companyId, createdAt])
   @@index([companyId, customerId, startsAt(sort: Desc)])
   @@index([companyId, status, startsAt])
+  @@index([companyId, seriesId])
   @@index([companyId, paymentStatus])
   @@index([holdExpiresAt])
   @@map("appointment")

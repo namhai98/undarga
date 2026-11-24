@@ -9,12 +9,16 @@ import { AppointmentsService } from './appointments.service';
 import {
   appointmentQuerySchema,
   cancelAppointmentSchema,
+  cancelSeriesSchema,
   createAppointmentSchema,
+  createSeriesSchema,
   rescheduleAppointmentSchema,
   statusChangeSchema,
   type AppointmentQueryDto,
   type CancelAppointmentDto,
+  type CancelSeriesDto,
   type CreateAppointmentDto,
+  type CreateSeriesDto,
   type RescheduleAppointmentDto,
   type StatusChangeDto,
 } from './dto/appointment.dto';
@@ -104,6 +108,36 @@ export class AppointmentsController {
   @ApiResponse({ status: 409, description: 'SLOT_UNAVAILABLE, SLOT_TAKEN or SERVICE_NOT_BOOKABLE.' })
   async create(@Body(new ZodValidationPipe(createAppointmentSchema)) dto: CreateAppointmentDto) {
     return this.appointments.create(dto);
+  }
+
+  @Post('recurring/preview')
+  @HttpCode(200)
+  @RequirePermission(C.APPOINTMENT_WRITE)
+  @ApiOperation({
+    summary: 'Check a recurring series before booking it',
+    description:
+      'Every date the rule produces, each checked exactly as a single booking would be (hours, ' +
+      'rosters, time off, resources, notice, advance window, concurrency cap, existing bookings). ' +
+      'Writes nothing.',
+  })
+  async previewRecurring(@Body(new ZodValidationPipe(createSeriesSchema)) dto: CreateSeriesDto) {
+    return this.appointments.previewSeries(dto);
+  }
+
+  @Post('recurring')
+  @RequirePermission(C.APPOINTMENT_WRITE)
+  @RequiresWrite()
+  @ApiOperation({
+    summary: 'Book a recurring series',
+    description:
+      'Daily, weekly (chosen weekdays) or monthly, ending on a date or after N appointments (at ' +
+      'most 52). Every occurrence is validated, then all are written in one transaction. With ' +
+      '`onConflict: "fail"` (default) a single unbookable date refuses the whole series; with ' +
+      '"skip" the others are booked and the rest reported. A conflicting appointment is never created.',
+  })
+  @ApiResponse({ status: 409, description: 'SERIES_CONFLICT — details.occurrences says which dates and why.' })
+  async createRecurring(@Body(new ZodValidationPipe(createSeriesSchema)) dto: CreateSeriesDto) {
+    return this.appointments.createSeries(dto);
   }
 
   @Get(':appointmentId')
@@ -208,5 +242,39 @@ export class AppointmentsController {
     @Body(new ZodValidationPipe(rescheduleAppointmentSchema)) dto: RescheduleAppointmentDto,
   ) {
     return this.appointments.reschedule(appointmentId, dto);
+  }
+}
+
+/** A recurring series: its rule and every occurrence. */
+@ApiTags('appointments')
+@ApiParam({ name: 'companyId', description: 'Validated against your memberships; 404 if not.' })
+@Controller({ path: 'companies/:companyId/appointment-series', version: '1' })
+@AllowPlatformAccess()
+export class AppointmentSeriesController {
+  constructor(private readonly appointments: AppointmentsService) {}
+
+  @Get(':seriesId')
+  @RequirePermission(C.APPOINTMENT_READ_OWN, C.APPOINTMENT_READ_ANY)
+  @ApiOperation({ summary: 'A series, with every occurrence (with :own, only yours)' })
+  async find(@Param('seriesId', uuidParam) seriesId: string) {
+    return this.appointments.findSeries(seriesId);
+  }
+
+  @Post(':seriesId/cancel')
+  @HttpCode(200)
+  @RequirePermission(C.APPOINTMENT_CANCEL_OWN, C.APPOINTMENT_CANCEL_ANY)
+  @RequiresWrite()
+  @ApiOperation({
+    summary: 'Cancel one occurrence, or every occurrence from a moment on',
+    description:
+      '`scope: "occurrence"` with `appointmentId`, or `scope: "future"` (from `from`, default now; ' +
+      'needs appointment:cancel:any). The cancellation deadline applies to each; past it, confirm ' +
+      'with `lateCancellation: true`. All-or-nothing.',
+  })
+  async cancel(
+    @Param('seriesId', uuidParam) seriesId: string,
+    @Body(new ZodValidationPipe(cancelSeriesSchema)) dto: CancelSeriesDto,
+  ) {
+    return this.appointments.cancelSeries(seriesId, dto);
   }
 }

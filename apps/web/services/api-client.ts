@@ -1,6 +1,7 @@
 import { API_HEADERS, type ApiEnvelope } from '@undarga/shared';
 import { clientEnv } from '@/lib/env';
 import { ApiAbortError, ApiError, ApiNetworkError } from './api-error';
+import { STAFF_REFRESH_LOCK, withCrossTabLock } from './cross-tab-lock';
 import { tokenStore, UNRECOVERABLE_AUTH_CODES, type AuthTokens } from './token-store';
 
 export interface RequestOptions {
@@ -290,7 +291,9 @@ class ApiClient {
    * under refresh-token rotation.
    */
   private async refresh(): Promise<AuthTokens | null> {
-    this.refreshInFlight ??= this.performRefresh().finally(() => {
+    this.refreshInFlight ??= withCrossTabLock(STAFF_REFRESH_LOCK, () =>
+      this.performRefresh(),
+    ).finally(() => {
       this.refreshInFlight = null;
     });
 

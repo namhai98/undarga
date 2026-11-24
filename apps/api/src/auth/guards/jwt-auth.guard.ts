@@ -85,7 +85,7 @@ export class JwtAuthGuard implements CanActivate {
     // "why am I seeing logged-out content" undebuggable.
     const claims = this.tokens.verifyAny(token, allowedRealms);
 
-    if (this.denyList.isRevoked(claims.sid)) {
+    if (await this.denyList.isRevoked(claims.sid)) {
       throw new SessionRevokedError();
     }
 

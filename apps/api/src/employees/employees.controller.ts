@@ -1,5 +1,14 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
@@ -14,12 +23,20 @@ import {
   createEmployeeSchema,
   employeeQuerySchema,
   linkEmployeeAccountSchema,
+  listExceptionsSchema,
+  putExceptionSchema,
+  putScheduleSchema,
+  scheduleQuerySchema,
   updateEmployeeSchema,
   type AssignBranchDto,
   type AssignServiceDto,
   type CreateEmployeeDto,
   type EmployeeQueryDto,
   type LinkEmployeeAccountDto,
+  type ListExceptionsDto,
+  type PutExceptionDto,
+  type PutScheduleDto,
+  type ScheduleQueryDto,
   type UpdateEmployeeDto,
 } from './dto/employee.dto';
 
@@ -221,6 +238,74 @@ export class EmployeesController {
     @Param('serviceId', uuidParam) serviceId: string,
   ): Promise<void> {
     await this.employees.removeService(employeeId, serviceId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Working hours
+  // ---------------------------------------------------------------------------
+
+  @Get(':employeeId/schedule')
+  @RequirePermission(COMPANY_PERMISSIONS.EMPLOYEE_READ)
+  @ApiOperation({
+    summary: 'Working week at a branch',
+    description: 'The shifts in force today, one per working day. A missing day is a day off.',
+  })
+  async findSchedule(
+    @Param('employeeId', uuidParam) employeeId: string,
+    @Query(new ZodValidationPipe(scheduleQuerySchema)) query: ScheduleQueryDto,
+  ) {
+    return this.employees.findSchedule(employeeId, query.branchId);
+  }
+
+  @Put(':employeeId/schedule')
+  @RequirePermission(COMPANY_PERMISSIONS.EMPLOYEE_WRITE)
+  @RequiresWrite()
+  @ApiOperation({
+    summary: 'Replace the working week at a branch',
+    description:
+      'PUT, as for business hours: the week is one decision. Days left out are days off from ' +
+      'effectiveFrom (default today). Existing bookings are not moved or cancelled.',
+  })
+  async putSchedule(
+    @Param('employeeId', uuidParam) employeeId: string,
+    @Body(new ZodValidationPipe(putScheduleSchema)) dto: PutScheduleDto,
+  ) {
+    return this.employees.putSchedule(employeeId, dto);
+  }
+
+  @Get(':employeeId/schedule-exceptions')
+  @RequirePermission(COMPANY_PERMISSIONS.EMPLOYEE_READ)
+  @ApiOperation({ summary: 'One-off days: days off or different hours, next 90 days by default' })
+  async listExceptions(
+    @Param('employeeId', uuidParam) employeeId: string,
+    @Query(new ZodValidationPipe(listExceptionsSchema)) query: ListExceptionsDto,
+  ) {
+    return this.employees.listExceptions(employeeId, query);
+  }
+
+  @Put(':employeeId/schedule-exceptions')
+  @RequirePermission(COMPANY_PERMISSIONS.EMPLOYEE_WRITE)
+  @RequiresWrite()
+  @ApiOperation({
+    summary: 'Set one date: a day off or different hours',
+    description: 'Replaces the usual shift for that date. Setting a date again replaces it.',
+  })
+  async putException(
+    @Param('employeeId', uuidParam) employeeId: string,
+    @Body(new ZodValidationPipe(putExceptionSchema)) dto: PutExceptionDto,
+  ) {
+    return this.employees.putException(employeeId, dto);
+  }
+
+  @Delete(':employeeId/schedule-exceptions/:exceptionId')
+  @RequirePermission(COMPANY_PERMISSIONS.EMPLOYEE_WRITE)
+  @RequiresWrite()
+  @HttpCode(204)
+  async removeException(
+    @Param('employeeId', uuidParam) employeeId: string,
+    @Param('exceptionId', uuidParam) exceptionId: string,
+  ): Promise<void> {
+    await this.employees.removeException(employeeId, exceptionId);
   }
 
   // ---------------------------------------------------------------------------

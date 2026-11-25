@@ -170,6 +170,13 @@ export const envSchema = z.object({
    */
   PASSWORD_RESET_TTL_MINUTES: int(30, 5),
 
+  /**
+   * Platform operators must present a TOTP code at sign-in. Enforced (true) in
+   * production; when false, an operator who has not enrolled may still sign in
+   * — for local development only. Enrolled operators always need the code.
+   */
+  PLATFORM_MFA_REQUIRED: bool(false),
+
   ARGON2_MEMORY_KIB: int(19456, 8192),
   ARGON2_TIME_COST: int(2, 1),
   ARGON2_PARALLELISM: int(1, 1),
@@ -355,7 +362,12 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   if (env.STORAGE_DRIVER === 's3' && !env.S3_BUCKET) {
     problems.push('STORAGE_DRIVER is "s3" but S3_BUCKET is not set.');
   }
-  if (env.NODE_ENV === 'production' && env.STORAGE_DRIVER !== 's3' && !env.S3_BUCKET && env.STORAGE_DRIVER !== 'local') {
+  if (
+    env.NODE_ENV === 'production' &&
+    env.STORAGE_DRIVER !== 's3' &&
+    !env.S3_BUCKET &&
+    env.STORAGE_DRIVER !== 'local'
+  ) {
     problems.push(
       'No file storage configured for production: set S3_BUCKET (and credentials), or STORAGE_DRIVER=local deliberately.',
     );
@@ -474,8 +486,20 @@ export function validateEnv(raw: Record<string, unknown>): Env {
           'depend on it, and starting without it fails open.',
       );
     }
+    if (!env.PLATFORM_MFA_REQUIRED) {
+      problems.push(
+        'PLATFORM_MFA_REQUIRED must be true in production: platform operators can reach every company.',
+      );
+    }
+    if (!env.SECRETS_ENCRYPTION_KEY) {
+      problems.push(
+        'SECRETS_ENCRYPTION_KEY is required in production: it encrypts platform MFA secrets and stored provider credentials.',
+      );
+    }
     if (!env.THROTTLE_ENABLED) {
-      problems.push('THROTTLE_ENABLED=false turns off brute-force protection; refused in production.');
+      problems.push(
+        'THROTTLE_ENABLED=false turns off brute-force protection; refused in production.',
+      );
     }
     for (const origin of corsOrigins(env.CORS_ORIGINS)) {
       if (!origin.startsWith('https://')) {

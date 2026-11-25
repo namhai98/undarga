@@ -68,7 +68,10 @@ describe('customer portal', () => {
     spy.mockRestore();
     expect(code).toMatch(/^\d{6}$/);
     const res = await as().post(`/customer/auth/${slug}/verify`, { email, code }).expect(200);
-    return { token: res.body.data.accessToken as string, cookie: res.headers['set-cookie'] as unknown as string[] };
+    return {
+      token: res.body.data.accessToken as string,
+      cookie: res.headers['set-cookie'] as unknown as string[],
+    };
   }
 
   async function customerByEmail(email: string, companyId = world.companyA.id) {
@@ -115,7 +118,9 @@ describe('customer portal', () => {
       data: { companyId, employeeId: employee.id, jobTitle: 'Stylist', phone: '+97611112222' },
     });
     await prisma.employeeBranch.create({ data: { companyId, employeeId: employee.id, branchId } });
-    await prisma.employeeService.create({ data: { companyId, employeeId: employee.id, serviceId: service } });
+    await prisma.employeeService.create({
+      data: { companyId, employeeId: employee.id, serviceId: service },
+    });
     await prisma.employeeSchedule.createMany({
       data: Array.from({ length: 7 }, (_, dayOfWeek) => ({
         companyId,
@@ -157,7 +162,9 @@ describe('customer portal', () => {
       const email = 'customer@company-a.test';
       const { token, cookie } = await signIn(email);
       expect(token).toBeTruthy();
-      expect(cookie.join(';')).toMatch(/undarga_crt=.+; Path=\/api\/v1\/customer\/auth\/company-a.*HttpOnly/);
+      expect(cookie.join(';')).toMatch(
+        /undarga_crt=.+; Path=\/api\/v1\/customer\/auth\/company-a.*HttpOnly/,
+      );
 
       const customer = await customerByEmail(email);
       expect(customer.customerIdentityId).not.toBeNull();
@@ -178,13 +185,28 @@ describe('customer portal', () => {
       const code = spy.mock.calls[0]![0].code;
       const wrong = code === '000000' ? '111111' : '000000';
 
-      const first = await as().post(`/customer/auth/${SLUG}/verify`, { email, code: wrong }).expect(401);
+      const first = await as()
+        .post(`/customer/auth/${SLUG}/verify`, { email, code: wrong })
+        .expect(401);
       expect(first.body.error.code).toBe('SIGN_IN_CODE_INVALID');
       for (let i = 0; i < 4; i++) {
         await as().post(`/customer/auth/${SLUG}/verify`, { email, code: wrong }).expect(401);
       }
       // Burnt: the right code no longer works either.
       await as().post(`/customer/auth/${SLUG}/verify`, { email, code }).expect(401);
+    });
+
+    it('files the sign-in under the customer, not an anonymous request', async () => {
+      const email = newEmail('audit');
+      await bookAs(email, at(19, '16:00'));
+      await signIn(email);
+      const customer = await customerByEmail(email);
+      const row = await harness.prisma.auditLog.findFirstOrThrow({
+        where: { action: 'customer.signed_in', resourceId: customer.id },
+      });
+      expect(row.actorType).toBe('CUSTOMER');
+      expect(row.actorId).toBe(customer.id);
+      expect(row.companyId).toBe(world.companyA.id);
     });
 
     it('counts every one of many parallel wrong guesses', async () => {
@@ -251,9 +273,15 @@ describe('customer portal', () => {
       await as(newToken).get('/customer/me').expect(200);
 
       // The old cookie again: the whole family is revoked.
-      const reused = await request(http).post(api(`/customer/auth/${SLUG}/refresh`)).set('Cookie', cookie).expect(401);
+      const reused = await request(http)
+        .post(api(`/customer/auth/${SLUG}/refresh`))
+        .set('Cookie', cookie)
+        .expect(401);
       expect(reused.body.error.code).toBe('REFRESH_TOKEN_REUSED');
-      await request(http).post(api(`/customer/auth/${SLUG}/refresh`)).set('Cookie', next).expect(401);
+      await request(http)
+        .post(api(`/customer/auth/${SLUG}/refresh`))
+        .set('Cookie', next)
+        .expect(401);
       await as(newToken).get('/customer/me').expect(401);
     });
 
@@ -262,7 +290,9 @@ describe('customer portal', () => {
       await bookAs(email, at(19, '12:00'));
       const { token, cookie } = await signIn(email);
       const refresh = () =>
-        request(http).post(api(`/customer/auth/${SLUG}/refresh`)).set('Cookie', cookie);
+        request(http)
+          .post(api(`/customer/auth/${SLUG}/refresh`))
+          .set('Cookie', cookie);
 
       const results = await Promise.all([refresh(), refresh(), refresh()]);
       expect(results.filter((r) => r.status === 200)).toHaveLength(1);
@@ -271,7 +301,9 @@ describe('customer portal', () => {
 
       const winner = results.find((r) => r.status === 200)!;
       // The family is gone, and so is the old access token.
-      await as(winner.body.data.accessToken as string).get('/customer/me').expect(401);
+      await as(winner.body.data.accessToken as string)
+        .get('/customer/me')
+        .expect(401);
       await as(token).get('/customer/me').expect(401);
     });
 
@@ -285,7 +317,9 @@ describe('customer portal', () => {
         .set('Cookie', cookie)
         .expect(200);
       await as(token).get('/customer/me').expect(401);
-      await as(refreshed.body.data.accessToken as string).get('/customer/me').expect(200);
+      await as(refreshed.body.data.accessToken as string)
+        .get('/customer/me')
+        .expect(200);
     });
 
     it('ends the session on sign-out', async () => {
@@ -329,7 +363,9 @@ describe('customer portal', () => {
       await bookAs(email, at(9, '12:00'));
       const { token } = await signIn(email);
 
-      const updated = await as(token).patch('/customer/me', { firstName: 'Sarnai', phone: '+976 9911 0099' }).expect(200);
+      const updated = await as(token)
+        .patch('/customer/me', { firstName: 'Sarnai', phone: '+976 9911 0099' })
+        .expect(200);
       expect(updated.body.data).toMatchObject({ firstName: 'Sarnai', phone: '+97699110099' });
 
       await as(token).patch('/customer/me', { firstName: '' }).expect(400);
@@ -339,7 +375,9 @@ describe('customer portal', () => {
       await as(token).patch('/customer/me', {}).expect(400);
 
       // Another customer's number.
-      const seeded = await harness.prisma.companyCustomer.findUniqueOrThrow({ where: { id: world.companyA.customerId } });
+      const seeded = await harness.prisma.companyCustomer.findUniqueOrThrow({
+        where: { id: world.companyA.customerId },
+      });
       const dup = await as(token).patch('/customer/me', { phone: seeded.phone }).expect(409);
       expect(dup.body.error.code).toBe('CONFLICT');
     });
@@ -354,13 +392,19 @@ describe('customer portal', () => {
       const other = await bookAs(newEmail('other'), at(10, '14:00'));
       const { token } = await signIn(email);
 
-      const page1 = await as(token).get('/customer/appointments?scope=upcoming&limit=1').expect(200);
+      const page1 = await as(token)
+        .get('/customer/appointments?scope=upcoming&limit=1')
+        .expect(200);
       expect(page1.body.data).toMatchObject({ total: 2, limit: 1, offset: 0 });
       expect(page1.body.data.items).toHaveLength(1);
-      const page2 = await as(token).get('/customer/appointments?scope=upcoming&limit=1&offset=1').expect(200);
+      const page2 = await as(token)
+        .get('/customer/appointments?scope=upcoming&limit=1&offset=1')
+        .expect(200);
       expect(page2.body.data.items[0].id).not.toBe(page1.body.data.items[0].id);
 
-      const all = [...page1.body.data.items, ...page2.body.data.items].map((a: { id: string }) => a.id);
+      const all = [...page1.body.data.items, ...page2.body.data.items].map(
+        (a: { id: string }) => a.id,
+      );
       expect(all).not.toContain(other.id);
 
       await as(token).get('/customer/appointments?limit=0').expect(400);
@@ -370,7 +414,10 @@ describe('customer portal', () => {
     it('shows details with actions and nothing internal', async () => {
       const email = newEmail('detail');
       const appt = await bookAs(email, at(11, '10:00'));
-      await harness.prisma.appointment.update({ where: { id: appt.id }, data: { internalNote: 'Owes us money' } });
+      await harness.prisma.appointment.update({
+        where: { id: appt.id },
+        data: { internalNote: 'Owes us money' },
+      });
       const { token } = await signIn(email);
 
       const res = await as(token).get(`/customer/appointments/${appt.id}`).expect(200);
@@ -407,10 +454,17 @@ describe('customer portal', () => {
   // ===========================================================================
   describe('cancellation and rescheduling rules', () => {
     async function setRules(data: Record<string, unknown>) {
-      await harness.prisma.companySettings.update({ where: { companyId: world.companyA.id }, data });
+      await harness.prisma.companySettings.update({
+        where: { companyId: world.companyA.id },
+        data,
+      });
     }
     afterEach(async () => {
-      await setRules({ allowCustomerCancel: true, allowCustomerReschedule: true, cancellationWindowHours: 24 });
+      await setRules({
+        allowCustomerCancel: true,
+        allowCustomerReschedule: true,
+        cancellationWindowHours: 24,
+      });
     });
 
     it('cancels when allowed, through the Appointment Engine', async () => {
@@ -418,10 +472,15 @@ describe('customer portal', () => {
       const appt = await bookAs(email, at(12, '11:00'));
       const { token } = await signIn(email);
 
-      const res = await as(token).post(`/customer/appointments/${appt.id}/cancel`, { reason: 'Sick' }).expect(200);
+      const res = await as(token)
+        .post(`/customer/appointments/${appt.id}/cancel`, { reason: 'Sick' })
+        .expect(200);
       expect(res.body.data.status).toBe('CANCELLED');
       const row = await harness.prisma.appointment.findUniqueOrThrow({ where: { id: appt.id } });
-      expect(row).toMatchObject({ cancelledByType: 'CUSTOMER', cancellationReason: 'Customer: Sick' });
+      expect(row).toMatchObject({
+        cancelledByType: 'CUSTOMER',
+        cancellationReason: 'Customer: Sick',
+      });
 
       const cancelled = await as(token).get('/customer/appointments?scope=cancelled').expect(200);
       expect(cancelled.body.data.items.map((a: { id: string }) => a.id)).toContain(appt.id);
@@ -436,7 +495,10 @@ describe('customer portal', () => {
       await setRules({ cancellationWindowHours: 720 });
 
       const detail = await as(token).get(`/customer/appointments/${appt.id}`).expect(200);
-      expect(detail.body.data.actions.cancel).toMatchObject({ allowed: false, reason: 'PAST_DEADLINE' });
+      expect(detail.body.data.actions.cancel).toMatchObject({
+        allowed: false,
+        reason: 'PAST_DEADLINE',
+      });
 
       const res = await as(token).post(`/customer/appointments/${appt.id}/cancel`).expect(409);
       expect(res.body.error).toMatchObject({
@@ -496,7 +558,9 @@ describe('customer portal', () => {
       expect(Object.keys(options.body.data.slots[0])).toEqual(['startAt', 'endAt']);
 
       const moved = await as(token)
-        .post(`/customer/appointments/${appt.id}/reschedule`, { startsAt: options.body.data.slots[0].startAt })
+        .post(`/customer/appointments/${appt.id}/reschedule`, {
+          startsAt: options.body.data.slots[0].startAt,
+        })
         .expect(200);
       expect(moved.body.data.id).not.toBe(appt.id);
       expect(moved.body.data.status).toBe('CONFIRMED');
@@ -560,7 +624,11 @@ describe('customer portal', () => {
 
       const res = await as(token).get('/customer/payments').expect(200);
       expect(res.body.data.total).toBe(1);
-      expect(res.body.data.items[0]).toMatchObject({ method: 'ONLINE', amountMinor: '1000000', appointmentId: appt.id });
+      expect(res.body.data.items[0]).toMatchObject({
+        method: 'ONLINE',
+        amountMinor: '1000000',
+        appointmentId: appt.id,
+      });
       expect(res.body.data.summary.paidMinor).toBe('1000000');
       expect(JSON.stringify(res.body.data)).not.toMatch(/qpay|fee|provider/i);
 
@@ -570,7 +638,10 @@ describe('customer portal', () => {
 
   // ===========================================================================
   describe('gift cards', () => {
-    async function giftCard(data: { issuedToCustomerId?: string | null; purchasedByCustomerId?: string | null }) {
+    async function giftCard(data: {
+      issuedToCustomerId?: string | null;
+      purchasedByCustomerId?: string | null;
+    }) {
       const card = await harness.prisma.giftCard.create({
         data: {
           companyId: world.companyA.id,
@@ -587,8 +658,24 @@ describe('customer portal', () => {
       });
       await harness.prisma.giftCardTransaction.createMany({
         data: [
-          { companyId: world.companyA.id, giftCardId: card.id, type: 'ISSUE', amountMinor: 5_000_000n, balanceAfterMinor: 5_000_000n, currencyCode: 'MNT', performedByType: 'SYSTEM' },
-          { companyId: world.companyA.id, giftCardId: card.id, type: 'REDEEM', amountMinor: -2_000_000n, balanceAfterMinor: 3_000_000n, currencyCode: 'MNT', performedByType: 'SYSTEM' },
+          {
+            companyId: world.companyA.id,
+            giftCardId: card.id,
+            type: 'ISSUE',
+            amountMinor: 5_000_000n,
+            balanceAfterMinor: 5_000_000n,
+            currencyCode: 'MNT',
+            performedByType: 'SYSTEM',
+          },
+          {
+            companyId: world.companyA.id,
+            giftCardId: card.id,
+            type: 'REDEEM',
+            amountMinor: -2_000_000n,
+            balanceAfterMinor: 3_000_000n,
+            currencyCode: 'MNT',
+            performedByType: 'SYSTEM',
+          },
         ],
       });
       return card;
@@ -603,18 +690,27 @@ describe('customer portal', () => {
       const friend = await customerByEmail(friendEmail);
 
       const held = await giftCard({ issuedToCustomerId: me.id });
-      const givenAway = await giftCard({ purchasedByCustomerId: me.id, issuedToCustomerId: friend.id });
+      const givenAway = await giftCard({
+        purchasedByCustomerId: me.id,
+        issuedToCustomerId: friend.id,
+      });
       const strangers = await giftCard({ issuedToCustomerId: friend.id });
       const { token } = await signIn(email);
 
       const res = await as(token).get('/customer/gift-cards').expect(200);
       const byId = Object.fromEntries(res.body.data.items.map((c: { id: string }) => [c.id, c]));
       expect(byId[held.id]).toMatchObject({ relation: 'HOLDER', balanceMinor: '3000000' });
-      expect(byId[givenAway.id]).toMatchObject({ relation: 'PURCHASER', balanceMinor: null, recipientName: 'A friend' });
+      expect(byId[givenAway.id]).toMatchObject({
+        relation: 'PURCHASER',
+        balanceMinor: null,
+        recipientName: 'A friend',
+      });
       expect(byId[strangers.id]).toBeUndefined();
       expect(JSON.stringify(res.body.data)).not.toMatch(/hash-/);
 
-      const history = await as(token).get(`/customer/gift-cards/${held.id}/transactions?limit=1`).expect(200);
+      const history = await as(token)
+        .get(`/customer/gift-cards/${held.id}/transactions?limit=1`)
+        .expect(200);
       expect(history.body.data).toMatchObject({ total: 2, limit: 1 });
       expect(history.body.data.giftCard.balanceMinor).toBe('3000000');
 
@@ -638,7 +734,9 @@ describe('customer portal', () => {
 
       // One identity, two company records.
       const aCustomer = await customerByEmail(email);
-      const bLinked = await harness.prisma.companyCustomer.findUniqueOrThrow({ where: { id: bCustomer.id } });
+      const bLinked = await harness.prisma.companyCustomer.findUniqueOrThrow({
+        where: { id: bCustomer.id },
+      });
       expect(bLinked.customerIdentityId).toBe(aCustomer.customerIdentityId);
 
       const bList = await as(b.token).get('/customer/appointments?scope=upcoming').expect(200);
@@ -648,7 +746,10 @@ describe('customer portal', () => {
       expect(bMe.body.data.company.slug).toBe('company-b');
 
       // Company A's refresh cookie is not company B's.
-      await request(http).post(api('/customer/auth/company-b/refresh')).set('Cookie', a.cookie).expect(401);
+      await request(http)
+        .post(api('/customer/auth/company-b/refresh'))
+        .set('Cookie', a.cookie)
+        .expect(401);
       await as(a.token).get(`/customer/appointments/${inA.id}`).expect(200);
     });
 

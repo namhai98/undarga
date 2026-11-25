@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { AppConfig } from '../config';
+import type { SystemActor } from '../tenancy/context/context.types';
 import {
   InvalidCredentialsError,
+  MfaEnrollmentRequiredError,
+  MfaRequiredError,
   RefreshTokenReusedError,
   SessionRevokedError,
   TenantNotFoundError,
@@ -12,10 +16,14 @@ import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.se
 import { normalizeEmail } from './normalize-email';
 import { IdentityRepository } from './identity.repository';
 import { PasswordService } from './password.service';
+import { PlatformMfaService } from './platform-mfa.service';
 import { SessionDenyList } from './session-deny-list';
 import { TokenHashService } from './token-hash.service';
 import { TokenService } from './token.service';
 import type { IssuedTokens } from './token.types';
+
+/** Failed and suspicious attempts: nobody has proved who they are. */
+const ANONYMOUS: SystemActor = { kind: 'SYSTEM', name: 'anonymous' };
 
 export interface MembershipSummary {
   companyId: string;
@@ -64,6 +72,8 @@ export class AuthService {
     private readonly hashes: TokenHashService,
     private readonly denyList: SessionDenyList,
     private readonly config: AppConfig,
+    private readonly audit: AuditService,
+    private readonly mfa: PlatformMfaService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -95,6 +105,13 @@ export class AuthService {
     const ok = await this.passwords.verify(user.passwordHash, password);
     if (!ok) {
       await this.identity.recordStaffLoginFailure(user.id);
+      // Platform-level, about a known account: the trail that shows someone
+      // guessing at it. The attempt proves nothing about who made it.
+      await this.audit.recordAs(ANONYMOUS, {
+        action: 'auth.sign_in_failed',
+        resourceType: 'user_account',
+        resourceId: user.id,
+      });
       throw new InvalidCredentialsError();
     }
 
@@ -110,7 +127,7 @@ export class AuthService {
     // to a company, and their token simply carries no active company until then.
     const active = memberships[0];
 
-    const issued = await this.issueStaffSession({
+    const { sessionId, ...issued } = await this.issueStaffSession({
       userAccountId: user.id,
       email: user.email,
       name: user.fullName,
@@ -118,6 +135,20 @@ export class AuthService {
       companyUserId: active?.companyUserId,
       meta,
     });
+
+    // Filed under the company the session opened in, so that company sees who
+    // signed in to it.
+    await this.audit.recordAs(
+      {
+        kind: 'COMPANY_USER',
+        userAccountId: user.id,
+        email: user.email,
+        displayName: user.fullName,
+        sessionId,
+      },
+      { action: 'auth.signed_in', resourceType: 'user_session', resourceId: sessionId },
+      active?.companyId,
+    );
 
     return { ...issued, memberships: memberships.map(toSummary) };
   }
@@ -153,7 +184,7 @@ export class AuthService {
     this.denyList.revoke(sessionId);
     await this.identity.revokeStaffSession(sessionId);
 
-    const issued = await this.issueStaffSession({
+    const { sessionId: _next, ...issued } = await this.issueStaffSession({
       userAccountId: user.id,
       email: user.email,
       name: user.fullName,
@@ -263,6 +294,13 @@ export class AuthService {
     this.logger.warn(
       `Refresh token reuse detected for family ${familyId}; ${killed.length} sessions revoked`,
     );
+    // A possible stolen token: worth a row, not just a log line.
+    await this.audit.recordAs(ANONYMOUS, {
+      action: 'auth.refresh_token_reused',
+      resourceType: 'user_session_family',
+      resourceId: familyId,
+      metadata: { sessionsRevoked: killed.length },
+    });
     throw new RefreshTokenReusedError();
   }
 
@@ -281,17 +319,18 @@ export class AuthService {
   // -------------------------------------------------------------------------
 
   /**
-   * Operator sign-in.
+   * Operator sign-in: password, then a TOTP code.
    *
-   * MFA IS NOT ENFORCED HERE YET. `mfaEnrolledAt` is read and logged, but the
-   * second factor challenge is not implemented — that is called out as a
-   * blocking item in the report rather than silently skipped. This realm must
-   * not reach production without it.
+   * An enrolled operator always needs the code; a wrong one counts towards the
+   * lockout exactly like a wrong password. An operator who has not enrolled is
+   * refused when PLATFORM_MFA_REQUIRED (always, in production), and only let
+   * in — loudly — in development.
    */
   async loginPlatform(
     email: string,
     password: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
+    mfaCode?: string,
   ): Promise<IssuedTokens> {
     const user = await this.identity.findPlatformUserByEmail(normalizeEmail(email));
 
@@ -311,16 +350,35 @@ export class AuthService {
     if (!ok) {
       await this.identity.recordPlatformLoginFailure(user.id);
       this.logger.warn(`Failed platform sign-in for operator ${user.id}`);
+      await this.audit.recordAs(ANONYMOUS, {
+        action: 'platform.sign_in_failed',
+        resourceType: 'platform_user',
+        resourceId: user.id,
+      });
       throw new InvalidCredentialsError();
     }
     if (user.status !== 'ACTIVE') {
       throw new InvalidCredentialsError();
     }
 
-    if (!user.mfaEnrolledAt) {
+    if (user.mfaEnrolledAt) {
+      // Only reached with the right password, so this says nothing to a guesser.
+      if (!mfaCode) throw new MfaRequiredError();
+      if (!(await this.mfa.verify(user, mfaCode))) {
+        await this.identity.recordPlatformLoginFailure(user.id);
+        await this.audit.recordAs(ANONYMOUS, {
+          action: 'platform.mfa_failed',
+          resourceType: 'platform_user',
+          resourceId: user.id,
+        });
+        throw new InvalidCredentialsError();
+      }
+    } else if (this.config.auth.platformMfaRequired) {
+      throw new MfaEnrollmentRequiredError();
+    } else {
       this.logger.error(
-        `Platform user ${user.id} signed in without MFA enrolment. This realm requires a ` +
-          'second factor before production use.',
+        `Platform user ${user.id} signed in without MFA enrolment. Allowed only because ` +
+          'PLATFORM_MFA_REQUIRED is false; production refuses this.',
       );
     }
 
@@ -337,6 +395,22 @@ export class AuthService {
     });
 
     this.logger.warn(`Platform operator ${user.email} signed in (session ${session.id})`);
+    await this.audit.recordAs(
+      {
+        kind: 'PLATFORM_USER',
+        platformUserId: user.id,
+        email: user.email,
+        displayName: user.fullName,
+        sessionId: session.id,
+        platformPermissions: new Set(),
+      },
+      {
+        action: 'platform.signed_in',
+        resourceType: 'platform_session',
+        resourceId: session.id,
+        metadata: { mfa: Boolean(user.mfaEnrolledAt) },
+      },
+    );
 
     return {
       accessToken: this.tokens.signPlatformAccess({
@@ -367,7 +441,7 @@ export class AuthService {
     activeCompanyId?: string;
     companyUserId?: string;
     meta: { ipAddress?: string; userAgent?: string };
-  }): Promise<IssuedTokens> {
+  }): Promise<IssuedTokens & { sessionId: string }> {
     const refreshToken = this.hashes.generate();
     const session = await this.identity.createStaffSession({
       userAccountId: input.userAccountId,
@@ -394,6 +468,8 @@ export class AuthService {
       tokenType: 'Bearer',
       expiresIn: this.tokens.accessTtlSeconds,
       activeCompanyId: input.activeCompanyId,
+      // For the caller's audit row; stripped before anything is returned.
+      sessionId: session.id,
     };
   }
 

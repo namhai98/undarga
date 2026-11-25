@@ -8,6 +8,7 @@ import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 import { AuthController, PlatformAuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PlatformMfaService } from './platform-mfa.service';
 import { UserTokenRepository } from './user-token.repository';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { MeController } from './me.controller';
@@ -35,6 +36,7 @@ import { TokenService } from './token.service';
   controllers: [AuthController, PlatformAuthController, MeController, AccountController],
   providers: [
     AuthService,
+    PlatformMfaService,
     AccountService,
     IdentityRepository,
     UserTokenRepository,

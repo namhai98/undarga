@@ -222,11 +222,18 @@ export class CustomerAuthService {
     }
 
     const session = await this.openSession(company.id, outcome.id, identityId, randomUUID(), meta);
-    await this.audit.recordForCompany(company.id, {
-      action: 'customer.signed_in',
-      resourceType: 'company_customer',
-      resourceId: outcome.id,
-    });
+    // Under the customer just authenticated, not the anonymous request.
+    await this.audit.recordAs(
+      {
+        kind: 'CUSTOMER',
+        customerIdentityId: identityId,
+        companyCustomerId: outcome.id,
+        companyId: company.id,
+        sessionId: session.id,
+      },
+      { action: 'customer.signed_in', resourceType: 'company_customer', resourceId: outcome.id },
+      company.id,
+    );
     return this.issue({
       companyId: company.id,
       companyCustomerId: outcome.id,

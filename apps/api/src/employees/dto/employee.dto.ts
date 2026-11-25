@@ -182,7 +182,113 @@ export const linkEmployeeAccountSchema = z
   .object({
     email: z.string().trim().toLowerCase().email().max(320),
     /** Which system permissions they get. Unrelated to their job title. */
-    roleKeys: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).min(1).max(10),
+    roleKeys: z
+      .array(z.string().regex(/^[A-Z][A-Z0-9_]*$/))
+      .min(1)
+      .max(10),
   })
   .strict();
 export type LinkEmployeeAccountDto = z.infer<typeof linkEmployeeAccountSchema>;
+
+const timeOfDay = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:MM, e.g. 09:00.');
+
+export const scheduleQuerySchema = z.object({ branchId: uuid }).strict();
+export type ScheduleQueryDto = z.infer<typeof scheduleQuerySchema>;
+
+/**
+ * The employee's working week at one branch, replaced as a whole.
+ *
+ * Only working days are listed; a day left out is a day off. One shift per
+ * day — that is what the availability engine reads. `endsAt` earlier than
+ * `startsAt` is an overnight shift.
+ */
+export const putScheduleSchema = z
+  .object({
+    branchId: uuid,
+    /** When the new week takes effect. Defaults to today (UTC date). */
+    effectiveFrom: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+      .optional(),
+    days: z
+      .array(
+        z
+          .object({
+            dayOfWeek: z.number().int().min(0).max(6),
+            startsAt: timeOfDay,
+            endsAt: timeOfDay,
+            /** Unpaid gaps inside the shift (lunch). Nothing is offered during them. */
+            breaks: z
+              .array(z.object({ startsAt: timeOfDay, endsAt: timeOfDay }).strict())
+              .max(3)
+              .optional(),
+          })
+          .strict()
+          .refine((d) => d.startsAt !== d.endsAt, {
+            message: 'A shift must not start and end at the same time.',
+            path: ['endsAt'],
+          }),
+      )
+      .max(7),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const seen = new Set<number>();
+    for (const day of value.days) {
+      if (seen.has(day.dayOfWeek)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Day ${day.dayOfWeek} appears more than once.`,
+          path: ['days'],
+        });
+        return;
+      }
+      seen.add(day.dayOfWeek);
+    }
+  });
+export type PutScheduleDto = z.infer<typeof putScheduleSchema>;
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.');
+
+export const listExceptionsSchema = z
+  .object({ from: isoDate.optional(), to: isoDate.optional() })
+  .strict();
+export type ListExceptionsDto = z.infer<typeof listExceptionsSchema>;
+
+/**
+ * One date that differs from the usual week: a day off, or different hours.
+ * Replaces the recurring shift for that date; one per employee per date.
+ */
+export const putExceptionSchema = z
+  .object({
+    date: isoDate,
+    isWorking: z.boolean(),
+    startsAt: timeOfDay.optional(),
+    endsAt: timeOfDay.optional(),
+    note: z.string().trim().max(256).nullable().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.isWorking && (!v.startsAt || !v.endsAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A working day needs both times.',
+        path: ['startsAt'],
+      });
+    }
+    if (!v.isWorking && (v.startsAt || v.endsAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A day off has no times.',
+        path: ['isWorking'],
+      });
+    }
+    if (v.startsAt && v.startsAt === v.endsAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Start and end cannot be the same.',
+        path: ['endsAt'],
+      });
+    }
+  });
+export type PutExceptionDto = z.infer<typeof putExceptionSchema>;

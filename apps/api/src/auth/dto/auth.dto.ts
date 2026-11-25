@@ -8,6 +8,24 @@ export const loginSchema = z.object({
 });
 export type LoginDto = z.infer<typeof loginSchema>;
 
+/** Platform sign-in adds the second factor once the operator has one. */
+export const platformLoginSchema = loginSchema.extend({
+  mfaCode: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code.')
+    .optional(),
+});
+export type PlatformLoginDto = z.infer<typeof platformLoginSchema>;
+
+export const mfaCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code.'),
+});
+export type MfaCodeDto = z.infer<typeof mfaCodeSchema>;
+
 // There is deliberately no refresh DTO. The refresh token arrives in an
 // HttpOnly cookie the client can neither read nor write (see
 // SessionCookieService), and accepting it in a body as well would reopen

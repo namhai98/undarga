@@ -14,11 +14,13 @@
  * empty installation, not for managing operators. Run scripts/migrate-deploy.sh
  * first (it seeds the SUPER_ADMIN role this assigns).
  *
- * Platform sign-in does not yet enforce MFA (docs/SECURITY.md): use a long,
- * unique password and keep the number of SUPER_ADMIN accounts minimal.
+ * Also sets up the second factor (needs SECRETS_ENCRYPTION_KEY) and prints
+ * the authenticator link once: platform sign-in requires the code in
+ * production (PLATFORM_MFA_REQUIRED). Keep SUPER_ADMIN accounts few.
  */
 import * as argon2 from 'argon2';
 import { PrismaClient } from '@prisma/client';
+import { enrolPlatformMfa } from './platform-mfa';
 
 const email = (process.env.PLATFORM_ADMIN_EMAIL ?? '').trim().toLowerCase();
 const fullName = (process.env.PLATFORM_ADMIN_NAME ?? '').trim();
@@ -39,6 +41,8 @@ async function main() {
   }
   const url = process.env.MIGRATION_DATABASE_URL ?? process.env.PLATFORM_DATABASE_URL;
   if (!url) fail('set MIGRATION_DATABASE_URL (or PLATFORM_DATABASE_URL).');
+  if (!process.env.SECRETS_ENCRYPTION_KEY)
+    fail('set SECRETS_ENCRYPTION_KEY: the account is created with MFA.');
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
@@ -76,7 +80,10 @@ async function main() {
       return created;
     });
 
-    console.log(`Created SUPER_ADMIN ${user.email} (${user.id}). Sign in at /platform.`);
+    await enrolPlatformMfa(prisma, user.id, user.email);
+    console.log(
+      `Created SUPER_ADMIN ${user.email} (${user.id}). Sign in at /platform with the code.`,
+    );
   } finally {
     await prisma.$disconnect();
   }

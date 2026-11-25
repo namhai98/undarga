@@ -6,7 +6,9 @@ import {
   AlreadyAssignedError,
   ConflictError,
   ResourceNotFoundError,
+  ValidationFailedError,
 } from '../common/errors';
+import { effectiveFromDate } from '../branches/business-hours';
 import { InvitationsService } from '../members/invitations.service';
 import type { TenantTx } from '../database/tenant-prisma.service';
 import { EmployeeRepository } from './employee.repository';
@@ -16,9 +18,56 @@ import type {
   CreateEmployeeDto,
   EmployeeQueryDto,
   LinkEmployeeAccountDto,
+  ListExceptionsDto,
+  PutExceptionDto,
+  PutScheduleDto,
   UpdateEmployeeDto,
 } from './dto/employee.dto';
+import { employeeLockKey, lockKeys } from '../appointments/booking-locks';
 import { EntitlementsService } from '../subscriptions/entitlements.service';
+
+/** `@db.Time` comes back as a Date on 1970-01-01; only the time part matters. */
+function hhmm(value: Date): string {
+  return value.toISOString().slice(11, 16);
+}
+
+/** `HH:MM` as the Date Prisma expects for a `@db.Time` column. */
+function timeValue(hhmmValue: string): Date {
+  return new Date(`1970-01-01T${hhmmValue}:00.000Z`);
+}
+
+const minutes = (v: string) => Number(v.slice(0, 2)) * 60 + Number(v.slice(3, 5));
+
+/**
+ * Breaks sit inside their shift and do not overlap. An overnight shift is
+ * measured on a 48-hour line, so a 01:00 break in a 22:00–06:00 shift fits.
+ */
+function assertBreaksInside(day: {
+  dayOfWeek: number;
+  startsAt: string;
+  endsAt: string;
+  breaks?: Array<{ startsAt: string; endsAt: string }>;
+}) {
+  const start = minutes(day.startsAt);
+  const end = minutes(day.endsAt) <= start ? minutes(day.endsAt) + 1440 : minutes(day.endsAt);
+  const spans = (day.breaks ?? [])
+    .map((b) => {
+      let s = minutes(b.startsAt);
+      let e = minutes(b.endsAt);
+      if (s < start) s += 1440;
+      if (e <= s) e += 1440;
+      return [s, e] as const;
+    })
+    .sort((a, b) => a[0] - b[0]);
+  spans.forEach(([s, e], i) => {
+    const prev = spans[i - 1];
+    if (s < start || e > end || (prev && s < prev[1])) {
+      throw new ValidationFailedError({
+        days: `Breaks on day ${day.dayOfWeek} must sit inside the shift and not overlap.`,
+      });
+    }
+  });
+}
 
 /**
  * Employees: the people a company books work against.
@@ -143,7 +192,12 @@ export class EmployeesService {
         tx.employee.count({ where }),
       ]);
 
-      return { items: rows.map(toEmployeeResponse), total, limit: query.limit, offset: query.offset };
+      return {
+        items: rows.map(toEmployeeResponse),
+        total,
+        limit: query.limit,
+        offset: query.offset,
+      };
     });
   }
 
@@ -154,7 +208,11 @@ export class EmployeesService {
         include: {
           profile: true,
           branches: {
-            select: { branchId: true, isPrimary: true, branch: { select: { name: true, code: true } } },
+            select: {
+              branchId: true,
+              isPrimary: true,
+              branch: { select: { name: true, code: true } },
+            },
           },
           services: {
             select: {
@@ -619,6 +677,198 @@ export class EmployeesService {
   }
 
   // ---------------------------------------------------------------------------
+  // Working hours
+  // ---------------------------------------------------------------------------
+
+  /** The week in force today at one branch: one shift per working day. */
+  async findSchedule(employeeId: string, branchId: string) {
+    return this.employees.transaction(async (tx, companyId) => {
+      await this.assertEmployeeExists(tx, companyId, employeeId);
+      await this.assertBranchesExist(tx, companyId, [branchId]);
+      return { branchId, days: await this.currentWeek(tx, companyId, employeeId, branchId) };
+    });
+  }
+
+  /**
+   * Replace the working week at one branch, from `effectiveFrom` on.
+   *
+   * Rows are versioned by date and the availability engine reads the newest
+   * row per weekday, so a day left out must END the older row for that day —
+   * otherwise last month's Saturday shift would quietly carry on. Older rows
+   * are closed the day before; rows from `effectiveFrom` on are retired. Rows
+   * are never deleted: breaks hang off them, and history stays readable.
+   */
+  async putSchedule(employeeId: string, input: PutScheduleDto) {
+    const from = effectiveFromDate(input.effectiveFrom);
+    const dayBefore = new Date(from.getTime() - 86_400_000);
+
+    const days = await this.employees.transaction(async (tx, companyId) => {
+      await this.assertEmployeeExists(tx, companyId, employeeId);
+      await this.assertBranchesExist(tx, companyId, [input.branchId]);
+      const assigned = await tx.employeeBranch.count({
+        where: { companyId, employeeId, branchId: input.branchId },
+      });
+      if (assigned === 0) {
+        throw new ValidationFailedError({
+          branchId: 'Assign this branch to the employee before setting their hours there.',
+        });
+      }
+
+      // The lock bookings take for this employee: a booking in flight either
+      // commits first or re-checks against the new week.
+      await lockKeys(tx, [employeeLockKey(companyId, employeeId)]);
+
+      const scope = { companyId, employeeId, branchId: input.branchId, isActive: true };
+      await tx.employeeSchedule.updateMany({
+        where: { ...scope, effectiveFrom: { gte: from } },
+        data: { isActive: false },
+      });
+      await tx.employeeSchedule.updateMany({
+        where: {
+          ...scope,
+          effectiveFrom: { lt: from },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }],
+        },
+        data: { effectiveTo: dayBefore },
+      });
+      for (const d of input.days) {
+        const shift = await tx.employeeSchedule.create({
+          data: {
+            companyId,
+            employeeId,
+            branchId: input.branchId,
+            dayOfWeek: d.dayOfWeek,
+            startsAt: timeValue(d.startsAt),
+            endsAt: timeValue(d.endsAt),
+            effectiveFrom: from,
+            // crossesMidnight is derived by a trigger.
+          },
+          select: { id: true },
+        });
+        if (d.breaks?.length) {
+          assertBreaksInside(d);
+          await tx.employeeScheduleBreak.createMany({
+            data: d.breaks.map((b) => ({
+              companyId,
+              scheduleId: shift.id,
+              startsAt: timeValue(b.startsAt),
+              endsAt: timeValue(b.endsAt),
+            })),
+          });
+        }
+      }
+      return this.currentWeek(tx, companyId, employeeId, input.branchId, from);
+    });
+
+    await this.audit.record({
+      action: 'employee.schedule_updated',
+      resourceType: 'employee_schedule',
+      resourceId: employeeId,
+      after: {
+        branchId: input.branchId,
+        effectiveFrom: from.toISOString().slice(0, 10),
+        days,
+      },
+    });
+    return { branchId: input.branchId, days };
+  }
+
+  private async currentWeek(
+    tx: TenantTx,
+    companyId: string,
+    employeeId: string,
+    branchId: string,
+    on: Date = effectiveFromDate(),
+  ) {
+    const rows = await tx.employeeSchedule.findMany({
+      where: {
+        companyId,
+        employeeId,
+        branchId,
+        isActive: true,
+        effectiveFrom: { lte: on },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: on } }],
+      },
+      orderBy: [{ effectiveFrom: 'desc' }, { dayOfWeek: 'asc' }],
+      include: { breaks: { select: { startsAt: true, endsAt: true } } },
+    });
+    const latest = new Map<number, (typeof rows)[number]>();
+    for (const row of rows) if (!latest.has(row.dayOfWeek)) latest.set(row.dayOfWeek, row);
+    return [...latest.values()]
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map((row) => ({
+        dayOfWeek: row.dayOfWeek,
+        startsAt: hhmm(row.startsAt),
+        endsAt: hhmm(row.endsAt),
+        crossesMidnight: row.crossesMidnight,
+        breaks: row.breaks.map((b) => ({ startsAt: hhmm(b.startsAt), endsAt: hhmm(b.endsAt) })),
+      }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // One-off days (schedule exceptions)
+  // ---------------------------------------------------------------------------
+
+  /** Dates that differ from the usual week, from today (or `from`) for 90 days. */
+  async listExceptions(employeeId: string, query: ListExceptionsDto) {
+    const from = effectiveFromDate(query.from);
+    const to = query.to ? effectiveFromDate(query.to) : new Date(from.getTime() + 90 * 86_400_000);
+    return this.employees.transaction(async (tx, companyId) => {
+      await this.assertEmployeeExists(tx, companyId, employeeId);
+      const rows = await tx.employeeScheduleException.findMany({
+        where: { companyId, employeeId, date: { gte: from, lte: to } },
+        orderBy: { date: 'asc' },
+      });
+      return { items: rows.map(toExceptionResponse) };
+    });
+  }
+
+  /**
+   * Set one date: a day off, or different hours. One per employee per date, so
+   * setting a date twice replaces it. Existing appointments are not moved.
+   */
+  async putException(employeeId: string, input: PutExceptionDto) {
+    const date = effectiveFromDate(input.date);
+    const row = await this.employees.transaction(async (tx, companyId) => {
+      await this.assertEmployeeExists(tx, companyId, employeeId);
+      await lockKeys(tx, [employeeLockKey(companyId, employeeId)]);
+      const data = {
+        isWorking: input.isWorking,
+        startsAt: input.isWorking && input.startsAt ? timeValue(input.startsAt) : null,
+        endsAt: input.isWorking && input.endsAt ? timeValue(input.endsAt) : null,
+        note: input.note ?? null,
+      };
+      return tx.employeeScheduleException.upsert({
+        where: { companyId_employeeId_date: { companyId, employeeId, date } },
+        create: { companyId, employeeId, date, ...data },
+        update: data,
+      });
+    });
+    const response = toExceptionResponse(row);
+    await this.audit.record({
+      action: 'employee.schedule_exception_set',
+      resourceType: 'employee_schedule_exception',
+      resourceId: row.id,
+      after: response,
+    });
+    return response;
+  }
+
+  async removeException(employeeId: string, exceptionId: string) {
+    await this.employees.transaction(async (tx, companyId) => {
+      const { count } = await tx.employeeScheduleException.deleteMany({
+        where: { id: exceptionId, companyId, employeeId },
+      });
+      if (count === 0) throw new ResourceNotFoundError('ScheduleException', exceptionId);
+    });
+    await this.audit.record({
+      action: 'employee.schedule_exception_removed',
+      resourceType: 'employee_schedule_exception',
+      resourceId: exceptionId,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Guards
   // ---------------------------------------------------------------------------
 
@@ -831,5 +1081,23 @@ function toEmployeeDetailResponse(employee: EmployeeDetailRow) {
           emailVerified: employee.userAccount?.emailVerifiedAt != null,
         }
       : null,
+  };
+}
+
+function toExceptionResponse(row: {
+  id: string;
+  date: Date;
+  isWorking: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  note: string | null;
+}) {
+  return {
+    id: row.id,
+    date: row.date.toISOString().slice(0, 10),
+    isWorking: row.isWorking,
+    startsAt: row.startsAt ? hhmm(row.startsAt) : null,
+    endsAt: row.endsAt ? hhmm(row.endsAt) : null,
+    note: row.note,
   };
 }

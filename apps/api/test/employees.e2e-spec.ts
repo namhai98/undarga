@@ -32,7 +32,11 @@ describe('employee management', () => {
 
   const url = (companyId = world.companyA.id) => `/api/v1/companies/${companyId}/employees`;
 
-  async function makeEmployee(body: Record<string, unknown> = {}, token = ownerA, companyId?: string) {
+  async function makeEmployee(
+    body: Record<string, unknown> = {},
+    token = ownerA,
+    companyId?: string,
+  ) {
     const res = await request(http)
       .post(url(companyId))
       .set('Authorization', `Bearer ${token}`)
@@ -44,7 +48,12 @@ describe('employee management', () => {
   /** A branch created directly, so branch-module behaviour is not under test here. */
   async function seedBranch(companyId: string) {
     const branch = await harness.prisma.branch.create({
-      data: { companyId, code: `B${Date.now() % 100000}${unique++}`, name: 'Branch', timezoneName: 'UTC' },
+      data: {
+        companyId,
+        code: `B${Date.now() % 100000}${unique++}`,
+        name: 'Branch',
+        timezoneName: 'UTC',
+      },
     });
     return branch.id;
   }
@@ -271,7 +280,9 @@ describe('employee management', () => {
         .get(`${url()}?status=ON_LEAVE`)
         .set('Authorization', `Bearer ${ownerA}`)
         .expect(200);
-      expect(byStatus.body.data.items.every((e: { status: string }) => e.status === 'ON_LEAVE')).toBe(true);
+      expect(
+        byStatus.body.data.items.every((e: { status: string }) => e.status === 'ON_LEAVE'),
+      ).toBe(true);
 
       const byBranch = await request(http)
         .get(`${url()}?branchId=${branch}`)
@@ -417,7 +428,12 @@ describe('employee management', () => {
       const res = await request(http)
         .post(`${url()}/${employee.id}/services`)
         .set('Authorization', `Bearer ${ownerA}`)
-        .send({ serviceId: serviceA, durationOverrideMin: 45, priceOverrideMinor: '5500', proficiency: 4 })
+        .send({
+          serviceId: serviceA,
+          durationOverrideMin: 45,
+          priceOverrideMinor: '5500',
+          proficiency: 4,
+        })
         .expect(201);
 
       expect(res.body.data.items[0]).toMatchObject({
@@ -669,7 +685,9 @@ describe('employee management', () => {
       // four at once and they race the server's socket.
       const attempts = [
         () =>
-          request(http).get(`${url()}/${theirs.id}/branches`).set('Authorization', `Bearer ${ownerA}`),
+          request(http)
+            .get(`${url()}/${theirs.id}/branches`)
+            .set('Authorization', `Bearer ${ownerA}`),
         () =>
           request(http)
             .post(`${url()}/${theirs.id}/branches`)
@@ -704,6 +722,194 @@ describe('employee management', () => {
 
       const noCompany = await tokenWithNoCompany();
       await request(http).get(url()).set('Authorization', `Bearer ${noCompany}`).expect(404);
+    });
+  });
+
+  // ===========================================================================
+  describe('working hours', () => {
+    const schedule = (employeeId: string) => `${url()}/${employeeId}/schedule`;
+
+    it('replaces the week and reads it back; a day left out is a day off', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      const put = await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({
+          branchId: branchA,
+          days: [
+            { dayOfWeek: 1, startsAt: '09:00', endsAt: '17:00' },
+            { dayOfWeek: 6, startsAt: '22:00', endsAt: '06:00' },
+          ],
+        })
+        .expect(200);
+      expect(put.body.data.days).toEqual([
+        { dayOfWeek: 1, startsAt: '09:00', endsAt: '17:00', crossesMidnight: false, breaks: [] },
+        { dayOfWeek: 6, startsAt: '22:00', endsAt: '06:00', crossesMidnight: true, breaks: [] },
+      ]);
+
+      // Saturday dropped: it must stop applying, not linger from the first save.
+      await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({ branchId: branchA, days: [{ dayOfWeek: 2, startsAt: '10:00', endsAt: '14:00' }] })
+        .expect(200);
+      const got = await request(http)
+        .get(schedule(employee.id))
+        .query({ branchId: branchA })
+        .set('Authorization', `Bearer ${ownerA}`)
+        .expect(200);
+      expect(got.body.data.days.map((d: { dayOfWeek: number }) => d.dayOfWeek)).toEqual([2]);
+    });
+
+    it('ends an older week’s day instead of deleting it', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      const old = await harness.prisma.employeeSchedule.create({
+        data: {
+          companyId: world.companyA.id,
+          employeeId: employee.id,
+          branchId: branchA,
+          dayOfWeek: 6,
+          startsAt: new Date('1970-01-01T09:00:00.000Z'),
+          endsAt: new Date('1970-01-01T13:00:00.000Z'),
+          effectiveFrom: new Date('2025-01-01T00:00:00.000Z'),
+        },
+      });
+      await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({ branchId: branchA, days: [] })
+        .expect(200);
+
+      const row = await harness.prisma.employeeSchedule.findUniqueOrThrow({
+        where: { id: old.id },
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      expect(row.effectiveTo!.toISOString().slice(0, 10) < today).toBe(true);
+      const got = await request(http)
+        .get(schedule(employee.id))
+        .query({ branchId: branchA })
+        .set('Authorization', `Bearer ${ownerA}`)
+        .expect(200);
+      expect(got.body.data.days).toEqual([]);
+    });
+
+    it('refuses a branch the employee is not assigned to, and another company’s branch', async () => {
+      const employee = await makeEmployee();
+      const unassigned = await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({ branchId: branchA, days: [{ dayOfWeek: 1, startsAt: '09:00', endsAt: '17:00' }] })
+        .expect(400);
+      expect(unassigned.body.error.code).toBe('VALIDATION_FAILED');
+
+      await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({ branchId: branchB, days: [] })
+        .expect(404);
+    });
+
+    it('rejects a zero-length shift and a repeated day', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      for (const days of [
+        [{ dayOfWeek: 1, startsAt: '09:00', endsAt: '09:00' }],
+        [
+          { dayOfWeek: 1, startsAt: '09:00', endsAt: '12:00' },
+          { dayOfWeek: 1, startsAt: '13:00', endsAt: '17:00' },
+        ],
+      ]) {
+        await request(http)
+          .put(schedule(employee.id))
+          .set('Authorization', `Bearer ${ownerA}`)
+          .send({ branchId: branchA, days })
+          .expect(400);
+      }
+    });
+
+    it('keeps lunch breaks with their shift, and refuses one outside it', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      const res = await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({
+          branchId: branchA,
+          days: [
+            {
+              dayOfWeek: 1,
+              startsAt: '09:00',
+              endsAt: '18:00',
+              breaks: [{ startsAt: '13:00', endsAt: '14:00' }],
+            },
+          ],
+        })
+        .expect(200);
+      expect(res.body.data.days[0].breaks).toEqual([{ startsAt: '13:00', endsAt: '14:00' }]);
+
+      await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${ownerA}`)
+        .send({
+          branchId: branchA,
+          days: [
+            {
+              dayOfWeek: 1,
+              startsAt: '09:00',
+              endsAt: '12:00',
+              breaks: [{ startsAt: '13:00', endsAt: '14:00' }],
+            },
+          ],
+        })
+        .expect(400);
+      // The refused save changed nothing.
+      const got = await request(http)
+        .get(schedule(employee.id))
+        .query({ branchId: branchA })
+        .set('Authorization', `Bearer ${ownerA}`)
+        .expect(200);
+      expect(got.body.data.days[0].endsAt).toBe('18:00');
+    });
+
+    it('sets, replaces, lists and removes one-off days', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      const exceptions = `${url()}/${employee.id}/schedule-exceptions`;
+      const auth = { Authorization: `Bearer ${ownerA}` };
+      const date = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+
+      await request(http).put(exceptions).set(auth).send({ date, isWorking: false }).expect(200);
+      const replaced = await request(http)
+        .put(exceptions)
+        .set(auth)
+        .send({ date, isWorking: true, startsAt: '10:00', endsAt: '14:00', note: 'Short day' })
+        .expect(200);
+      expect(replaced.body.data).toMatchObject({
+        date,
+        isWorking: true,
+        startsAt: '10:00',
+        endsAt: '14:00',
+        note: 'Short day',
+      });
+
+      const list = await request(http).get(exceptions).set(auth).expect(200);
+      expect(list.body.data.items).toHaveLength(1);
+
+      await request(http).put(exceptions).set(auth).send({ date, isWorking: true }).expect(400);
+      await request(http).delete(`${exceptions}/${replaced.body.data.id}`).set(auth).expect(204);
+      expect((await request(http).get(exceptions).set(auth)).body.data.items).toHaveLength(0);
+    });
+
+    it('lets a read-only member read the week but not change it', async () => {
+      const employee = await makeEmployee({ branchIds: [branchA] });
+      const reader = await memberWithRole(SYSTEM_ROLES.READ_ONLY);
+      await request(http)
+        .get(schedule(employee.id))
+        .query({ branchId: branchA })
+        .set('Authorization', `Bearer ${reader}`)
+        .expect(200);
+      await request(http)
+        .put(schedule(employee.id))
+        .set('Authorization', `Bearer ${reader}`)
+        .send({ branchId: branchA, days: [] })
+        .expect(403);
     });
   });
 
@@ -760,7 +966,11 @@ describe('employee management', () => {
       const marker = `Priv${Date.now()}`;
       await makeEmployee({
         displayName: marker,
-        profile: { jobTitle: 'Stylist', emergencyContact: '+976 9911 2233', phone: '+976 5500 1122' },
+        profile: {
+          jobTitle: 'Stylist',
+          emergencyContact: '+976 9911 2233',
+          phone: '+976 5500 1122',
+        },
       });
 
       const list = await request(http)
@@ -865,7 +1075,9 @@ describe('employee management', () => {
       where: { companyId: world.companyA.id, key: roleKey },
       include: { permissions: true },
     });
-    const keys = [...new Set([...template.permissions.map((p) => p.permissionKey), ...extraPermissions])];
+    const keys = [
+      ...new Set([...template.permissions.map((p) => p.permissionKey), ...extraPermissions]),
+    ];
     await harness.prisma.companyRolePermission.createMany({
       data: keys.map((permissionKey) => ({
         companyId: world.companyA.id,

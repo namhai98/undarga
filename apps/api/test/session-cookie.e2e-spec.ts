@@ -14,7 +14,9 @@ describe('session cookie', () => {
     world = await seedWorld(harness.prisma);
   });
 
-  afterAll(async () => { await harness.close(); });
+  afterAll(async () => {
+    await harness.close();
+  });
 
   it('sets an HttpOnly, path-scoped cookie and keeps the token out of the body', async () => {
     const res = await request(http)
@@ -67,6 +69,37 @@ describe('session cookie', () => {
       .post('/api/v1/auth/refresh')
       .set('Cookie', asCookies(winner.headers['set-cookie']))
       .expect(401);
+  });
+
+  it('records sign-ins under the person, in the company they signed in to', async () => {
+    const before = new Date();
+    await request(http)
+      .post('/api/v1/auth/login')
+      .send({ email: world.userA.email, password: TEST_PASSWORD })
+      .expect(200);
+    await request(http)
+      .post('/api/v1/auth/login')
+      .send({ email: world.userA.email, password: 'definitely-wrong-password' })
+      .expect(401);
+
+    const ok = await harness.prisma.auditLog.findFirstOrThrow({
+      where: { action: 'auth.signed_in', actorId: world.userA.id, occurredAt: { gte: before } },
+    });
+    expect(ok.actorType).toBe('COMPANY_USER');
+    expect(ok.actorLabel).toContain(world.userA.email);
+    expect(ok.companyId).toBe(world.companyA.id);
+
+    const failed = await harness.prisma.auditLog.findFirstOrThrow({
+      where: {
+        action: 'auth.sign_in_failed',
+        resourceId: world.userA.id,
+        occurredAt: { gte: before },
+      },
+    });
+    expect(failed.actorLabel).toBe('system:anonymous');
+    expect(failed.companyId).toBeNull();
+    // Nothing about the attempted password, ever.
+    expect(JSON.stringify(failed)).not.toContain('definitely-wrong-password');
   });
 
   it('refuses a refresh with no cookie', async () => {

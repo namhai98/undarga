@@ -7,6 +7,8 @@ import { InvitationTokenRepository } from './invitation-token.repository';
 import { InvitationRepository } from './invitation.repository';
 import { InvitationsController } from './invitations.controller';
 import { InvitationsService } from './invitations.service';
+import { MembersController } from './members.controller';
+import { MembersService } from './members.service';
 
 /**
  * Company membership: invitations today, member and role administration next.
@@ -19,12 +21,13 @@ import { InvitationsService } from './invitations.service';
  */
 @Module({
   imports: [DatabaseModule, AuthModule],
-  controllers: [InvitationsController, InvitationAcceptController],
+  controllers: [InvitationsController, InvitationAcceptController, MembersController],
   providers: [
     InvitationsService,
     InvitationRepository,
     InvitationAcceptService,
     InvitationTokenRepository,
+    MembersService,
   ],
   exports: [InvitationsService],
 })

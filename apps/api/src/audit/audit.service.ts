@@ -5,7 +5,7 @@ import { AppConfig } from '../config';
 import { PlatformPrismaService } from '../database/platform-prisma.service';
 import { TenantPrismaService, type TenantTx } from '../database/tenant-prisma.service';
 import { RequestContextService } from '../tenancy/context/request-context.service';
-import { actorId, actorLabel, isPlatformUser } from '../tenancy/context/context.types';
+import { actorId, actorLabel, isPlatformUser, type Actor } from '../tenancy/context/context.types';
 
 export interface AuditEvent {
   /** Dotted verb, e.g. `appointment.cancelled`, `member.role_changed`. */
@@ -102,10 +102,28 @@ export class AuditService {
     return this.write(event, companyId);
   }
 
-  private async write(event: AuditEvent, forCompanyId: string | undefined): Promise<void> {
+  /**
+   * Record an authentication event under the actor it is about.
+   *
+   * A sign-in request is anonymous until the moment it succeeds, so the ambient
+   * actor would file every sign-in as `system:anonymous`. The caller names the
+   * actor it just authenticated — never one taken from the request body — and,
+   * for a company sign-in, the company the session was opened in (a
+   * server-side lookup, as for `recordForCompany`). Without a company the row
+   * is platform-level.
+   */
+  async recordAs(actor: Actor, event: AuditEvent, companyId?: string): Promise<void> {
+    return this.write(event, companyId, actor);
+  }
+
+  private async write(
+    event: AuditEvent,
+    forCompanyId: string | undefined,
+    actorOverride?: Actor,
+  ): Promise<void> {
     try {
       const ctx = this.context.peek();
-      const actor = ctx?.actor ?? { kind: 'SYSTEM' as const, name: 'unknown' };
+      const actor = actorOverride ?? ctx?.actor ?? { kind: 'SYSTEM' as const, name: 'unknown' };
       const tenant = event.platformLevel ? null : (ctx?.tenant ?? null);
 
       const row = {

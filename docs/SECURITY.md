@@ -32,20 +32,20 @@ depth see [MULTI-TENANCY.md](MULTI-TENANCY.md); for authentication flows see
 
 ## Task #28: found and fixed
 
-| Issue | Fix |
-|---|---|
-| Behind a load balancer every client shared the balancer's IP: per-IP login limits could lock everyone out, audit IPs were wrong | `TRUST_PROXY` (hop count or subnets; `true` refused) |
-| Rate-limit counters and session revocation were per process: N replicas allowed N× the rate, and a logout or password change reached other replicas only when the token expired | Both in Redis (`RedisThrottlerStorage`, `SessionDenyList`), with a per-process fallback during a Redis outage |
-| Platform Admin login: no account lockout, default 300/min limit | Lockout after 5 failures for 15 min (`platform_user.failed_login_count`, `locked_until`), 5/min per IP |
-| Vulnerable dependencies: Next.js (RCE in `next/og`, SSRF, cache poisoning), proxy-addr (IP spoofing), multer (DoS), sharp | Upgraded / pinned patched versions; `pnpm audit --prod` clean |
-| Web app sent no security headers | CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies, COOP, HSTS in production (`next.config.ts`) |
-| No `.dockerignore`: `.env` was sent into the Docker build | `.dockerignore` excludes env files, git and local state |
-| Swagger on by default in production; throttling could be switched off; CORS origins unvalidated | Swagger off in production unless set; `THROTTLE_ENABLED=false`, non-https or malformed CORS origins refused |
-| JWT algorithm not pinned | HS256 only, for signing and verifying |
-| Cookie-authenticated refresh/logout drivable from other origins | Origin must be in `CORS_ORIGINS` (or same-origin) |
-| Invitation endpoints on the default rate limit | 20/min preview, 10/min accept |
-| Dev Postgres and Redis listened on all interfaces | Bound to 127.0.0.1 in `docker-compose.yml` |
-| (Found in #30) In production the hardening script would give the BYPASSRLS `app_platform` role its development password when `APP_PLATFORM_PASSWORD` was unset | Refuses unless both role passwords are set |
+| Issue                                                                                                                                                                           | Fix                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Behind a load balancer every client shared the balancer's IP: per-IP login limits could lock everyone out, audit IPs were wrong                                                 | `TRUST_PROXY` (hop count or subnets; `true` refused)                                                                  |
+| Rate-limit counters and session revocation were per process: N replicas allowed N× the rate, and a logout or password change reached other replicas only when the token expired | Both in Redis (`RedisThrottlerStorage`, `SessionDenyList`), with a per-process fallback during a Redis outage         |
+| Platform Admin login: no account lockout, default 300/min limit                                                                                                                 | Lockout after 5 failures for 15 min (`platform_user.failed_login_count`, `locked_until`), 5/min per IP                |
+| Vulnerable dependencies: Next.js (RCE in `next/og`, SSRF, cache poisoning), proxy-addr (IP spoofing), multer (DoS), sharp                                                       | Upgraded / pinned patched versions; `pnpm audit --prod` clean                                                         |
+| Web app sent no security headers                                                                                                                                                | CSP, `X-Frame-Options: DENY`, nosniff, referrer and permissions policies, COOP, HSTS in production (`next.config.ts`) |
+| No `.dockerignore`: `.env` was sent into the Docker build                                                                                                                       | `.dockerignore` excludes env files, git and local state                                                               |
+| Swagger on by default in production; throttling could be switched off; CORS origins unvalidated                                                                                 | Swagger off in production unless set; `THROTTLE_ENABLED=false`, non-https or malformed CORS origins refused           |
+| JWT algorithm not pinned                                                                                                                                                        | HS256 only, for signing and verifying                                                                                 |
+| Cookie-authenticated refresh/logout drivable from other origins                                                                                                                 | Origin must be in `CORS_ORIGINS` (or same-origin)                                                                     |
+| Invitation endpoints on the default rate limit                                                                                                                                  | 20/min preview, 10/min accept                                                                                         |
+| Dev Postgres and Redis listened on all interfaces                                                                                                                               | Bound to 127.0.0.1 in `docker-compose.yml`                                                                            |
+| (Found in #30) In production the hardening script would give the BYPASSRLS `app_platform` role its development password when `APP_PLATFORM_PASSWORD` was unset                  | Refuses unless both role passwords are set                                                                            |
 
 API responses also carry a strict CSP (`default-src 'none'`) and
 `Cache-Control: no-store`. The shared HTTP setup lives in
@@ -61,17 +61,17 @@ revocation across two app instances, CSRF Origin check) and
 
 Required or strongly recommended:
 
-| Variable | Value |
-|---|---|
-| `NODE_ENV` | `production` |
-| `TRUST_PROXY` | number of proxies in front of the API (one load balancer: `1`) |
-| `CORS_ORIGINS` | exact `https://` origins of the web app |
-| `REDIS_REQUIRED` | `true` (enforced) |
-| `JWT_ACCESS_SECRET` | ≥ 32 random characters |
-| `TOKEN_HASH_PEPPER` | ≥ 16 random characters |
-| `SECRETS_ENCRYPTION_KEY` | 32 random bytes, base64 (provider and calendar credentials) |
-| `SWAGGER_ENABLED` | leave unset (off) unless the API is deliberately public |
-| `THROTTLE_ENABLED` | leave unset (on; `false` is refused) |
+| Variable                 | Value                                                          |
+| ------------------------ | -------------------------------------------------------------- |
+| `NODE_ENV`               | `production`                                                   |
+| `TRUST_PROXY`            | number of proxies in front of the API (one load balancer: `1`) |
+| `CORS_ORIGINS`           | exact `https://` origins of the web app                        |
+| `REDIS_REQUIRED`         | `true` (enforced)                                              |
+| `JWT_ACCESS_SECRET`      | ≥ 32 random characters                                         |
+| `TOKEN_HASH_PEPPER`      | ≥ 16 random characters                                         |
+| `SECRETS_ENCRYPTION_KEY` | 32 random bytes, base64 (provider and calendar credentials)    |
+| `SWAGGER_ENABLED`        | leave unset (off) unless the API is deliberately public        |
+| `THROTTLE_ENABLED`       | leave unset (on; `false` is refused)                           |
 
 Secrets come from the environment at run time — never from files in the
 image. See `.env.example` for every variable.
@@ -92,9 +92,36 @@ body-parser < 2.4.0 and multer < 2.5.0 (DoS) → pinned patched versions.
 - **deepmerge ≤ 4.3.1** (low, prototype poisoning in `mergeObject`) comes in
   through `nestjs-zod`; no fixed version exists yet. Upgrade when one does.
   (`qs` was patched to 6.16.2 in Task #30.)
-- **Platform MFA is not enforced** — sign-ins without enrolment are logged as
-  errors. Enrolment and verification are a feature of their own.
 - **The web CSP allows inline scripts**: the App Router needs them unless a
   nonce-issuing middleware is added.
 - **Dev-tool advisories** (vitest 2, vite 5, jest helpers) need a vitest major
   upgrade; they never ship to production.
+
+## Platform MFA
+
+Platform operators sign in with a password and a TOTP code (RFC 6238, six
+digits, 30-second steps, one step of drift allowed).
+
+- **Enforced** when `PLATFORM_MFA_REQUIRED=true`, which production requires:
+  an operator without a second factor cannot sign in at all
+  (`MFA_ENROLLMENT_REQUIRED`). An enrolled operator always needs the code.
+- **Secrets** are sealed with `SECRETS_ENCRYPTION_KEY` (AES-256-GCM, bound to
+  the operator id), also required in production. Rotating the key makes every
+  secret unreadable: re-enrol operators with `scripts/platform-mfa.ts`.
+- **No replay**: each accepted code spends its time step
+  (`platform_user.mfa_last_step`, a conditional update), so a code cannot be
+  used twice, even by two requests at once.
+- **Lockout**: a wrong code counts like a wrong password (5 failures, 15
+  minutes) and is audited as `platform.mfa_failed`.
+- **Enrolment**: from the platform console (Two-factor authentication card), or
+  by `scripts/create-platform-admin.ts` for the first operator. A lost phone is
+  reset with `scripts/platform-mfa.ts`; the console cannot replace a working
+  second factor.
+
+## Sign-in audit
+
+Staff, customer and operator sign-ins are written to the audit trail under the
+person who signed in (`auth.signed_in`, `customer.signed_in`,
+`platform.signed_in`), staff ones in the company the session opened in.
+Failed attempts against a known account, and refresh-token reuse, are recorded
+as `system:anonymous`. No password or code is ever written.

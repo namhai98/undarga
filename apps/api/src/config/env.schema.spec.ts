@@ -17,6 +17,8 @@ const production = {
   CORS_ORIGINS: 'https://app.undarga.mn',
   TRUST_PROXY: '1',
   STORAGE_DRIVER: 'local',
+  PLATFORM_MFA_REQUIRED: 'true',
+  SECRETS_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'),
 };
 
 function configFor(env: Record<string, unknown>): AppConfig {
@@ -28,6 +30,14 @@ function configFor(env: Record<string, unknown>): AppConfig {
 describe('environment validation (security)', () => {
   it('accepts a complete production configuration', () => {
     expect(() => validateEnv(production)).not.toThrow();
+  });
+
+  it('refuses production without platform MFA, or without the key that seals it', () => {
+    expect(() => validateEnv({ ...production, PLATFORM_MFA_REQUIRED: 'false' })).toThrow(
+      /PLATFORM_MFA_REQUIRED/,
+    );
+    const { SECRETS_ENCRYPTION_KEY: _key, ...withoutKey } = production;
+    expect(() => validateEnv(withoutKey)).toThrow(/SECRETS_ENCRYPTION_KEY/);
   });
 
   it('refuses switching rate limiting off in production', () => {

@@ -638,6 +638,8 @@ model PlatformUser {
   // MFA is mandatory for this realm; the column records enrolment, not choice.
   mfaSecret        String?   @map("mfa_secret") @db.VarChar(255)
   mfaEnrolledAt    DateTime? @map("mfa_enrolled_at") @db.Timestamptz(3)
+  /// Last TOTP time step accepted; a later sign-in must present a later one (no replay).
+  mfaLastStep      BigInt?   @map("mfa_last_step")
   lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
   /// Lockout after repeated failed sign-ins, as for staff accounts.
   failedLoginCount Int       @default(0) @map("failed_login_count") @db.SmallInt

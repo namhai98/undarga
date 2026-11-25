@@ -348,7 +348,9 @@ export async function seedPlatformUser(
   permissions: readonly string[],
 ) {
   const user = await prisma.platformUser.create({
-    data: { email, fullName, passwordHash, status: 'ACTIVE', mfaEnrolledAt: new Date() },
+    // Not enrolled: tests run with PLATFORM_MFA_REQUIRED=false, so these operators
+    // sign in with a password alone. The MFA suite enrols its own operators.
+    data: { email, fullName, passwordHash, status: 'ACTIVE' },
   });
 
   const role = await prisma.platformRole.upsert({

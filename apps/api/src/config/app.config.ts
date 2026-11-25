@@ -122,6 +122,9 @@ export class AppConfig {
       passwordMinLength: this.get('PASSWORD_MIN_LENGTH'),
       emailVerificationTtlHours: this.get('EMAIL_VERIFICATION_TTL_HOURS'),
       passwordResetTtlMinutes: this.get('PASSWORD_RESET_TTL_MINUTES'),
+      platformMfaRequired: this.get('PLATFORM_MFA_REQUIRED'),
+      /** Seals platform MFA secrets at rest (shared with provider credentials). */
+      secretsKey: this.get('SECRETS_ENCRYPTION_KEY') ?? null,
       argon2: {
         memoryCost: this.get('ARGON2_MEMORY_KIB'),
         timeCost: this.get('ARGON2_TIME_COST'),
@@ -203,7 +206,10 @@ export class AppConfig {
             }
           : null,
       publicBaseUrl: this.get('STORAGE_PUBLIC_BASE_URL')?.replace(/\/+$/, '') ?? null,
-      apiPublicUrl: (this.get('API_PUBLIC_URL') ?? `http://localhost:${this.get('PORT')}`).replace(/\/+$/, ''),
+      apiPublicUrl: (this.get('API_PUBLIC_URL') ?? `http://localhost:${this.get('PORT')}`).replace(
+        /\/+$/,
+        '',
+      ),
       apiPrefix: this.get('API_PREFIX'),
       maxImageBytes: this.get('FILE_MAX_IMAGE_BYTES'),
       maxImagePixels: this.get('FILE_MAX_IMAGE_PIXELS'),
@@ -224,14 +230,18 @@ export class AppConfig {
     const pair = (id: string | undefined, secret: string | undefined) =>
       id && secret ? { clientId: id, clientSecret: secret } : null;
     return {
-      google: pair(this.get('GOOGLE_CALENDAR_CLIENT_ID'), this.get('GOOGLE_CALENDAR_CLIENT_SECRET')),
+      google: pair(
+        this.get('GOOGLE_CALENDAR_CLIENT_ID'),
+        this.get('GOOGLE_CALENDAR_CLIENT_SECRET'),
+      ),
       microsoft: pair(
         this.get('MICROSOFT_CALENDAR_CLIENT_ID'),
         this.get('MICROSOFT_CALENDAR_CLIENT_SECRET'),
       ),
       microsoftTenant: this.get('MICROSOFT_CALENDAR_TENANT') ?? 'common',
       redirectUrl:
-        this.get('CALENDAR_OAUTH_REDIRECT_URL') ?? (webAppUrl ? `${webAppUrl}/calendar/callback` : null),
+        this.get('CALENDAR_OAUTH_REDIRECT_URL') ??
+        (webAppUrl ? `${webAppUrl}/calendar/callback` : null),
       syncEnabled: this.get('CALENDAR_SYNC_ENABLED'),
       syncIntervalMs: this.get('CALENDAR_SYNC_INTERVAL_MS'),
       busyRefreshMinutes: this.get('CALENDAR_BUSY_REFRESH_MINUTES'),

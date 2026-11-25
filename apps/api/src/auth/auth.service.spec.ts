@@ -1,8 +1,11 @@
+import { AuditService } from '../audit/audit.service';
+import { RefreshTokenReusedError } from '../common/errors';
 import { AppConfig } from '../config';
 import { TenantDirectoryService } from '../tenancy/directory/tenant-directory.service';
 import { AuthService } from './auth.service';
 import { IdentityRepository } from './identity.repository';
 import { PasswordService } from './password.service';
+import type { PlatformMfaService } from './platform-mfa.service';
 import { SessionDenyList } from './session-deny-list';
 import { TokenHashService } from './token-hash.service';
 import { TokenService } from './token.service';
@@ -11,7 +14,13 @@ const COMPANY_A = '018f0000-0000-7000-8000-00000000000a';
 const COMPANY_B = '018f0000-0000-7000-8000-00000000000b';
 
 const memberships = [
-  { companyId: COMPANY_A, companySlug: 'a', companyName: 'A', isOwner: true, companyUserId: 'cu-a' },
+  {
+    companyId: COMPANY_A,
+    companySlug: 'a',
+    companyName: 'A',
+    isOwner: true,
+    companyUserId: 'cu-a',
+  },
   {
     companyId: COMPANY_B,
     companySlug: 'b',
@@ -31,6 +40,8 @@ describe('AuthService.refreshStaff — active company', () => {
   let service: AuthService;
   let rotate: jest.Mock;
   let signStaffAccess: jest.Mock;
+  let revokeFamily: jest.Mock;
+  let recordAs: jest.Mock;
   let session: {
     id: string;
     userAccountId: string;
@@ -54,6 +65,8 @@ describe('AuthService.refreshStaff — active company', () => {
 
     rotate = jest.fn(async () => ({ id: 'session-2' }));
     signStaffAccess = jest.fn(() => 'access-token');
+    revokeFamily = jest.fn(async () => ['session-1', 'session-x']);
+    recordAs = jest.fn(async () => undefined);
 
     const identity = {
       findStaffSessionByHash: async () => session,
@@ -64,6 +77,7 @@ describe('AuthService.refreshStaff — active company', () => {
         status: 'ACTIVE',
       }),
       rotateStaffSession: rotate,
+      revokeStaffSessionFamily: revokeFamily,
     } as unknown as IdentityRepository;
 
     const directory = {
@@ -81,6 +95,8 @@ describe('AuthService.refreshStaff — active company', () => {
       } as unknown as TokenHashService,
       { revoke: jest.fn() } as unknown as SessionDenyList,
       { auth: { refreshTokenTtlDays: 30 } } as unknown as AppConfig,
+      { recordAs } as unknown as AuditService,
+      {} as PlatformMfaService,
     );
   });
 
@@ -95,7 +111,9 @@ describe('AuthService.refreshStaff — active company', () => {
     const result = await service.refreshStaff('token');
 
     expect(result.activeCompanyId).toBe(COMPANY_B);
-    expect(signStaffAccess).toHaveBeenCalledWith(expect.objectContaining({ companyUserId: 'cu-b' }));
+    expect(signStaffAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ companyUserId: 'cu-b' }),
+    );
     // And it must persist, or the next rotation loses it again.
     expect(rotate).toHaveBeenCalledWith(expect.objectContaining({ activeCompanyId: COMPANY_B }));
   });
@@ -114,5 +132,21 @@ describe('AuthService.refreshStaff — active company', () => {
 
     expect(result.activeCompanyId).toBe(COMPANY_A);
     expect(rotate).toHaveBeenCalledWith(expect.objectContaining({ activeCompanyId: COMPANY_A }));
+  });
+
+  it('treats a refresh that lost the rotation race as reuse: family revoked and audited', async () => {
+    // The token was read as live, but another request rotated it first.
+    rotate.mockResolvedValueOnce(null);
+
+    await expect(service.refreshStaff('token')).rejects.toBeInstanceOf(RefreshTokenReusedError);
+    expect(revokeFamily).toHaveBeenCalledWith(session.familyId);
+    expect(recordAs).toHaveBeenCalledWith(
+      { kind: 'SYSTEM', name: 'anonymous' },
+      expect.objectContaining({
+        action: 'auth.refresh_token_reused',
+        resourceId: session.familyId,
+      }),
+    );
+    expect(signStaffAccess).not.toHaveBeenCalled();
   });
 });

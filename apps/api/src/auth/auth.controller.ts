@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { SessionRevokedError, UnauthenticatedError } from '../common/errors';
@@ -11,10 +12,15 @@ import { Public, Realm } from './decorators/public.decorator';
 import { SessionCookieService } from './session-cookie.service';
 import {
   loginSchema,
+  mfaCodeSchema,
+  platformLoginSchema,
   switchCompanySchema,
   type LoginDto,
+  type MfaCodeDto,
+  type PlatformLoginDto,
   type SwitchCompanyDto,
 } from './dto/auth.dto';
+import { PlatformMfaService } from './platform-mfa.service';
 import type { AuthenticatedSession } from './auth.service';
 
 /**
@@ -191,18 +197,59 @@ export class AuthController {
 @NoTenant()
 @Realm('platform')
 export class PlatformAuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly mfa: PlatformMfaService,
+  ) {}
 
   @Post('login')
   @Public()
   @HttpCode(200)
   // Stricter than staff sign-in: these accounts can reach every company.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  async login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto, @Req() req: Request) {
-    return this.auth.loginPlatform(dto.email, dto.password, {
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
+  async login(
+    @Body(new ZodValidationPipe(platformLoginSchema)) dto: PlatformLoginDto,
+    @Req() req: Request,
+  ) {
+    return this.auth.loginPlatform(
+      dto.email,
+      dto.password,
+      { ipAddress: req.ip, userAgent: req.headers['user-agent'] },
+      dto.mfaCode,
+    );
+  }
+
+  @Get('mfa')
+  @ApiOperation({ summary: 'Whether two-factor authentication is set up for you' })
+  async mfaStatus(@CurrentUser() actor: Actor | null) {
+    return this.mfa.status(this.operator(actor).platformUserId);
+  }
+
+  @Post('mfa/setup')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Start setting up two-factor authentication',
+    description: 'Returns the secret and an otpauth URI ONCE, for an authenticator app.',
+  })
+  async mfaSetup(@CurrentUser() actor: Actor | null) {
+    return this.mfa.setup(this.operator(actor).platformUserId);
+  }
+
+  @Post('mfa/confirm')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Finish setting up two-factor authentication with a code' })
+  async mfaConfirm(
+    @CurrentUser() actor: Actor | null,
+    @Body(new ZodValidationPipe(mfaCodeSchema)) dto: MfaCodeDto,
+  ) {
+    return this.mfa.confirm(this.operator(actor).platformUserId, dto.code);
+  }
+
+  private operator(actor: Actor | null) {
+    if (!actor || !isPlatformUser(actor)) throw new UnauthenticatedError();
+    return actor;
   }
 
   @Post('logout')

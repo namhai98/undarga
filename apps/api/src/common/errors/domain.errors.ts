@@ -50,6 +50,31 @@ export class UnauthenticatedError extends DomainError {
   }
 }
 
+/**
+ * Platform sign-in: the password was right and a second factor is due. Only
+ * ever raised AFTER the password is verified, and only in the platform realm,
+ * so it reveals nothing to someone who does not already hold the password.
+ */
+export class MfaRequiredError extends DomainError {
+  readonly code = 'MFA_REQUIRED' as const;
+  readonly status = 401;
+  constructor() {
+    super('Enter the 6-digit code from your authenticator app.');
+  }
+}
+
+/** Platform sign-in refused until the operator has set up a second factor. */
+export class MfaEnrollmentRequiredError extends DomainError {
+  readonly code = 'MFA_ENROLLMENT_REQUIRED' as const;
+  readonly status = 403;
+  constructor() {
+    super(
+      'Two-factor authentication must be set up for this account before it can sign in. ' +
+        'Ask a platform administrator to run the enrolment script.',
+    );
+  }
+}
+
 export class InvalidCredentialsError extends DomainError {
   readonly code = 'INVALID_CREDENTIALS' as const;
   readonly status = 401;
@@ -339,7 +364,11 @@ export class SlotUnavailableError extends DomainError {
   readonly code = 'SLOT_UNAVAILABLE' as const;
   readonly status = 409;
   constructor(details: { reason: string; startsAt: string; [key: string]: unknown }) {
-    super(SLOT_UNAVAILABLE_MESSAGES[details.reason] ?? 'That time is no longer available. Choose another slot.', details);
+    super(
+      SLOT_UNAVAILABLE_MESSAGES[details.reason] ??
+        'That time is no longer available. Choose another slot.',
+      details,
+    );
   }
 }
 
@@ -611,7 +640,9 @@ export class FileTooLargeError extends DomainError {
   readonly code = 'FILE_TOO_LARGE' as const;
   readonly status = 413;
   constructor(maxBytes: number) {
-    super(`The file is larger than ${Math.round((maxBytes / 1024 / 1024) * 10) / 10} MB.`, { maxBytes });
+    super(`The file is larger than ${Math.round((maxBytes / 1024 / 1024) * 10) / 10} MB.`, {
+      maxBytes,
+    });
   }
 }
 
@@ -619,7 +650,9 @@ export class FileTypeNotAllowedError extends DomainError {
   readonly code = 'FILE_TYPE_NOT_ALLOWED' as const;
   readonly status = 415;
   constructor(allowed: readonly string[]) {
-    super('That kind of file is not accepted. Use a JPEG, PNG or WebP image.', { allowed: [...allowed] });
+    super('That kind of file is not accepted. Use a JPEG, PNG or WebP image.', {
+      allowed: [...allowed],
+    });
   }
 }
 
@@ -673,6 +706,49 @@ export class PrivilegeEscalationError extends DomainError {
   readonly status = 403;
   constructor(permissions: string[]) {
     super('You cannot grant permissions you do not hold yourself.', { permissions });
+  }
+}
+
+/** The built-in roles are shared vocabulary; copy one to change it. */
+export class SystemRoleImmutableError extends DomainError {
+  readonly code = 'SYSTEM_ROLE_IMMUTABLE' as const;
+  readonly status = 409;
+  constructor() {
+    super('Built-in roles cannot be changed or deleted. Create your own role instead.');
+  }
+}
+
+/** A role someone holds, or an open invitation offers, cannot be deleted. */
+export class RoleInUseError extends DomainError {
+  readonly code = 'ROLE_IN_USE' as const;
+  readonly status = 409;
+  constructor(members: number) {
+    super('This role is still given to someone. Move them to another role first.', { members });
+  }
+}
+
+/**
+ * A member tried to change or remove their own access. Refused so nobody can
+ * promote themselves, or lock themselves out by accident; another
+ * administrator does it.
+ */
+export class SelfModificationBlockedError extends DomainError {
+  readonly code = 'SELF_MODIFICATION_BLOCKED' as const;
+  readonly status = 403;
+  constructor() {
+    super('You cannot change or remove your own access. Ask another administrator.');
+  }
+}
+
+/**
+ * The company owner's access is not changed through member management: a
+ * company must always keep its owner, and ownership is moved deliberately.
+ */
+export class LastOwnerError extends DomainError {
+  readonly code = 'LAST_OWNER' as const;
+  readonly status = 409;
+  constructor() {
+    super("The owner's access cannot be changed or removed here.");
   }
 }
 

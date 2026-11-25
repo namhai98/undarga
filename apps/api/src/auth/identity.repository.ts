@@ -450,9 +450,52 @@ export class IdentityRepository {
         passwordHash: true,
         status: true,
         mfaEnrolledAt: true,
+        mfaSecret: true,
         lockedUntil: true,
       },
     });
+  }
+
+  /** MFA state for one operator. `mfaSecret` is sealed; only the MFA service opens it. */
+  async findPlatformMfa(platformUserId: string) {
+    return this.prisma.platformUser.findFirst({
+      where: { id: platformUserId, deletedAt: null },
+      select: { id: true, email: true, mfaSecret: true, mfaEnrolledAt: true },
+    });
+  }
+
+  /** Store a new, not yet confirmed secret. Refused once enrolled. */
+  async setPendingPlatformMfa(platformUserId: string, sealedSecret: string): Promise<boolean> {
+    const { count } = await this.prisma.platformUser.updateMany({
+      where: { id: platformUserId, deletedAt: null, mfaEnrolledAt: null },
+      data: { mfaSecret: sealedSecret },
+    });
+    return count === 1;
+  }
+
+  /** Confirm the pending secret with the step of the code that proved it. */
+  async confirmPlatformMfa(platformUserId: string, step: number): Promise<boolean> {
+    const { count } = await this.prisma.platformUser.updateMany({
+      where: { id: platformUserId, deletedAt: null, mfaEnrolledAt: null, mfaSecret: { not: null } },
+      data: { mfaEnrolledAt: new Date(), mfaLastStep: BigInt(step) },
+    });
+    return count === 1;
+  }
+
+  /**
+   * Spend a TOTP time step. Conditional on it being later than the last one,
+   * so a code cannot be replayed, and two sign-ins racing with one code cannot
+   * both win.
+   */
+  async claimPlatformMfaStep(platformUserId: string, step: number): Promise<boolean> {
+    const { count } = await this.prisma.platformUser.updateMany({
+      where: {
+        id: platformUserId,
+        OR: [{ mfaLastStep: null }, { mfaLastStep: { lt: BigInt(step) } }],
+      },
+      data: { mfaLastStep: BigInt(step) },
+    });
+    return count === 1;
   }
 
   async createPlatformSession(input: {

@@ -98,10 +98,17 @@ jobs:
             -c "CREATE DATABASE undarga_test"
           DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" npx prisma migrate deploy
           MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node scripts/apply-hardening.js
+          MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" node scripts/verify-hardening.js
 
       - name: Migrations apply cleanly to an empty database (deploy procedure)
         working-directory: apps/api
         run: sh scripts/migrate-deploy.sh
+
+      # The double-booking constraints and row-level security live outside
+      # Prisma's migrations. Prove the deploy procedure above created them.
+      - name: Hardening is in place (exclusion constraints, RLS, roles)
+        working-directory: apps/api
+        run: node scripts/verify-hardening.js
 
       - name: End-to-end tests (API, real PostgreSQL + RLS)
         working-directory: apps/api

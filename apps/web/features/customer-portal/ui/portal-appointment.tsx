@@ -11,7 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/services/api-error';
-import type { PortalActionVerdict, PortalAppointmentDetail } from '@/services/customer-portal.service';
+import type {
+  PortalActionVerdict,
+  PortalAppointmentDetail,
+} from '@/services/customer-portal.service';
 import {
   useCancelAppointment,
   useCustomerAppointment,
@@ -31,6 +34,8 @@ import {
 } from '../model/format';
 import { Field, Loadable } from './portal-pages';
 
+import { useT } from '@/lib/i18n';
+
 /** What a refused action means, in the customer's words. */
 function refusalMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -43,6 +48,7 @@ function refusalMessage(error: unknown): string {
 }
 
 export function PortalAppointment({ slug, id }: { slug: string; id: string }) {
+  const t = useT();
   const appointment = useCustomerAppointment(slug, id);
 
   return (
@@ -52,15 +58,19 @@ export function PortalAppointment({ slug, id }: { slug: string; id: string }) {
         className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} -ml-2 w-fit`}
       >
         <ArrowLeft aria-hidden className="size-4" />
-        My appointments
+        {t('My appointments')}
       </Link>
       {appointment.error instanceof ApiError && appointment.error.status === 404 ? (
         <Alert role="alert">
-          <AlertTitle>Appointment not found</AlertTitle>
-          <AlertDescription>It may belong to a different account.</AlertDescription>
+          <AlertTitle>{t('Appointment not found')}</AlertTitle>
+          <AlertDescription>{t('It may belong to a different account.')}</AlertDescription>
         </Alert>
       ) : (
-        <Loadable query={appointment} label="Loading the appointment…" error="Could not load this appointment.">
+        <Loadable
+          query={appointment}
+          label={t('Loading the appointment…')}
+          error="Could not load this appointment."
+        >
           {(data) => <Detail slug={slug} data={data} />}
         </Loadable>
       )}
@@ -69,44 +79,56 @@ export function PortalAppointment({ slug, id }: { slug: string; id: string }) {
 }
 
 function Detail({ slug, data }: { slug: string; data: PortalAppointmentDetail }) {
+  const t = useT();
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold">{data.service ?? 'Appointment'}</h1>
-          <Badge variant={statusTone(data.status)}>{STATUS_LABEL[data.status]}</Badge>
+          <h1 className="text-xl font-semibold">{data.service ?? t('Appointment')}</h1>
+          <Badge variant={statusTone(data.status)}>{t(STATUS_LABEL[data.status])}</Badge>
         </div>
         <p className="text-muted-foreground text-sm">
           {when(data.startsAt, data.timezone)} – {time(data.endsAt, data.timezone)}
           <span className="font-mono"> · {data.appointmentNumber}</span>
         </p>
         {data.rescheduledFrom ? (
-          <p className="text-muted-foreground text-xs">Moved from {data.rescheduledFrom}.</p>
+          <p className="text-muted-foreground text-xs">
+            {t('Moved from {rescheduledFrom}.', { rescheduledFrom: data.rescheduledFrom })}
+          </p>
         ) : null}
       </header>
 
       <Card>
         <CardContent className="pt-6">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Row label="Where">
+            <Row label={t('Where')}>
               {data.branch.name}
-              {data.branch.address ? <span className="text-muted-foreground block">{data.branch.address}</span> : null}
+              {data.branch.address ? (
+                <span className="text-muted-foreground block">{data.branch.address}</span>
+              ) : null}
             </Row>
-            <Row label="With">{data.employee ?? 'Our team'}</Row>
-            <Row label="Duration">{data.durationMin ? `${data.durationMin} minutes` : '—'}</Row>
-            <Row label="Times shown in">{data.timezone}</Row>
-            {data.branch.phone ? <Row label="Phone">{data.branch.phone}</Row> : null}
-            {data.customerNote ? <Row label="Your note">{data.customerNote}</Row> : null}
+            <Row label={t('With')}>{data.employee ?? t('Our team')}</Row>
+            <Row label={t('Duration')}>
+              {data.durationMin
+                ? t('{durationMin} minutes', { durationMin: data.durationMin })
+                : '—'}
+            </Row>
+            <Row label={t('Times shown in')}>{data.timezone}</Row>
+            {data.branch.phone ? <Row label={t('Phone')}>{data.branch.phone}</Row> : null}
+            {data.customerNote ? <Row label={t('Your note')}>{data.customerNote}</Row> : null}
           </dl>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Price and payment</CardTitle>
+          <CardTitle>{t('Price and payment')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          <Line label="Price" value={money(data.price.subtotalMinor, data.price.currencyCode)} />
+          <Line
+            label={t('Price')}
+            value={money(data.price.subtotalMinor, data.price.currencyCode)}
+          />
           {data.promotions.map((p) => (
             <Line
               key={p.name}
@@ -115,21 +137,40 @@ function Detail({ slug, data }: { slug: string; data: PortalAppointmentDetail })
             />
           ))}
           {data.promotions.length === 0 && data.price.discountMinor !== '0' ? (
-            <Line label="Discount" value={`− ${money(data.price.discountMinor, data.price.currencyCode)}`} />
+            <Line
+              label={t('Discount')}
+              value={`− ${money(data.price.discountMinor, data.price.currencyCode)}`}
+            />
           ) : null}
-          <Line label="Total" value={money(data.price.totalMinor, data.price.currencyCode)} strong />
+          <Line
+            label={t('Total')}
+            value={money(data.price.totalMinor, data.price.currencyCode)}
+            strong
+          />
           <div className="border-border/60 grid gap-2 border-t pt-3">
-            <Line label="Payment" value={PAYMENT_STATUS_LABEL[data.payment.status] ?? data.payment.status} />
-            <Line label="Paid" value={money(data.payment.paidMinor, data.price.currencyCode)} />
+            <Line
+              label={t('Payment')}
+              value={PAYMENT_STATUS_LABEL[data.payment.status] ?? data.payment.status}
+            />
+            <Line
+              label={t('Paid')}
+              value={money(data.payment.paidMinor, data.price.currencyCode)}
+            />
             {data.payment.refundedMinor !== '0' ? (
-              <Line label="Refunded" value={money(data.payment.refundedMinor, data.price.currencyCode)} />
+              <Line
+                label={t('Refunded')}
+                value={money(data.payment.refundedMinor, data.price.currencyCode)}
+              />
             ) : null}
             {data.status !== 'CANCELLED' ? (
-              <Line label="Still to pay" value={money(data.payment.outstandingMinor, data.price.currencyCode)} />
+              <Line
+                label={t('Still to pay')}
+                value={money(data.payment.outstandingMinor, data.price.currencyCode)}
+              />
             ) : null}
             {data.payment.inProgress ? (
               <p className="text-muted-foreground text-xs" role="status">
-                An online payment is being processed.
+                {t('An online payment is being processed.')}
               </p>
             ) : null}
           </div>
@@ -155,6 +196,7 @@ function Detail({ slug, data }: { slug: string; data: PortalAppointmentDetail })
 }
 
 function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }) {
+  const t = useT();
   const [mode, setMode] = useState<'none' | 'cancel' | 'reschedule'>('none');
   const [done, setDone] = useState<string | null>(null);
   const { cancel, reschedule } = data.actions;
@@ -168,7 +210,7 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
           </Alert>
         ) : null}
         <Link href={`/book/${slug}`} className={buttonVariants({ size: 'sm' })}>
-          Book again
+          {t('Book again')}
         </Link>
       </div>
     );
@@ -177,10 +219,10 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Need to change it?</CardTitle>
+        <CardTitle>{t('Need to change it?')}</CardTitle>
         {cancel.allowed && cancel.deadline ? (
           <CardDescription>
-            You can change or cancel online until {when(cancel.deadline, data.timezone)}.
+            {t('You can change or cancel online until')} {when(cancel.deadline, data.timezone)}.
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -195,17 +237,19 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
             <div className="flex flex-wrap gap-2">
               {reschedule.allowed ? (
                 <Button size="sm" onClick={() => setMode('reschedule')}>
-                  Reschedule
+                  {t('Reschedule')}
                 </Button>
               ) : null}
               {cancel.allowed ? (
                 <Button size="sm" variant="outline" onClick={() => setMode('cancel')}>
-                  Cancel appointment
+                  {t('Cancel appointment')}
                 </Button>
               ) : null}
             </div>
-            <NotAllowed verdict={cancel} label="Cancelling" />
-            {reschedule.reason !== cancel.reason ? <NotAllowed verdict={reschedule} label="Rescheduling" /> : null}
+            <NotAllowed verdict={cancel} label={t('Cancelling')} />
+            {reschedule.reason !== cancel.reason ? (
+              <NotAllowed verdict={reschedule} label={t('Rescheduling')} />
+            ) : null}
           </div>
         ) : mode === 'cancel' ? (
           <CancelForm
@@ -213,7 +257,7 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
             data={data}
             onDone={() => {
               setMode('none');
-              setDone('Your appointment was cancelled.');
+              setDone(t('Your appointment was cancelled.'));
             }}
             onBack={() => setMode('none')}
           />
@@ -226,10 +270,12 @@ function Actions({ slug, data }: { slug: string; data: PortalAppointmentDetail }
 }
 
 function NotAllowed({ verdict, label }: { verdict: PortalActionVerdict; label: string }) {
+  const t = useT();
   if (verdict.allowed || !verdict.message) return null;
   return (
     <p className="text-muted-foreground text-sm">
-      <span className="font-medium">{label} online is not available.</span> {verdict.message}
+      <span className="font-medium">{t('{label} online is not available.', { label })}</span>{' '}
+      {verdict.message}
     </p>
   );
 }
@@ -245,27 +291,40 @@ function CancelForm({
   onDone: () => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const cancel = useCancelAppointment(slug, data.id);
   const paid = data.payment.paidMinor !== '0';
 
   return (
-    <div className="grid gap-3" role="group" aria-label="Cancel appointment">
-      <p className="text-sm font-medium">Cancel {data.service ?? 'this appointment'} on {when(data.startsAt, data.timezone)}?</p>
+    <div className="grid gap-3" role="group" aria-label={t('Cancel appointment')}>
+      <p className="text-sm font-medium">
+        {t('Cancel {what} on {when}?', {
+          what: data.service ?? t('this appointment'),
+          when: when(data.startsAt, data.timezone),
+        })}
+      </p>
       {paid ? (
         <p className="text-muted-foreground text-sm">
-          You have paid {money(data.payment.paidMinor, data.price.currencyCode)}. The business handles any refund.
+          {t('You have paid {amount}. The business handles any refund.', {
+            amount: money(data.payment.paidMinor, data.price.currencyCode),
+          })}
         </p>
       ) : null}
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not cancel</AlertTitle>
+          <AlertTitle>{t('Could not cancel')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-      <Field id="cancel-reason" label="Reason (optional)">
-        <Input id="cancel-reason" value={reason} maxLength={512} onChange={(e) => setReason(e.target.value)} />
+      <Field id="cancel-reason" label={t('Reason (optional)')}>
+        <Input
+          id="cancel-reason"
+          value={reason}
+          maxLength={512}
+          onChange={(e) => setReason(e.target.value)}
+        />
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -274,14 +333,16 @@ function CancelForm({
           disabled={cancel.isPending}
           onClick={() => {
             setError(null);
-            cancel.mutateAsync(reason.trim() || undefined).then(onDone, (caught: unknown) => setError(refusalMessage(caught)));
+            cancel
+              .mutateAsync(reason.trim() || undefined)
+              .then(onDone, (caught: unknown) => setError(refusalMessage(caught)));
           }}
         >
           {cancel.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Yes, cancel it
+          {t('Yes, cancel it')}
         </Button>
         <Button size="sm" variant="ghost" onClick={onBack}>
-          Keep my appointment
+          {t('Keep my appointment')}
         </Button>
       </div>
     </div>
@@ -297,6 +358,7 @@ function RescheduleForm({
   data: PortalAppointmentDetail;
   onBack: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [date, setDate] = useState(() => isoDateIn(data.timezone, 1));
   const [picked, setPicked] = useState<string | null>(null);
@@ -305,8 +367,12 @@ function RescheduleForm({
   const move = useRescheduleAppointment(slug, data.id);
 
   return (
-    <div className="grid gap-4" role="group" aria-label="Reschedule appointment">
-      <Field id="reschedule-date" label="New date" hint={`Times are in ${data.timezone}.`}>
+    <div className="grid gap-4" role="group" aria-label={t('Reschedule appointment')}>
+      <Field
+        id="reschedule-date"
+        label={t('New date')}
+        hint={t('Times are in {timezone}.', { timezone: data.timezone })}
+      >
         <Input
           id="reschedule-date"
           type="date"
@@ -327,10 +393,12 @@ function RescheduleForm({
           <AlertDescription>{refusalMessage(options.error)}</AlertDescription>
         </Alert>
       ) : options.data && options.data.slots.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No times are free that day. Try another date.</p>
+        <p className="text-muted-foreground text-sm">
+          {t('No times are free that day. Try another date.')}
+        </p>
       ) : (
         <div className="grid gap-2">
-          <p className="text-sm font-medium">Choose a time</p>
+          <p className="text-sm font-medium">{t('Choose a time')}</p>
           <div className="flex flex-wrap gap-2">
             {options.data?.slots.map((slot) => (
               <Button
@@ -349,7 +417,7 @@ function RescheduleForm({
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not reschedule</AlertTitle>
+          <AlertTitle>{t('Could not reschedule')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -372,10 +440,10 @@ function RescheduleForm({
           }}
         >
           {move.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          {picked ? `Move to ${when(picked, data.timezone)}` : 'Pick a time'}
+          {picked ? t('Move to {when}', { when: when(picked, data.timezone) }) : t('Pick a time')}
         </Button>
         <Button size="sm" variant="ghost" onClick={onBack}>
-          Keep the current time
+          {t('Keep the current time')}
         </Button>
       </div>
     </div>
@@ -391,7 +459,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Line({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+function Line({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-3">
       <span className={strong ? 'font-medium' : 'text-muted-foreground'}>{label}</span>

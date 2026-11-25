@@ -22,6 +22,7 @@ import {
   useDeleteCustomer,
 } from '../api/use-customers';
 import { CustomerForm } from './customer-form';
+import { useT } from '@/lib/i18n';
 
 /**
  * Everything one company knows about one person.
@@ -42,6 +43,7 @@ export function CustomerDetail({
   customerId: string;
   children?: ReactNode;
 }) {
+  const t = useT();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -58,7 +60,7 @@ export function CustomerDetail({
   if (customer.isPending) {
     return (
       <div className="grid gap-3" aria-busy="true">
-        <span className="sr-only">Loading the customer…</span>
+        <span className="sr-only">{t('Loading the customer…')}</span>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -70,9 +72,9 @@ export function CustomerDetail({
       <div className="grid gap-4">
         <BackLink />
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load this customer</AlertTitle>
+          <AlertTitle>{t('Could not load this customer')}</AlertTitle>
           <AlertDescription>
-            They may have been deactivated, or belong to another company.
+            {t('They may have been deactivated, or belong to another company.')}
           </AlertDescription>
         </Alert>
       </div>
@@ -97,7 +99,9 @@ export function CustomerDetail({
       await remove.mutateAsync(customerId);
       router.push('/customers');
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not deactivate this customer.');
+      setError(
+        caught instanceof ApiError ? caught.message : t('Could not deactivate this customer.'),
+      );
     }
   };
 
@@ -119,14 +123,14 @@ export function CustomerDetail({
             ))}
           </div>
           <p className="text-muted-foreground text-sm">
-            {[detail.phone, detail.email].filter(Boolean).join(' · ') || 'No contact details'}
+            {[detail.phone, detail.email].filter(Boolean).join(' · ') || t('No contact details')}
           </p>
         </div>
 
         {canWrite ? (
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-              Edit
+              {t('Edit')}
             </Button>
             <Button
               size="sm"
@@ -135,7 +139,7 @@ export function CustomerDetail({
               disabled={remove.isPending}
               onClick={() => setConfirmingDelete(true)}
             >
-              Deactivate
+              {t('Deactivate')}
             </Button>
           </div>
         ) : null}
@@ -145,8 +149,8 @@ export function CustomerDetail({
         purpose="CUSTOMER_PHOTO"
         targetId={customerId}
         fileId={detail.photoFileId}
-        label="Photo"
-        hint="Staff only — never shown on the booking page."
+        label={t('Photo')}
+        hint={t('Staff only — never shown on the booking page.')}
         visibility="PRIVATE"
         shape="round"
         canEdit={canWrite}
@@ -160,18 +164,19 @@ export function CustomerDetail({
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not deactivate</AlertTitle>
+          <AlertTitle>{t('Could not deactivate')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {confirmingDelete ? (
         <Alert role="alert">
-          <AlertTitle>Deactivate {detail.fullName}?</AlertTitle>
+          <AlertTitle>{t('Deactivate {fullName}?', { fullName: detail.fullName })}</AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>
-              Their appointment and payment history stays intact — the record is hidden, not erased.
-              Their phone number and email become available for a new customer.
+              {t(
+                'Their appointment and payment history stays intact — the record is hidden, not erased. Their phone number and email become available for a new customer.',
+              )}
             </p>
             <div className="flex gap-2">
               <Button
@@ -181,10 +186,10 @@ export function CustomerDetail({
                 onClick={() => void handleDelete()}
               >
                 {remove.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Deactivate
+                {t('Deactivate')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(false)}>
-                Keep
+                {t('Keep')}
               </Button>
             </div>
           </AlertDescription>
@@ -194,24 +199,24 @@ export function CustomerDetail({
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Details</CardTitle>
+            <CardTitle>{t('Details')}</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Detail label="Phone" value={detail.phone} />
-              <Detail label="Email" value={detail.email} />
-              <Detail label="Address" value={detail.address} />
-              <Detail label="Birthday" value={detail.birthDate} />
-              <Detail label="Usual staff member" value={detail.preferredEmployeeName} />
+              <Detail label={t('Phone')} value={detail.phone} />
+              <Detail label={t('Email')} value={detail.email} />
+              <Detail label={t('Address')} value={detail.address} />
+              <Detail label={t('Birthday')} value={detail.birthDate} />
+              <Detail label={t('Usual staff member')} value={detail.preferredEmployeeName} />
               <Detail
-                label="Customer since"
+                label={t('Customer since')}
                 value={new Date(detail.createdAt).toLocaleDateString()}
               />
             </dl>
 
             {detail.notes ? (
               <div className="border-border/60 mt-4 border-t pt-4">
-                <dt className="text-muted-foreground text-xs">Notes</dt>
+                <dt className="text-muted-foreground text-xs">{t('Notes')}</dt>
                 <dd className="mt-1 text-sm whitespace-pre-wrap">{detail.notes}</dd>
               </div>
             ) : null}
@@ -220,22 +225,22 @@ export function CustomerDetail({
 
         <Card>
           <CardHeader>
-            <CardTitle>History</CardTitle>
-            <CardDescription>Maintained by the booking and payment flows.</CardDescription>
+            <CardTitle>{t('History')}</CardTitle>
+            <CardDescription>{t('Maintained by the booking and payment flows.')}</CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3">
-              <Detail label="Visits" value={String(detail.totalVisits)} />
-              <Detail label="No-shows" value={String(detail.totalNoShows)} />
+              <Detail label={t('Visits')} value={String(detail.totalVisits)} />
+              <Detail label={t('No-shows')} value={String(detail.totalNoShows)} />
               <Detail
-                label="Lifetime spend"
+                label={t('Lifetime spend')}
                 value={formatMoney(
                   { amountMinor: detail.totalSpentMinor, currencyCode: 'MNT' },
                   currencyFormat('MNT'),
                 )}
               />
               <Detail
-                label="Last visit"
+                label={t('Last visit')}
                 value={
                   detail.lastVisitAt ? new Date(detail.lastVisitAt).toLocaleDateString() : 'Never'
                 }
@@ -252,12 +257,12 @@ export function CustomerDetail({
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Appointments</CardTitle>
+            <CardTitle>{t('Appointments')}</CardTitle>
             <CardDescription>
               {/* Seeing a customer is a different decision from seeing everything
                   they have ever booked. The query is not fired at all rather than
                   fired and 403'd. */}
-              You do not have permission to see this customer’s booking history.
+              {t('You do not have permission to see this customer’s booking history.')}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -267,30 +272,31 @@ export function CustomerDetail({
 }
 
 function AppointmentHistory({ customerId }: { customerId: string }) {
+  const t = useT();
   const appointments = useCustomerAppointments(customerId);
   const items = appointments.data?.items ?? [];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Appointments</CardTitle>
+        <CardTitle>{t('Appointments')}</CardTitle>
         <CardDescription>
           {appointments.isPending
-            ? 'Loading…'
-            : `${appointments.data?.total ?? 0} in total, newest first.`}
+            ? t('Loading…')
+            : t('{value} in total, newest first.', { value: appointments.data?.total ?? 0 })}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {appointments.error ? (
           <Alert variant="destructive" role="alert">
-            <AlertTitle>Could not load the history</AlertTitle>
-            <AlertDescription>Please try again.</AlertDescription>
+            <AlertTitle>{t('Could not load the history')}</AlertTitle>
+            <AlertDescription>{t('Please try again.')}</AlertDescription>
           </Alert>
         ) : null}
 
         {appointments.isPending ? (
           <div className="grid gap-2" aria-busy="true">
-            <span className="sr-only">Loading appointments…</span>
+            <span className="sr-only">{t('Loading appointments…')}</span>
             {[0, 1].map((i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
@@ -298,7 +304,7 @@ function AppointmentHistory({ customerId }: { customerId: string }) {
         ) : null}
 
         {!appointments.isPending && items.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nothing booked yet.</p>
+          <p className="text-muted-foreground text-sm">{t('Nothing booked yet.')}</p>
         ) : null}
 
         {items.length > 0 ? (
@@ -307,22 +313,22 @@ function AppointmentHistory({ customerId }: { customerId: string }) {
               <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
                 <tr>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    When
+                    {t('When')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Reference
+                    {t('Reference')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Services
+                    {t('Services')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Branch
+                    {t('Branch')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Total
+                    {t('Total')}
                   </th>
                   <th scope="col" className="py-2 font-medium">
-                    Status
+                    {t('Status')}
                   </th>
                 </tr>
               </thead>
@@ -367,13 +373,14 @@ function AppointmentHistory({ customerId }: { customerId: string }) {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link
       href="/customers"
       className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} -ml-2 w-fit`}
     >
       <ArrowLeft aria-hidden className="size-4" />
-      All customers
+      {t('All customers')}
     </Link>
   );
 }

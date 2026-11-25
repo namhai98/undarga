@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -12,9 +13,13 @@ import { useZodForm } from '@/hooks/use-zod-form';
 import { ApiError, ApiNetworkError } from '@/services/api-error';
 import { useLogin, destinationFor, isSafeReturnPath } from '../api/use-login';
 import { useSession } from '../model/use-session';
+import { useT } from '@/lib/i18n';
 
 const loginSchema = z.object({
-  email: z.string().min(1, 'Enter your email address.').email('That does not look like an email address.'),
+  email: z
+    .string()
+    .min(1, 'Enter your email address.')
+    .email('That does not look like an email address.'),
   password: z.string().min(1, 'Enter your password.'),
 });
 
@@ -57,6 +62,7 @@ function messageFor(error: unknown): { title: string; detail: string } {
 }
 
 export function LoginForm({ next, email: prefill }: { next?: string; email?: string }) {
+  const t = useT();
   const router = useRouter();
   const session = useSession();
   const login = useLogin(next);
@@ -99,7 +105,7 @@ export function LoginForm({ next, email: prefill }: { next?: string; email?: str
       ) : null}
 
       <div className="grid gap-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t('Email')}</Label>
         <Input
           id="email"
           name="email"
@@ -124,7 +130,7 @@ export function LoginForm({ next, email: prefill }: { next?: string; email?: str
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t('Password')}</Label>
         <div className="relative">
           <Input
             id="password"
@@ -162,8 +168,11 @@ export function LoginForm({ next, email: prefill }: { next?: string; email?: str
 
       <Button type="submit" size="lg" disabled={pending} className="mt-1 w-full">
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        {pending ? 'Signing in…' : 'Sign in'}
+        {pending ? t('Signing in…') : t('Sign in')}
       </Button>
+      <Link href="/forgot-password" className="text-muted-foreground text-sm hover:underline">
+        {t('Forgot your password?')}
+      </Link>
     </form>
   );
 }

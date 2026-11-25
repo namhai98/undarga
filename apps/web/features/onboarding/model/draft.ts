@@ -1,3 +1,4 @@
+import { defaultTimezone, timezoneOptions } from '@/lib/timezones';
 import { decimalToMinorString } from '@undarga/shared';
 import { z } from 'zod';
 import { currencyFormat } from '@/lib/currency';
@@ -29,7 +30,15 @@ export type WizardStep = (typeof WIZARD_STEPS)[number]['key'];
 /** The currencies the platform is set up for (the `currency` table). */
 export const CURRENCIES = ['MNT', 'USD', 'EUR', 'GBP', 'CNY', 'JPY', 'KRW', 'RUB'] as const;
 
-export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+export const DAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
 /** Monday first, the way a week is read on a schedule. */
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -70,22 +79,7 @@ export interface Draft {
   };
 }
 
-export function timezoneOptions(): string[] {
-  try {
-    const zones = Intl.supportedValuesOf('timeZone');
-    return zones.includes('UTC') ? zones : ['UTC', ...zones];
-  } catch {
-    return ['Asia/Ulaanbaatar', 'UTC', 'Europe/London', 'Europe/Berlin', 'America/New_York'];
-  }
-}
-
-export function defaultTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ulaanbaatar';
-  } catch {
-    return 'Asia/Ulaanbaatar';
-  }
-}
+export { defaultTimezone, timezoneOptions };
 
 export function emptyDraft(prefill?: { displayName?: string; slug?: string }): Draft {
   return {

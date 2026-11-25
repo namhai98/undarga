@@ -20,6 +20,7 @@ import {
   useServiceCategories,
   useUpdateCategory,
 } from '../api/use-catalog';
+import { useT } from '@/lib/i18n';
 
 const formSchema = z.object({
   name: z.string().trim().min(1, 'Give the category a name.').max(96),
@@ -46,6 +47,7 @@ const selectClass =
  * them is, rather than just "cannot delete".
  */
 export function CategoryManager() {
+  const t = useT();
   const canWrite = useCan('service:write');
   const categories = useServiceCategories();
   const tree = useCategoryTree();
@@ -63,7 +65,7 @@ export function CategoryManager() {
       setError(
         caught instanceof ApiError
           ? caught.message
-          : `Could not delete “${category.name}”.`,
+          : t('Could not delete “{name}”.', { name: category.name }),
       );
     }
   };
@@ -72,21 +74,21 @@ export function CategoryManager() {
     <section className="grid max-w-2xl gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Service categories</h2>
+          <h2 className="text-lg font-semibold">{t('Service categories')}</h2>
           <p className="text-muted-foreground text-sm">
-            How the booking page groups what you sell. Two levels deep.
+            {t('How the booking page groups what you sell. Two levels deep.')}
           </p>
         </div>
         {canWrite ? (
           <Button size="sm" onClick={() => setEditing('new')}>
-            Add category
+            {t('Add category')}
           </Button>
         ) : null}
       </header>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not delete</AlertTitle>
+          <AlertTitle>{t('Could not delete')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -101,7 +103,7 @@ export function CategoryManager() {
 
       {categories.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading categories…</span>
+          <span className="sr-only">{t('Loading categories…')}</span>
           {[0, 1].map((i) => (
             <Skeleton key={i} className="h-10 w-full" />
           ))}
@@ -110,9 +112,9 @@ export function CategoryManager() {
 
       {!categories.isPending && tree.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm font-medium">No categories yet</p>
+          <p className="text-sm font-medium">{t('No categories yet')}</p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Services work without one; categories only decide how they are grouped.
+            {t('Services work without one; categories only decide how they are grouped.')}
           </p>
         </div>
       ) : null}
@@ -167,6 +169,7 @@ function CategoryRow({
   onDelete: () => void;
   deleting: boolean;
 }) {
+  const t = useT();
   return (
     <div
       className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${nested ? 'pl-8' : ''}`}
@@ -189,7 +192,7 @@ function CategoryRow({
       {canWrite ? (
         <span className="flex shrink-0 gap-1">
           <Button variant="ghost" size="sm" onClick={onEdit}>
-            Edit
+            {t('Edit')}
           </Button>
           <Button
             variant="ghost"
@@ -198,7 +201,7 @@ function CategoryRow({
             disabled={deleting}
             onClick={onDelete}
           >
-            Delete
+            {t('Delete')}
           </Button>
         </span>
       ) : null}
@@ -215,6 +218,7 @@ function CategoryForm({
   roots: ServiceCategory[];
   onDone: () => void;
 }) {
+  const t = useT();
   const [formError, setFormError] = useState<string | null>(null);
   const { errors, onSubmit, applyServerErrors } = useZodForm(formSchema);
 
@@ -246,9 +250,7 @@ function CategoryForm({
       onDone();
     } catch (error) {
       if (applyServerErrors(error)) return;
-      setFormError(
-        error instanceof ApiError ? error.message : 'Could not save the category.',
-      );
+      setFormError(error instanceof ApiError ? error.message : t('Could not save the category.'));
     }
   });
 
@@ -258,18 +260,18 @@ function CategoryForm({
       className="border-border/60 grid gap-4 rounded-lg border p-4"
       noValidate
     >
-      <h3 className="text-sm font-medium">{category ? 'Edit category' : 'New category'}</h3>
+      <h3 className="text-sm font-medium">{category ? t('Edit category') : t('New category')}</h3>
 
       {formError ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t('Could not save')}</AlertTitle>
           <AlertDescription>{formError}</AlertDescription>
         </Alert>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto]">
         <div className="grid gap-1.5">
-          <Label htmlFor="category-name">Name</Label>
+          <Label htmlFor="category-name">{t('Name')}</Label>
           <Input
             id="category-name"
             name="name"
@@ -285,14 +287,14 @@ function CategoryForm({
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="category-parent">Parent</Label>
+          <Label htmlFor="category-parent">{t('Parent')}</Label>
           <select
             id="category-parent"
             name="parentId"
             defaultValue={category?.parentId ?? ''}
             className={selectClass}
           >
-            <option value="">Top level</option>
+            <option value="">{t('Top level')}</option>
             {parentOptions.map((root) => (
               <option key={root.id} value={root.id}>
                 {root.name}
@@ -307,7 +309,7 @@ function CategoryForm({
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="category-sort">Order</Label>
+          <Label htmlFor="category-sort">{t('Order')}</Label>
           <Input
             id="category-sort"
             name="sortOrder"
@@ -325,10 +327,10 @@ function CategoryForm({
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          {category ? 'Save' : 'Create'}
+          {category ? t('Save') : t('Create')}
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onDone} disabled={pending}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </form>

@@ -36,6 +36,8 @@ import {
   price,
   type FieldErrors,
 } from './steps';
+import { LocaleSwitcher } from '@/components/locale-switcher';
+import { useT } from '@/lib/i18n';
 
 const TITLES: Record<Step, string> = {
   branch: 'Choose a location',
@@ -55,12 +57,13 @@ const TITLES: Record<Step, string> = {
  * summary above the step on a phone and beside it on a wide screen.
  */
 export function PublicBookingPage({ companySlug }: { companySlug: string }) {
+  const t = useT();
   const company = usePublicCompany(companySlug);
 
   if (company.isPending) {
     return (
       <div aria-busy="true" className="grid gap-4">
-        <span className="sr-only">Loading booking page…</span>
+        <span className="sr-only">{t('Loading booking page…')}</span>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-40 w-full rounded-xl" />
       </div>
@@ -71,11 +74,13 @@ export function PublicBookingPage({ companySlug }: { companySlug: string }) {
     const missing = company.error instanceof ApiError && company.error.status === 404;
     return (
       <Alert variant={missing ? 'default' : 'destructive'} role="alert">
-        <AlertTitle>{missing ? 'Booking page not found' : 'Couldn’t load this page'}</AlertTitle>
+        <AlertTitle>
+          {missing ? t('Booking page not found') : t('Couldn’t load this page')}
+        </AlertTitle>
         <AlertDescription>
           {missing
-            ? 'Check the link — this business may have moved or is not taking online bookings.'
-            : 'Check your connection and try again.'}
+            ? t('Check the link — this business may have moved or is not taking online bookings.')
+            : t('Check your connection and try again.')}
         </AlertDescription>
       </Alert>
     );
@@ -85,6 +90,7 @@ export function PublicBookingPage({ companySlug }: { companySlug: string }) {
 }
 
 function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
+  const t = useT();
   const singleBranch = company.branches.length === 1 ? company.branches[0]!.id : null;
   const [state, dispatch] = useReducer(reducer, undefined, () =>
     initialState(singleBranch, isoDay()),
@@ -167,7 +173,7 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
           }
           setServerErrors(next);
           if (Object.keys(next).length === 0)
-            setFailure('Please check your details and try again.');
+            setFailure(t('Please check your details and try again.'));
           return;
         }
         case 'ONLINE_BOOKING_UNAVAILABLE':
@@ -177,41 +183,52 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
           setPromo(null);
           setPromoRound((n) => n + 1);
           setFailure(
-            `${error.message} The code has been removed — confirm again to book at the full price, or try another code.`,
+            t(
+              '{message} The code has been removed — confirm again to book at the full price, or try another code.',
+              { message: error.message },
+            ),
           );
           return;
         case 'RESOURCE_NOT_FOUND':
         case 'TENANT_NOT_FOUND':
-          setFailure('That option is no longer available online. Please start again.');
+          setFailure(t('That option is no longer available online. Please start again.'));
           return;
       }
       if (error.status === 429) {
-        setFailure('Too many attempts. Please wait a minute and try again.');
+        setFailure(t('Too many attempts. Please wait a minute and try again.'));
         return;
       }
     }
     setFailure(
       error instanceof ApiNetworkError
-        ? 'We couldn’t reach the booking service. Check your connection — you have not been booked.'
-        : 'Something went wrong and you have not been booked. Please try again.',
+        ? t(
+            'We couldn’t reach the booking service. Check your connection — you have not been booked.',
+          )
+        : t('Something went wrong and you have not been booked. Please try again.'),
     );
   };
 
   return (
     <div className="grid gap-6" style={brandStyle(company.branding?.primaryColor)}>
+      <LocaleSwitcher className="justify-end" />
       <header className="grid gap-1">
         {company.branding?.logoFileId ? (
           // eslint-disable-next-line @next/next/no-img-element -- public, API-served and pre-sized
           <img
             src={filesService.publicUrl(company.branding.logoFileId)!}
-            alt={`${company.name} logo`}
+            alt={t('{name} logo', { name: company.name })}
             className="mb-2 h-14 w-auto max-w-[12rem] object-contain"
           />
         ) : null}
-        <p className="text-muted-foreground text-sm">Book online</p>
+        <p className="text-muted-foreground text-sm">{t('Book online')}</p>
         <h1 className="text-2xl font-semibold tracking-tight">{company.name}</h1>
         {company.branding?.headline ? (
           <p className="text-muted-foreground">{company.branding.headline}</p>
+        ) : null}
+        {company.branding?.blurb ? (
+          <p className="text-muted-foreground max-w-prose text-sm whitespace-pre-line">
+            {company.branding.blurb}
+          </p>
         ) : null}
       </header>
 
@@ -232,14 +249,14 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
                   size="sm"
                   className="-ml-2 size-11"
                   onClick={() => dispatch({ type: 'back' })}
-                  aria-label="Back"
+                  aria-label={t('Back')}
                 >
                   <ArrowLeft aria-hidden className="size-4" />
                 </Button>
               ) : null}
               <div className="grid">
                 <span className="text-muted-foreground text-xs">
-                  Step {position + 1} of {steps.length}
+                  {t('Step {step} of {total}', { step: position + 1, total: steps.length })}
                 </span>
                 <h2 id="pb-step-title" className="text-lg font-semibold">
                   {TITLES[state.step]}
@@ -252,7 +269,7 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
               aria-valuemin={1}
               aria-valuemax={steps.length}
               aria-valuenow={position + 1}
-              aria-label="Booking progress"
+              aria-label={t('Booking progress')}
             >
               <div
                 className="bg-primary h-full transition-all"
@@ -262,7 +279,7 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
 
             {failure ? (
               <Alert variant="destructive" role="alert">
-                <AlertTitle>Not booked</AlertTitle>
+                <AlertTitle>{t('Not booked')}</AlertTitle>
                 <AlertDescription>{failure}</AlertDescription>
               </Alert>
             ) : null}
@@ -336,14 +353,14 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
           </section>
 
           <aside
-            aria-label="Your booking"
+            aria-label={t('Your booking')}
             className="bg-muted/40 order-first grid gap-2 rounded-xl p-4 text-sm md:order-none md:sticky md:top-6"
           >
-            <p className="font-medium">Your booking</p>
+            <p className="font-medium">{t('Your booking')}</p>
             <Line
               icon={<MapPin aria-hidden className="size-4" />}
               value={branch?.name}
-              placeholder="Location"
+              placeholder={t('Location')}
             />
             <Line
               icon={<CalendarCheck aria-hidden className="size-4" />}
@@ -352,13 +369,13 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
                   ? `${state.service.name} · ${price(state.service.priceMinor, state.service.currencyCode)}`
                   : null
               }
-              placeholder="Service"
+              placeholder={t('Service')}
             />
             {state.service?.requiresEmployee !== false ? (
               <Line
                 icon={<User aria-hidden className="size-4" />}
                 value={state.employeeChosen ? (employeeName ?? 'Anyone available') : null}
-                placeholder="Staff"
+                placeholder={t('Staff')}
               />
             ) : null}
             <Line
@@ -370,7 +387,7 @@ function Flow({ slug, company }: { slug: string; company: PublicCompany }) {
                     ? `${state.service.durationMin} min`
                     : null
               }
-              placeholder="Date & time"
+              placeholder={t('Date & time')}
             />
           </aside>
         </div>

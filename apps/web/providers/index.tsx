@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { SessionProvider } from '@/features/auth';
+import { LocaleProvider, type Locale } from '@/lib/i18n';
 import { QueryProvider } from './query-provider';
 import { SessionCacheBridge } from './session-cache-bridge';
 
@@ -17,12 +18,14 @@ import { SessionCacheBridge } from './session-cache-bridge';
  * INSIDE QueryProvider. The bridge sits above SessionProvider so it is
  * subscribed before the bootstrap refresh can fire.
  */
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({ children, locale }: { children: ReactNode; locale: Locale }) {
   return (
-    <QueryProvider>
-      <SessionCacheBridge>
-        <SessionProvider>{children}</SessionProvider>
-      </SessionCacheBridge>
-    </QueryProvider>
+    <LocaleProvider locale={locale}>
+      <QueryProvider>
+        <SessionCacheBridge>
+          <SessionProvider>{children}</SessionProvider>
+        </SessionCacheBridge>
+      </QueryProvider>
+    </LocaleProvider>
   );
 }

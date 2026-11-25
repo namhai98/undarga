@@ -4,6 +4,7 @@ import { Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSwitchCompany } from '../api/use-switch-company';
 import { useSession } from '../model/use-session';
+import { useT } from '@/lib/i18n';
 
 /**
  * Pick which company to work in.
@@ -16,6 +17,7 @@ import { useSession } from '../model/use-session';
  * furniture.
  */
 export function CompanySwitcher() {
+  const t = useT();
   const { memberships, activeCompanyId } = useSession();
   const switchCompany = useSwitchCompany();
 
@@ -43,11 +45,11 @@ export function CompanySwitcher() {
                 <span className="font-medium">{membership.companyName}</span>
                 <span className="text-muted-foreground text-xs">
                   {membership.companySlug}
-                  {membership.isOwner ? ' · owner' : ''}
+                  {membership.isOwner ? t(' · owner') : ''}
                 </span>
               </span>
               {isSwitching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              {isActive ? <Check aria-label="Current company" /> : null}
+              {isActive ? <Check aria-label={t('Current company')} /> : null}
             </Button>
           </li>
         );

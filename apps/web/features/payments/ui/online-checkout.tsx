@@ -9,6 +9,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { currencyFormat } from '@/lib/currency';
 import type { OnlinePaymentBase, SimulatedOutcome } from '@/services/online-payments.service';
 import { isOpen } from '../api/use-online-payments';
+import { useT } from '@/lib/i18n';
 
 export const ONLINE_STATUS_LABEL: Record<OnlinePaymentBase['status'], string> = {
   PENDING: 'Waiting for payment',
@@ -59,6 +60,7 @@ export function OnlineCheckout({
   successMessage?: string;
   children?: ReactNode;
 }) {
+  const t = useT();
   const open = isOpen(payment.status);
   const checkout = payment.checkout;
 
@@ -74,16 +76,24 @@ export function OnlineCheckout({
             {payment.reference ? ` · ${payment.reference}` : ''}
           </p>
         </div>
-        <Badge variant={onlineStatusTone(payment.status)}>{ONLINE_STATUS_LABEL[payment.status]}</Badge>
+        <Badge variant={onlineStatusTone(payment.status)}>
+          {t(ONLINE_STATUS_LABEL[payment.status])}
+        </Badge>
       </div>
 
       {open ? (
         <>
-          <p className="text-muted-foreground flex items-center gap-2 text-sm" role="status" aria-live="polite">
+          <p
+            className="text-muted-foreground flex items-center gap-2 text-sm"
+            role="status"
+            aria-live="polite"
+          >
             <Loader2 className="size-4 animate-spin" aria-hidden />
             {payment.status === 'PROCESSING'
-              ? 'The payment is being processed. This page updates by itself.'
-              : 'Waiting for the payment. This page updates by itself once the provider confirms it.'}
+              ? t('The payment is being processed. This page updates by itself.')
+              : t(
+                  'Waiting for the payment. This page updates by itself once the provider confirms it.',
+                )}
           </p>
 
           {checkout?.qrImage ? (
@@ -91,14 +101,14 @@ export function OnlineCheckout({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={checkout.qrImage}
-              alt="QR code to scan with a banking app"
+              alt={t('QR code to scan with a banking app')}
               className="border-border/60 mx-auto size-56 rounded-lg border bg-white p-2"
             />
           ) : null}
 
           {checkout?.deeplinks && checkout.deeplinks.length > 0 ? (
             <div className="grid gap-2">
-              <p className="text-sm font-medium">Or open your bank app</p>
+              <p className="text-sm font-medium">{t('Or open your bank app')}</p>
               <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {checkout.deeplinks.map((link) => (
                   <li key={`${link.name}-${link.link}`}>
@@ -127,7 +137,7 @@ export function OnlineCheckout({
               rel="noopener noreferrer"
               className={`${buttonVariants({ size: 'sm' })} w-fit`}
             >
-              Open the payment page
+              {t('Open the payment page')}
               <ExternalLink aria-hidden className="size-4" />
             </a>
           ) : null}
@@ -135,15 +145,21 @@ export function OnlineCheckout({
           {checkout?.simulated && onSimulate ? (
             <div className="border-border/60 grid gap-2 rounded-lg border border-dashed p-3">
               <p className="text-muted-foreground text-xs">
-                Development: this is the local payment simulator. Choose what the payer does — the
-                result arrives through the real signed webhook.
+                {t(
+                  'Development: this is the local payment simulator. Choose what the payer does — the result arrives through the real signed webhook.',
+                )}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" disabled={busy} onClick={() => onSimulate('SUCCEEDED')}>
-                  Simulate payment
+                  {t('Simulate payment')}
                 </Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => onSimulate('FAILED')}>
-                  Simulate decline
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onSimulate('FAILED')}
+                >
+                  {t('Simulate decline')}
                 </Button>
               </div>
             </div>
@@ -151,7 +167,7 @@ export function OnlineCheckout({
 
           {onCancel && payment.status === 'PENDING' ? (
             <Button variant="ghost" size="sm" className="w-fit" disabled={busy} onClick={onCancel}>
-              Cancel this payment
+              {t('Cancel this payment')}
             </Button>
           ) : null}
         </>
@@ -160,7 +176,7 @@ export function OnlineCheckout({
       {payment.status === 'SUCCEEDED' ? (
         <Alert role="status">
           <CheckCircle2 aria-hidden className="size-4" />
-          <AlertTitle>Paid</AlertTitle>
+          <AlertTitle>{t('Paid')}</AlertTitle>
           <AlertDescription>
             {successMessage}
             {payment.failureReason ? ` ${payment.failureReason}` : ''}
@@ -171,13 +187,15 @@ export function OnlineCheckout({
       {payment.status === 'FAILED' || payment.status === 'CANCELLED' ? (
         <Alert variant="destructive" role="alert">
           <XCircle aria-hidden className="size-4" />
-          <AlertTitle>{payment.status === 'FAILED' ? 'The payment failed' : 'The payment was cancelled'}</AlertTitle>
+          <AlertTitle>
+            {payment.status === 'FAILED' ? t('The payment failed') : t('The payment was cancelled')}
+          </AlertTitle>
           <AlertDescription className="grid gap-3">
-            <p>{payment.failureReason ?? 'No money was taken.'}</p>
+            <p>{payment.failureReason ?? t('No money was taken.')}</p>
             {onRetry && payment.retryable ? (
               <Button size="sm" className="w-fit" disabled={busy} onClick={onRetry}>
                 <RotateCcw aria-hidden className="size-4" />
-                Try again
+                {t('Try again')}
               </Button>
             ) : null}
           </AlertDescription>
@@ -186,9 +204,9 @@ export function OnlineCheckout({
 
       {payment.status === 'REFUNDED' ? (
         <Alert role="status">
-          <AlertTitle>Refunded</AlertTitle>
+          <AlertTitle>{t('Refunded')}</AlertTitle>
           <AlertDescription>
-            {money(payment.refundedMinor, payment.currencyCode)} was returned to the payer.
+            {money(payment.refundedMinor, payment.currencyCode)} {t('was returned to the payer.')}
           </AlertDescription>
         </Alert>
       ) : null}

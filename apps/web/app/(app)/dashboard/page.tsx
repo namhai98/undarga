@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { buttonVariants } from '@/components/ui/button';
 import { DashboardSummary } from '@/features/analytics';
 import { useSession } from '@/features/auth';
+import { useT } from '@/lib/i18n';
 
 /**
  * Where a signed-in user lands.
@@ -16,12 +17,13 @@ import { useSession } from '@/features/auth';
  * resolved to the company the header claims.
  */
 export default function DashboardPage() {
+  const t = useT();
   const { user, activeCompany, memberships, permissions, isOwner, isLoadingCompany } = useSession();
 
   if (isLoadingCompany) {
     return (
       <div className="grid gap-4" aria-busy="true">
-        <span className="sr-only">Loading your company…</span>
+        <span className="sr-only">{t('Loading your company…')}</span>
         <Skeleton className="h-7 w-56" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -32,11 +34,11 @@ export default function DashboardPage() {
     <div className="grid gap-6">
       <div className="grid gap-1">
         <h1 className="text-xl font-semibold">
-          {activeCompany ? activeCompany.companyName : 'Signed in'}
+          {activeCompany ? activeCompany.companyName : t('Signed in')}
         </h1>
         <p className="text-muted-foreground text-sm">
           {user?.displayName} · {user?.email}
-          {isOwner ? ' · owner' : ''}
+          {isOwner ? t(' · owner') : ''}
         </p>
       </div>
 
@@ -44,171 +46,204 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Money and messages</CardTitle>
-          <CardDescription>Payments, gift cards, promotions and what went out.</CardDescription>
+          <CardTitle>{t('Money and messages')}</CardTitle>
+          <CardDescription>
+            {t('Payments, gift cards, promotions and what went out.')}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/payments" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Payments
+            {t('Payments')}
           </Link>
           <Link href="/gift-cards" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Gift cards
+            {t('Gift cards')}
           </Link>
           <Link href="/promotions" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Promotions
+            {t('Promotions')}
           </Link>
           <Link href="/subscription" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Subscription
+            {t('Subscription')}
           </Link>
           <Link href="/reports" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Reports
+            {t('Reports')}
           </Link>
           <Link href="/notifications" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-            Notifications
+            {t('Notifications')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Your access</CardTitle>
+          <CardTitle>{t('Your access')}</CardTitle>
           <CardDescription>
-            Resolved by the API for this company, not decided in the browser.
+            {t('Resolved by the API for this company, not decided in the browser.')}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           <p className="text-sm">
-            {permissions.size} permission{permissions.size === 1 ? '' : 's'} in this company.
+            {permissions.size === 1
+              ? t('1 permission in this company.')
+              : t('{count} permissions in this company.', { count: permissions.size })}
           </p>
-          {memberships.length > 1 ? (
-            <div>
+          <div className="flex flex-wrap gap-2">
+            {permissions.has('member:read') ? (
+              <Link href="/members" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                {t('Members and roles')}
+              </Link>
+            ) : null}
+            <Link href="/account" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+              {t('Your account')}
+            </Link>
+            {memberships.length > 1 ? (
               <Link
                 href="/select-company"
                 className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
-                Switch company
+                {t('Switch company')}
               </Link>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Appointments</CardTitle>
-          <CardDescription>The appointment book: book, move, cancel and progress.</CardDescription>
+          <CardTitle>{t('Appointments')}</CardTitle>
+          <CardDescription>
+            {t('The appointment book: book, move, cancel and progress.')}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/appointments" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Open appointments
+            {t('Open appointments')}
           </Link>
           <Link href="/appointments/new" className={buttonVariants({ size: 'sm' })}>
-            New appointment
+            {t('New appointment')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Staff</CardTitle>
-          <CardDescription>The people customers can book with.</CardDescription>
+          <CardTitle>{t('Business settings')}</CardTitle>
+          <CardDescription>
+            {t('Company details, branches and their opening hours.')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/settings" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            {t('Open settings')}
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('Staff')}</CardTitle>
+          <CardDescription>
+            {t('The people customers can book with, their services and working hours.')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/staff" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Manage staff
+            {t('Manage staff')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Availability</CardTitle>
-          <CardDescription>Check what the engine says is bookable.</CardDescription>
+          <CardTitle>{t('Availability')}</CardTitle>
+          <CardDescription>{t('Check what the engine says is bookable.')}</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/availability" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Open availability
+            {t('Open availability')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Booking page images</CardTitle>
-          <CardDescription>Your logo and branch pictures.</CardDescription>
+          <CardTitle>{t('Booking page images')}</CardTitle>
+          <CardDescription>{t('Your logo and branch pictures.')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Link href="/booking-page-images" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Manage images
+          <Link
+            href="/booking-page-images"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            {t('Manage images')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Calendar integration</CardTitle>
-          <CardDescription>Put appointments in staff Google or Outlook calendars.</CardDescription>
+          <CardTitle>{t('Calendar integration')}</CardTitle>
+          <CardDescription>
+            {t('Put appointments in staff Google or Outlook calendars.')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/calendar" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Connect calendars
+            {t('Connect calendars')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Booking rules</CardTitle>
-          <CardDescription>Notice, how far ahead, cancellation and rescheduling deadlines.</CardDescription>
+          <CardTitle>{t('Booking rules')}</CardTitle>
+          <CardDescription>
+            {t('Notice, how far ahead, cancellation and rescheduling deadlines.')}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Link href="/booking-settings" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Booking rules
+          <Link
+            href="/booking-settings"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            {t('Booking rules')}
           </Link>
           <Link href="/time-off" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-            Time off
+            {t('Time off')}
           </Link>
           <Link href="/resources" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
-            Rooms and equipment
+            {t('Rooms and equipment')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Services</CardTitle>
-          <CardDescription>What customers can book, and how it is grouped.</CardDescription>
+          <CardTitle>{t('Services')}</CardTitle>
+          <CardDescription>{t('What customers can book, and how it is grouped.')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/services" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Manage services
+            {t('Manage services')}
           </Link>
           <Link
             href="/services/categories"
             className={buttonVariants({ variant: 'ghost', size: 'sm' })}
           >
-            Categories
+            {t('Categories')}
           </Link>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Customers</CardTitle>
-          <CardDescription>The people you book work for.</CardDescription>
+          <CardTitle>{t('Customers')}</CardTitle>
+          <CardDescription>{t('The people you book work for.')}</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/customers" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Manage customers
+            {t('Manage customers')}
           </Link>
         </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Not built yet</CardTitle>
-          <CardDescription>Managing members and roles from this app.</CardDescription>
-        </CardHeader>
       </Card>
     </div>
   );

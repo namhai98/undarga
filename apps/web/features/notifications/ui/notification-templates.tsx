@@ -21,6 +21,7 @@ import {
   useSaveTemplate,
 } from '../api/use-notifications';
 import { CHANNEL_LABEL, notificationErrorMessage } from '../model/notification-display';
+import { useT } from '@/lib/i18n';
 
 const CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'PUSH'];
 const SMS_MAX = 480;
@@ -42,6 +43,7 @@ interface Editing {
  * renders on the server with sample values, through the same code that sends.
  */
 export function NotificationTemplates() {
+  const t = useT();
   const templates = useNotificationTemplates();
   const canWrite = useCan('settings:write');
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -52,18 +54,18 @@ export function NotificationTemplates() {
   if (templates.error || !templates.data) {
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Could not load templates</AlertTitle>
-        <AlertDescription>Please try again.</AlertDescription>
+        <AlertTitle>{t('Could not load templates')}</AlertTitle>
+        <AlertDescription>{t('Please try again.')}</AlertDescription>
       </Alert>
     );
   }
 
   const { items, catalog } = templates.data;
   const find = (type: string, channel: NotificationChannel) =>
-    items.find((t) => t.type === type && t.channel === channel) ?? null;
+    items.find((item) => item.type === type && item.channel === channel) ?? null;
 
   return (
-    <section className="grid gap-4" aria-label="Templates">
+    <section className="grid gap-4" aria-label={t('Templates')}>
       {editing ? (
         <TemplateEditor
           key={`${editing.type.type}:${editing.channel}`}
@@ -78,11 +80,11 @@ export function NotificationTemplates() {
           <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
             <tr>
               <th scope="col" className="py-2 pr-3 font-medium">
-                Message
+                {t('Message')}
               </th>
               {CHANNELS.map((channel) => (
                 <th key={channel} scope="col" className="py-2 pr-3 font-medium">
-                  {CHANNEL_LABEL[channel]}
+                  {t(CHANNEL_LABEL[channel])}
                 </th>
               ))}
             </tr>
@@ -100,15 +102,18 @@ export function NotificationTemplates() {
                       <button
                         type="button"
                         className="flex items-center gap-2 hover:underline"
-                        aria-label={`${type.label} ${CHANNEL_LABEL[channel]} template`}
+                        aria-label={t('{label} {value} template', {
+                          label: type.label,
+                          value: CHANNEL_LABEL[channel],
+                        })}
                         onClick={() => setEditing({ type, channel, existing })}
                       >
                         {existing ? (
                           <Badge variant={existing.isActive ? 'default' : 'secondary'}>
-                            {existing.isActive ? 'Custom' : 'Custom · off'}
+                            {existing.isActive ? t('Custom') : t('Custom · off')}
                           </Badge>
                         ) : (
-                          <span className="text-muted-foreground">Default</span>
+                          <span className="text-muted-foreground">{t('Default')}</span>
                         )}
                       </button>
                     </td>
@@ -132,6 +137,7 @@ function TemplateEditor({
   readOnly: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const { type, channel, existing } = editing;
   const fallback = type.defaults[channel];
   const [subject, setSubject] = useState(existing?.subject ?? fallback.subject ?? '');
@@ -188,22 +194,22 @@ function TemplateEditor({
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-medium">
-            {type.label} — {CHANNEL_LABEL[channel]}
+            {type.label} — {t(CHANNEL_LABEL[channel])}
           </h3>
           <p className="text-muted-foreground text-xs">
             {existing
-              ? 'The company’s own wording.'
-              : 'Using the default. Saving creates your own version.'}
+              ? t('The company’s own wording.')
+              : t('Using the default. Saving creates your own version.')}
           </p>
         </div>
         <Button size="sm" variant="ghost" onClick={onClose}>
-          Close
+          {t('Close')}
         </Button>
       </header>
 
       {hasSubject ? (
         <div className="grid gap-1.5">
-          <Label htmlFor="template-subject">{channel === 'PUSH' ? 'Title' : 'Subject'}</Label>
+          <Label htmlFor="template-subject">{channel === 'PUSH' ? t('Title') : t('Subject')}</Label>
           <Input
             id="template-subject"
             value={subject}
@@ -215,7 +221,7 @@ function TemplateEditor({
       ) : null}
 
       <div className="grid gap-1.5">
-        <Label htmlFor="template-body">Message</Label>
+        <Label htmlFor="template-body">{t('Message')}</Label>
         <textarea
           id="template-body"
           className={textareaClass}
@@ -224,7 +230,7 @@ function TemplateEditor({
           onChange={(e) => setBody(e.target.value)}
         />
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-muted-foreground text-xs">Insert:</span>
+          <span className="text-muted-foreground text-xs">{t('Insert:')}</span>
           {type.variables.map((name) => (
             <button
               key={name}
@@ -253,7 +259,7 @@ function TemplateEditor({
           disabled={readOnly}
           onChange={(e) => setIsActive(e.target.checked)}
         />
-        Active — when off, the default wording is used instead
+        {t('Active — when off, the default wording is used instead')}
       </label>
 
       {error ? (
@@ -263,7 +269,7 @@ function TemplateEditor({
       ) : null}
       {saved ? (
         <Alert role="status">
-          <AlertDescription>Template saved.</AlertDescription>
+          <AlertDescription>{t('Template saved.')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -275,19 +281,19 @@ function TemplateEditor({
           onClick={() => void runPreview()}
         >
           {render.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Preview
+          {t('Preview')}
         </Button>
         {!readOnly ? (
           <Button size="sm" disabled={save.isPending} onClick={() => void submit()}>
             {save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Save template
+            {t('Save template')}
           </Button>
         ) : null}
       </div>
 
       {preview ? (
-        <div className="bg-muted/40 grid gap-1 rounded-md p-3" aria-label="Preview">
-          <p className="text-muted-foreground text-xs">Preview with sample values</p>
+        <div className="bg-muted/40 grid gap-1 rounded-md p-3" aria-label={t('Preview')}>
+          <p className="text-muted-foreground text-xs">{t('Preview with sample values')}</p>
           {preview.subject ? <p className="text-sm font-medium">{preview.subject}</p> : null}
           <pre className="font-sans text-sm whitespace-pre-wrap">{preview.body}</pre>
         </div>

@@ -1,3 +1,6 @@
+'use client';
+
+import { useT } from '@/lib/i18n';
 /**
  * Small, dependency-free charts for the dashboard and reports.
  *
@@ -38,6 +41,7 @@ export function StackedBarChart({
   height?: number;
   formatLabel?: (label: string) => string;
 }) {
+  const t = useT();
   const width = 600;
   const top = 8;
   const bottom = 20;
@@ -55,7 +59,7 @@ export function StackedBarChart({
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto w-full overflow-visible"
         role="img"
-        aria-label={`${title}: chart. The same figures follow as a table.`}
+        aria-label={t('{title}: chart. The same figures follow as a table.', { title })}
         preserveAspectRatio="none"
       >
         <line
@@ -119,7 +123,7 @@ export function StackedBarChart({
           <caption>{title}</caption>
           <thead>
             <tr>
-              <th scope="col">Day</th>
+              <th scope="col">{t('Day')}</th>
               {series.map((s) => (
                 <th key={s.key} scope="col">
                   {s.label}

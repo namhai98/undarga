@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
+import { getT } from '@/lib/i18n/server';
 import { CalendarCallback } from '@/features/calendar';
 
-export const metadata: Metadata = {
-  title: 'Connecting calendar — Undarga',
-  robots: { index: false, follow: false },
-  // The URL carries a one-time authorisation code: never send it onward.
-  referrer: 'no-referrer',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t('Connecting calendar — Undarga'),
+    robots: { index: false, follow: false },
+    // The URL carries a one-time authorisation code: never send it onward.
+    referrer: 'no-referrer',
+  };
+}
 
 /** The OAuth redirect URL registered with Google / Microsoft (CALENDAR_OAUTH_REDIRECT_URL). */
 export default async function CalendarCallbackRoute({

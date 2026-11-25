@@ -20,6 +20,7 @@ import {
   ruleViolation,
 } from '../model/appointment-display';
 import { StatusBadge } from './status-badge';
+import { useT } from '@/lib/i18n';
 
 const SERIES_STATUS = { ACTIVE: 'Active', ENDED: 'Ended', CANCELLED: 'Cancelled' } as const;
 
@@ -32,6 +33,7 @@ const SERIES_STATUS = { ACTIVE: 'Active', ENDED: 'Ended', CANCELLED: 'Cancelled'
  * (which also needs that permission).
  */
 export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentId: string }) {
+  const t = useT();
   const series = useSeries(seriesId);
   const cancel = useCancelSeries(seriesId);
   const canCancelAny = useCan('appointment:cancel:any');
@@ -71,7 +73,7 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
       setLate(false);
     } catch (caught) {
       setLate(ruleViolation(caught) === 'CANCELLATION_DEADLINE' && canCancelAny);
-      setError(bookingErrorMessage(caught, 'Could not cancel.'));
+      setError(bookingErrorMessage(caught, 'Could not cancel.', t));
     }
   };
 
@@ -79,24 +81,29 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Recurring series</CardTitle>
+          <CardTitle>{t('Recurring series')}</CardTitle>
           <Badge variant={s.status === 'ACTIVE' ? 'default' : 'secondary'}>
-            {SERIES_STATUS[s.status]}
+            {t(SERIES_STATUS[s.status])}
           </Badge>
         </div>
         <CardDescription>
-          {describeRecurrence(s.recurrence)} at {s.recurrence.localStartTime} · {s.counts.upcoming}{' '}
-          upcoming, {s.counts.cancelled} cancelled of {s.counts.total}
+          {t('{rule} at {time} · {upcoming} upcoming, {cancelled} cancelled of {total}', {
+            rule: describeRecurrence(s.recurrence, t),
+            time: s.recurrence.localStartTime,
+            upcoming: s.counts.upcoming,
+            cancelled: s.counts.cancelled,
+            total: s.counts.total,
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
-        <ol className="grid max-h-60 gap-1 overflow-y-auto text-sm" aria-label="Occurrences">
+        <ol className="grid max-h-60 gap-1 overflow-y-auto text-sm" aria-label={t('Occurrences')}>
           {s.occurrences.map((o) => (
             <li key={o.id} className="flex flex-wrap items-center gap-2">
               <span className="w-6 text-right tabular-nums">{(o.seriesIndex ?? 0) + 1}.</span>
               {o.id === currentId ? (
                 <span className="font-medium tabular-nums">
-                  {localDate(o.startsAt)} {localTime(o.startsAt)} (this one)
+                  {localDate(o.startsAt)} {localTime(o.startsAt)} {t('(this one)')}
                 </span>
               ) : (
                 <Link href={`/appointments/${o.id}`} className="tabular-nums hover:underline">
@@ -112,26 +119,28 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
           <div className="flex flex-wrap gap-2">
             {(canCancelAny || canCancelOwn) && current && isLive(current.status) ? (
               <Button size="sm" variant="outline" onClick={() => setMode('occurrence')}>
-                Cancel this occurrence
+                {t('Cancel this occurrence')}
               </Button>
             ) : null}
             {canCancelAny ? (
               <Button size="sm" variant="destructive" onClick={() => setMode('future')}>
-                Cancel this and all later
+                {t('Cancel this and all later')}
               </Button>
             ) : null}
           </div>
         ) : null}
 
         {mode !== 'idle' ? (
-          <div className="grid gap-2" role="group" aria-label="Cancel series">
+          <div className="grid gap-2" role="group" aria-label={t('Cancel series')}>
             <p className="text-sm">
               {mode === 'occurrence'
-                ? 'Only this date is cancelled; the rest of the series stays booked.'
-                : 'This date and every later one in the series are cancelled. Earlier ones are kept.'}
+                ? t('Only this date is cancelled; the rest of the series stays booked.')
+                : t(
+                    'This date and every later one in the series are cancelled. Earlier ones are kept.',
+                  )}
             </p>
             <div className="grid gap-1.5 sm:max-w-md">
-              <Label htmlFor="series-cancel-reason">Reason (required)</Label>
+              <Label htmlFor="series-cancel-reason">{t('Reason (required)')}</Label>
               <Input
                 id="series-cancel-reason"
                 value={reason}
@@ -152,7 +161,7 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
                 onClick={() => void submit(false)}
               >
                 {cancel.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Confirm cancellation
+                {t('Confirm cancellation')}
               </Button>
               {late ? (
                 <Button
@@ -161,7 +170,7 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
                   disabled={cancel.isPending}
                   onClick={() => void submit(true)}
                 >
-                  Cancel anyway (late cancellation)
+                  {t('Cancel anyway (late cancellation)')}
                 </Button>
               ) : null}
               <Button
@@ -173,7 +182,7 @@ export function SeriesCard({ seriesId, currentId }: { seriesId: string; currentI
                   setLate(false);
                 }}
               >
-                Keep
+                {t('Keep')}
               </Button>
             </div>
           </div>

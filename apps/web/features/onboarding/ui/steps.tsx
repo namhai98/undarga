@@ -15,6 +15,7 @@ import {
   type ServiceRow,
   type StepErrors,
 } from '../model/draft';
+import { useT } from '@/lib/i18n';
 
 export const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -36,18 +37,19 @@ export function CompanyStep({
   errors: StepErrors;
   slugEditable: boolean;
 }) {
+  const t = useT();
   const slug = useDebounced(draft.company.slug, 400);
   const availability = useSlugAvailability(slugEditable ? slug : '');
 
   return (
     <div className="grid gap-4">
-      <Field id="displayName" label="Company name" error={errors.displayName}>
+      <Field id="displayName" label={t('Company name')} error={errors.displayName}>
         <Input
           id="displayName"
           value={draft.company.displayName}
           maxLength={160}
           autoFocus
-          placeholder="Nomin Spa"
+          placeholder={t('Nomin Spa')}
           onChange={(e) => {
             const displayName = e.target.value;
             update((d) => ({
@@ -65,8 +67,8 @@ export function CompanyStep({
 
       <Field
         id="legalName"
-        label="Legal name"
-        hint="Optional. The registered name, if different."
+        label={t('Legal name')}
+        hint={t('Optional. The registered name, if different.')}
         error={errors.legalName}
       >
         <Input
@@ -81,7 +83,7 @@ export function CompanyStep({
 
       <Field
         id="slug"
-        label="Company identifier"
+        label={t('Company identifier')}
         hint={
           slugEditable
             ? 'Used in your booking page address. Lowercase letters, digits and hyphens.'
@@ -106,11 +108,11 @@ export function CompanyStep({
       {slugEditable && !errors.slug && slug.length >= 3 ? (
         <p className="text-xs" aria-live="polite">
           {availability.isFetching ? (
-            <span className="text-muted-foreground">Checking…</span>
+            <span className="text-muted-foreground">{t('Checking…')}</span>
           ) : availability.data?.available ? (
             <span className="text-emerald-700 dark:text-emerald-400">
               <Check aria-hidden className="mr-1 inline size-3" />
-              Available
+              {t('Available')}
             </span>
           ) : availability.data ? (
             <span className="text-destructive">{availability.data.reason}</span>
@@ -119,7 +121,7 @@ export function CompanyStep({
       ) : null}
 
       <p className="text-muted-foreground text-xs">
-        A logo can be added later; image uploads are not available yet.
+        {t('A logo can be added later; image uploads are not available yet.')}
       </p>
     </div>
   );
@@ -138,13 +140,14 @@ export function BranchStep({
   update: Update;
   errors: StepErrors;
 }) {
+  const t = useT();
   const zones = useMemo(() => timezoneOptions(), []);
   const set = (field: keyof Draft['branch']) => (value: string) =>
     update((d) => ({ ...d, branch: { ...d.branch, [field]: value } }));
 
   return (
     <div className="grid gap-4">
-      <Field id="branchName" label="Branch name" error={errors.branchName}>
+      <Field id="branchName" label={t('Branch name')} error={errors.branchName}>
         <Input
           id="branchName"
           value={draft.branch.name}
@@ -154,18 +157,28 @@ export function BranchStep({
         />
       </Field>
 
-      <Field id="addressLine1" label="Address" hint="Optional." error={errors.addressLine1}>
+      <Field
+        id="addressLine1"
+        label={t('Address')}
+        hint={t('Optional.')}
+        error={errors.addressLine1}
+      >
         <Input
           id="addressLine1"
           value={draft.branch.addressLine1}
           maxLength={160}
-          placeholder="Street and number"
+          placeholder={t('Street and number')}
           onChange={(e) => set('addressLine1')(e.target.value)}
         />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="addressLine2" label="Address line 2" hint="Optional." error={errors.addressLine2}>
+        <Field
+          id="addressLine2"
+          label={t('Address line 2')}
+          hint={t('Optional.')}
+          error={errors.addressLine2}
+        >
           <Input
             id="addressLine2"
             value={draft.branch.addressLine2}
@@ -173,7 +186,7 @@ export function BranchStep({
             onChange={(e) => set('addressLine2')(e.target.value)}
           />
         </Field>
-        <Field id="city" label="City" hint="Optional." error={errors.city}>
+        <Field id="city" label={t('City')} hint={t('Optional.')} error={errors.city}>
           <Input
             id="city"
             value={draft.branch.city}
@@ -184,7 +197,7 @@ export function BranchStep({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="branchPhone" label="Phone" hint="Optional." error={errors.branchPhone}>
+        <Field id="branchPhone" label={t('Phone')} hint={t('Optional.')} error={errors.branchPhone}>
           <Input
             id="branchPhone"
             type="tel"
@@ -196,8 +209,8 @@ export function BranchStep({
         </Field>
         <Field
           id="timezoneName"
-          label="Timezone"
-          hint="Bookings at this branch use this timezone."
+          label={t('Timezone')}
+          hint={t('Bookings at this branch use this timezone.')}
           error={errors.timezoneName}
         >
           <select
@@ -234,16 +247,21 @@ export function BusinessStep({
   update: Update;
   errors: StepErrors;
 }) {
-  const set = (field: 'currencyCode' | 'contactEmail' | 'contactPhone' | 'registrationNumber' | 'taxNumber') =>
-    (value: string) => update((d) => ({ ...d, business: { ...d.business, [field]: value } }));
+  const t = useT();
+  const set =
+    (
+      field: 'currencyCode' | 'contactEmail' | 'contactPhone' | 'registrationNumber' | 'taxNumber',
+    ) =>
+    (value: string) =>
+      update((d) => ({ ...d, business: { ...d.business, [field]: value } }));
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="currencyCode"
-          label="Currency"
-          hint="Prices and reports use this currency."
+          label={t('Currency')}
+          hint={t('Prices and reports use this currency.')}
           error={errors.currencyCode}
         >
           <select
@@ -259,7 +277,12 @@ export function BusinessStep({
             ))}
           </select>
         </Field>
-        <Field id="contactEmail" label="Contact email" hint="Optional." error={errors.contactEmail}>
+        <Field
+          id="contactEmail"
+          label={t('Contact email')}
+          hint={t('Optional.')}
+          error={errors.contactEmail}
+        >
           <Input
             id="contactEmail"
             type="email"
@@ -271,7 +294,12 @@ export function BusinessStep({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field id="contactPhone" label="Contact phone" hint="Optional." error={errors.contactPhone}>
+        <Field
+          id="contactPhone"
+          label={t('Contact phone')}
+          hint={t('Optional.')}
+          error={errors.contactPhone}
+        >
           <Input
             id="contactPhone"
             type="tel"
@@ -282,8 +310,8 @@ export function BusinessStep({
         </Field>
         <Field
           id="registrationNumber"
-          label="Registration no."
-          hint="Optional."
+          label={t('Registration no.')}
+          hint={t('Optional.')}
           error={errors.registrationNumber}
         >
           <Input
@@ -293,7 +321,7 @@ export function BusinessStep({
             onChange={(e) => set('registrationNumber')(e.target.value)}
           />
         </Field>
-        <Field id="taxNumber" label="Tax no." hint="Optional." error={errors.taxNumber}>
+        <Field id="taxNumber" label={t('Tax no.')} hint={t('Optional.')} error={errors.taxNumber}>
           <Input
             id="taxNumber"
             value={draft.business.taxNumber}
@@ -304,7 +332,7 @@ export function BusinessStep({
       </div>
 
       <fieldset className="border-border/60 grid gap-3 rounded-lg border p-3">
-        <legend className="px-1 text-sm font-medium">Opening hours</legend>
+        <legend className="px-1 text-sm font-medium">{t('Opening hours')}</legend>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -313,7 +341,7 @@ export function BusinessStep({
               update((d) => ({ ...d, business: { ...d.business, setHours: e.target.checked } }))
             }
           />
-          Set opening hours now
+          {t('Set opening hours now')}
         </label>
         {draft.business.setHours ? (
           <ul className="grid gap-2">
@@ -337,7 +365,7 @@ export function BusinessStep({
                       <input
                         type="checkbox"
                         checked={row.open}
-                        aria-label={`Open on ${day}`}
+                        aria-label={t('Open on {day}', { day })}
                         onChange={(e) => change({ open: e.target.checked })}
                       />
                       {day}
@@ -346,22 +374,22 @@ export function BusinessStep({
                       <>
                         <Input
                           type="time"
-                          aria-label={`${day} opens`}
+                          aria-label={t('{day} opens', { day })}
                           className="w-28"
                           value={row.opensAt}
                           onChange={(e) => change({ opensAt: e.target.value })}
                         />
-                        <span className="text-muted-foreground">to</span>
+                        <span className="text-muted-foreground">{t('to')}</span>
                         <Input
                           type="time"
-                          aria-label={`${day} closes`}
+                          aria-label={t('{day} closes', { day })}
                           className="w-28"
                           value={row.closesAt}
                           onChange={(e) => change({ closesAt: e.target.value })}
                         />
                       </>
                     ) : (
-                      <span className="text-muted-foreground">Closed</span>
+                      <span className="text-muted-foreground">{t('Closed')}</span>
                     )}
                   </div>
                   {error ? (
@@ -375,7 +403,7 @@ export function BusinessStep({
           </ul>
         ) : (
           <p className="text-muted-foreground text-xs">
-            Optional. You can set or change hours per branch at any time.
+            {t('Optional. You can set or change hours per branch at any time.')}
           </p>
         )}
       </fieldset>
@@ -400,6 +428,7 @@ export function ServicesStep({
   currencyCode: string;
   nextKey: () => number;
 }) {
+  const t = useT();
   const change = (key: number, patch: Partial<ServiceRow>) =>
     setRows(rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
 
@@ -407,9 +436,9 @@ export function ServicesStep({
     <div className="grid gap-4">
       {rows.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-6 text-center">
-          <p className="text-sm font-medium">No services yet</p>
+          <p className="text-sm font-medium">{t('No services yet')}</p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Add what customers can book, or skip this and add them later.
+            {t('Add what customers can book, or skip this and add them later.')}
           </p>
         </div>
       ) : (
@@ -417,39 +446,49 @@ export function ServicesStep({
           {rows.map((row, index) => (
             <li key={row.key} className="border-border/60 grid gap-3 rounded-lg border p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">Service {index + 1}</p>
+                <p className="text-sm font-medium">
+                  {t('Service')} {index + 1}
+                </p>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Remove service ${index + 1}`}
+                  aria-label={t('Remove service {value}', { value: index + 1 })}
                   onClick={() => setRows(rows.filter((r) => r.key !== row.key))}
                 >
                   <Trash2 aria-hidden className="size-4" />
                 </Button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field id={`service-${row.key}-name`} label="Name" error={errors[`service-${row.key}-name`]}>
+                <Field
+                  id={`service-${row.key}-name`}
+                  label={t('Name')}
+                  error={errors[`service-${row.key}-name`]}
+                >
                   <Input
                     id={`service-${row.key}-name`}
                     value={row.name}
                     maxLength={160}
-                    placeholder="Haircut"
+                    placeholder={t('Haircut')}
                     onChange={(e) => change(row.key, { name: e.target.value })}
                   />
                 </Field>
-                <Field id={`service-${row.key}-category`} label="Category" hint="Optional.">
+                <Field
+                  id={`service-${row.key}-category`}
+                  label={t('Category')}
+                  hint={t('Optional.')}
+                >
                   <Input
                     id={`service-${row.key}-category`}
                     value={row.category}
                     maxLength={128}
-                    placeholder="Hair"
+                    placeholder={t('Hair')}
                     onChange={(e) => change(row.key, { category: e.target.value })}
                   />
                 </Field>
                 <Field
                   id={`service-${row.key}-duration`}
-                  label="Duration (minutes)"
+                  label={t('Duration (minutes)')}
                   error={errors[`service-${row.key}-duration`]}
                 >
                   <Input
@@ -465,7 +504,7 @@ export function ServicesStep({
                 </Field>
                 <Field
                   id={`service-${row.key}-price`}
-                  label={`Price (${currencyCode})`}
+                  label={t('Price ({currencyCode})', { currencyCode })}
                   error={errors[`service-${row.key}-price`]}
                 >
                   <Input
@@ -483,7 +522,7 @@ export function ServicesStep({
                   checked={row.isActive}
                   onChange={(e) => change(row.key, { isActive: e.target.checked })}
                 />
-                Active — can be booked
+                {t('Active — can be booked')}
               </label>
             </li>
           ))}
@@ -499,12 +538,19 @@ export function ServicesStep({
         onClick={() =>
           setRows([
             ...rows,
-            { key: nextKey(), name: '', category: '', durationMin: '60', price: '', isActive: true },
+            {
+              key: nextKey(),
+              name: '',
+              category: '',
+              durationMin: '60',
+              price: '',
+              isActive: true,
+            },
           ])
         }
       >
         <Plus aria-hidden className="size-4" />
-        Add a service
+        {t('Add a service')}
       </Button>
     </div>
   );

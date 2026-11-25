@@ -13,9 +13,15 @@ import { useCan } from '@/features/auth';
 import { useBranches } from '@/features/branches';
 import { useCompany } from '@/features/companies';
 import { currencyFormat } from '@/lib/currency';
-import type { Payment, PaymentMethod, PaymentQuery, PaymentStatus } from '@/services/billing.service';
+import type {
+  Payment,
+  PaymentMethod,
+  PaymentQuery,
+  PaymentStatus,
+} from '@/services/billing.service';
 import { usePayments } from '../api/use-billing';
 import { RefundDialog } from './refund-dialog';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 
@@ -36,6 +42,7 @@ const label = (value: string) => value.toLowerCase().replace(/_/g, ' ');
  * different question and look like the same one.
  */
 export function PaymentList() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState<PaymentMethod | ''>('');
   const [status, setStatus] = useState<PaymentStatus | ''>('');
@@ -77,19 +84,20 @@ export function PaymentList() {
   return (
     <section className="grid gap-4">
       <header className="grid gap-1">
-        <h2 className="text-lg font-semibold">Payments</h2>
+        <h2 className="text-lg font-semibold">{t('Payments')}</h2>
         <p className="text-muted-foreground text-sm">
           {payments.isPending
-            ? 'Loading…'
-            : `${total} payment${total === 1 ? '' : 's'} · ${money(
-                payments.data?.summary.netMinor ?? '0',
-              )} net`}
+            ? t('Loading…')
+            : t(total === 1 ? '1 payment · {money} net' : '{total} payments · {money} net', {
+                total,
+                money: money(payments.data?.summary.netMinor ?? '0'),
+              })}
         </p>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-search">Reference</Label>
+          <Label htmlFor="payment-search">{t('Reference')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -98,7 +106,7 @@ export function PaymentList() {
             <Input
               id="payment-search"
               value={search}
-              placeholder="PAY-…"
+              placeholder={t('PAY-…')}
               className="pl-8 font-mono"
               onChange={(e) => changeFilter(() => setSearch(e.target.value))}
             />
@@ -106,14 +114,14 @@ export function PaymentList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-method">Method</Label>
+          <Label htmlFor="payment-method">{t('Method')}</Label>
           <select
             id="payment-method"
             value={method}
             className={selectClass}
             onChange={(e) => changeFilter(() => setMethod(e.target.value as PaymentMethod | ''))}
           >
-            <option value="">All methods</option>
+            <option value="">{t('All methods')}</option>
             {METHODS.map((value) => (
               <option key={value} value={value}>
                 {label(value)}
@@ -123,14 +131,14 @@ export function PaymentList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-status">Status</Label>
+          <Label htmlFor="payment-status">{t('Status')}</Label>
           <select
             id="payment-status"
             value={status}
             className={selectClass}
             onChange={(e) => changeFilter(() => setStatus(e.target.value as PaymentStatus | ''))}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {STATUSES.map((value) => (
               <option key={value} value={value}>
                 {label(value)}
@@ -140,14 +148,14 @@ export function PaymentList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-branch">Branch</Label>
+          <Label htmlFor="payment-branch">{t('Branch')}</Label>
           <select
             id="payment-branch"
             value={branchId}
             className={selectClass}
             onChange={(e) => changeFilter(() => setBranchId(e.target.value))}
           >
-            <option value="">All branches</option>
+            <option value="">{t('All branches')}</option>
             {(branches.data?.items ?? []).map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -157,7 +165,7 @@ export function PaymentList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-from">From</Label>
+          <Label htmlFor="payment-from">{t('From')}</Label>
           <Input
             id="payment-from"
             type="date"
@@ -167,7 +175,7 @@ export function PaymentList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="payment-to">To</Label>
+          <Label htmlFor="payment-to">{t('To')}</Label>
           <Input
             id="payment-to"
             type="date"
@@ -179,14 +187,14 @@ export function PaymentList() {
 
       {payments.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load payments</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load payments')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {payments.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading payments…</span>
+          <span className="sr-only">{t('Loading payments…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -196,12 +204,12 @@ export function PaymentList() {
       {!payments.isPending && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {filtered ? 'Nothing matches those filters' : 'No payments yet'}
+            {filtered ? t('Nothing matches those filters') : t('No payments yet')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
             {filtered
-              ? 'Try widening the range.'
-              : 'Payments appear here as they are taken against bookings.'}
+              ? t('Try widening the range.')
+              : t('Payments appear here as they are taken against bookings.')}
           </p>
         </div>
       ) : null}
@@ -211,14 +219,26 @@ export function PaymentList() {
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">Reference</th>
-                <th scope="col" className="py-2 pr-3 font-medium">When</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Customer</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Method</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Amount</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Status</th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Reference')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('When')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Customer')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Method')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Amount')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Status')}
+                </th>
                 <th scope="col" className="py-2 font-medium">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('Actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -262,7 +282,7 @@ export function PaymentList() {
                     payment.status === 'SUCCEEDED' &&
                     payment.refundableMinor !== '0' ? (
                       <Button variant="ghost" size="sm" onClick={() => setRefunding(payment)}>
-                        Refund
+                        {t('Refund')}
                       </Button>
                     ) : null}
                   </td>
@@ -276,7 +296,11 @@ export function PaymentList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -285,7 +309,7 @@ export function PaymentList() {
               disabled={offset === 0 || payments.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -294,15 +318,13 @@ export function PaymentList() {
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               {payments.isFetching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
       ) : null}
 
-      {refunding ? (
-        <RefundDialog payment={refunding} onClose={() => setRefunding(null)} />
-      ) : null}
+      {refunding ? <RefundDialog payment={refunding} onClose={() => setRefunding(null)} /> : null}
     </section>
   );
 }

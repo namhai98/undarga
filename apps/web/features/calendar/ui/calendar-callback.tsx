@@ -8,6 +8,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCompleteCalendarConnection } from '../api/use-calendar';
 import { calendarErrorMessage, providerDenialMessage } from '../model/calendar-display';
+import { useT } from '@/lib/i18n';
 
 /**
  * Where Google / Microsoft send the browser back after consent.
@@ -17,6 +18,7 @@ import { calendarErrorMessage, providerDenialMessage } from '../model/calendar-d
  * happen), then moves on to the settings page with the code out of the URL.
  */
 export function CalendarCallback(props: { code: string; state: string; error: string }) {
+  const t = useT();
   const router = useRouter();
   const complete = useCompleteCalendarConnection();
   const sent = useRef(false);
@@ -43,11 +45,11 @@ export function CalendarCallback(props: { code: string; state: string; error: st
     return (
       <div className="grid gap-4">
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Calendar not connected</AlertTitle>
+          <AlertTitle>{t('Calendar not connected')}</AlertTitle>
           <AlertDescription>{problem}</AlertDescription>
         </Alert>
         <Link href="/calendar" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Back to calendar settings
+          {t('Back to calendar settings')}
         </Link>
       </div>
     );
@@ -55,7 +57,7 @@ export function CalendarCallback(props: { code: string; state: string; error: st
 
   return (
     <div className="grid gap-3" aria-busy="true">
-      <p className="text-sm">Connecting your calendar…</p>
+      <p className="text-sm">{t('Connecting your calendar…')}</p>
       <Skeleton className="h-10 w-full" />
     </div>
   );

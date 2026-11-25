@@ -14,6 +14,7 @@ import { useZodForm } from '@/hooks/use-zod-form';
 import { ApiError } from '@/services/api-error';
 import type { CustomerInput, CustomerStatus } from '@/services/customers.service';
 import { useCreateCustomer, useCustomer, useUpdateCustomer } from '../api/use-customers';
+import { useT } from '@/lib/i18n';
 
 /**
  * Everything arrives from `FormData` as a string, so the schema coerces and the
@@ -67,6 +68,7 @@ export function CustomerForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [formError, setFormError] = useState<string | null>(null);
   /** Set when the API says this contact detail already belongs to somebody. */
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export function CustomerForm({
   if (customerId && existing.isPending) {
     return (
       <div className="grid gap-3" aria-busy="true">
-        <span className="sr-only">Loading the customer…</span>
+        <span className="sr-only">{t('Loading the customer…')}</span>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -105,7 +107,10 @@ export function CustomerForm({
       notes: values.notes || null,
       birthDate: values.birthDate || null,
       tags: values.tags
-        ? values.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+        ? values.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
         : [],
       preferredEmployeeId: values.preferredEmployeeId || null,
       status: values.status as CustomerStatus,
@@ -133,7 +138,9 @@ export function CustomerForm({
       }
 
       setFormError(
-        error instanceof ApiError ? error.message : 'Could not save the customer. Please try again.',
+        error instanceof ApiError
+          ? error.message
+          : t('Could not save the customer. Please try again.'),
       );
     }
   });
@@ -141,37 +148,40 @@ export function CustomerForm({
   return (
     <form onSubmit={handle} className="grid max-w-2xl gap-5" noValidate>
       <header className="grid gap-1">
-        <h2 className="text-lg font-semibold">{customerId ? 'Edit customer' : 'New customer'}</h2>
+        <h2 className="text-lg font-semibold">
+          {customerId ? t('Edit customer') : t('New customer')}
+        </h2>
         <p className="text-muted-foreground text-sm">
-          A phone number or an email address is required — one of them is how you find this person
-          again.
+          {t(
+            'A phone number or an email address is required — one of them is how you find this person again.',
+          )}
         </p>
       </header>
 
       {formError ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t('Could not save')}</AlertTitle>
           <AlertDescription>{formError}</AlertDescription>
         </Alert>
       ) : null}
 
       {duplicateId ? (
         <Alert role="alert">
-          <AlertTitle>That contact detail is already on file</AlertTitle>
+          <AlertTitle>{t('That contact detail is already on file')}</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-2">
-            <span>You are probably looking for the existing record.</span>
+            <span>{t('You are probably looking for the existing record.')}</span>
             <Link
               href={`/customers/${duplicateId}`}
               className={buttonVariants({ variant: 'outline', size: 'sm' })}
             >
-              Open that customer
+              {t('Open that customer')}
             </Link>
           </AlertDescription>
         </Alert>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="firstName" label="First name" error={errors.firstName}>
+        <Field id="firstName" label={t('First name')} error={errors.firstName}>
           <Input
             id="firstName"
             name="firstName"
@@ -181,7 +191,7 @@ export function CustomerForm({
           />
         </Field>
 
-        <Field id="lastName" label="Last name" error={errors.lastName}>
+        <Field id="lastName" label={t('Last name')} error={errors.lastName}>
           <Input
             id="lastName"
             name="lastName"
@@ -192,8 +202,8 @@ export function CustomerForm({
 
         <Field
           id="phone"
-          label="Phone"
-          hint="Spaces and dashes are fine — they are stripped before saving."
+          label={t('Phone')}
+          hint={t('Spaces and dashes are fine — they are stripped before saving.')}
           error={errors.phone}
         >
           <Input
@@ -207,7 +217,7 @@ export function CustomerForm({
           />
         </Field>
 
-        <Field id="email" label="Email" error={errors.email}>
+        <Field id="email" label={t('Email')} error={errors.email}>
           <Input
             id="email"
             name="email"
@@ -218,17 +228,22 @@ export function CustomerForm({
         </Field>
       </div>
 
-      <Field id="address" label="Address" hint="One line — wherever you would drive to." error={errors.address}>
-        <Input
-          id="address"
-          name="address"
-          defaultValue={customer?.address ?? ''}
-          maxLength={512}
-        />
+      <Field
+        id="address"
+        label={t('Address')}
+        hint={t('One line — wherever you would drive to.')}
+        error={errors.address}
+      >
+        <Input id="address" name="address" defaultValue={customer?.address ?? ''} maxLength={512} />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field id="birthDate" label="Birthday" hint="YYYY-MM-DD." error={errors.birthDate}>
+        <Field
+          id="birthDate"
+          label={t('Birthday')}
+          hint={t('YYYY-MM-DD.')}
+          error={errors.birthDate}
+        >
           <Input
             id="birthDate"
             name="birthDate"
@@ -239,7 +254,7 @@ export function CustomerForm({
 
         <Field
           id="preferredEmployeeId"
-          label="Usual staff member"
+          label={t('Usual staff member')}
           error={errors.preferredEmployeeId}
         >
           <select
@@ -248,7 +263,7 @@ export function CustomerForm({
             defaultValue={customer?.preferredEmployeeId ?? ''}
             className={selectClass}
           >
-            <option value="">No preference</option>
+            <option value="">{t('No preference')}</option>
             {(employees.data?.items ?? []).map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.displayName}
@@ -257,25 +272,40 @@ export function CustomerForm({
           </select>
         </Field>
 
-        <Field id="status" label="Status" error={errors.status}>
+        <Field id="status" label={t('Status')} error={errors.status}>
           <select
             id="status"
             name="status"
             defaultValue={customer?.status ?? 'ACTIVE'}
             className={selectClass}
           >
-            <option value="ACTIVE">Active</option>
-            <option value="BLOCKED">Blocked</option>
-            <option value="ARCHIVED">Archived</option>
+            <option value="ACTIVE">{t('Active')}</option>
+            <option value="BLOCKED">{t('Blocked')}</option>
+            <option value="ARCHIVED">{t('Archived')}</option>
           </select>
         </Field>
       </div>
 
-      <Field id="tags" label="Tags" hint="Comma separated, e.g. vip, allergy." error={errors.tags}>
-        <Input id="tags" name="tags" defaultValue={customer?.tags.join(', ') ?? ''} maxLength={200} />
+      <Field
+        id="tags"
+        label={t('Tags')}
+        hint={t('Comma separated, e.g. vip, allergy.')}
+        error={errors.tags}
+      >
+        <Input
+          id="tags"
+          name="tags"
+          defaultValue={customer?.tags.join(', ') ?? ''}
+          maxLength={200}
+        />
       </Field>
 
-      <Field id="notes" label="Notes" hint="Visible to everyone who can see this customer." error={errors.notes}>
+      <Field
+        id="notes"
+        label={t('Notes')}
+        hint={t('Visible to everyone who can see this customer.')}
+        error={errors.notes}
+      >
         <textarea
           id="notes"
           name="notes"
@@ -289,10 +319,10 @@ export function CustomerForm({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          {customerId ? 'Save changes' : 'Create customer'}
+          {customerId ? t('Save changes') : t('Create customer')}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </form>

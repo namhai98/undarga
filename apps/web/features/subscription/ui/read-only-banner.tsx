@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCan, useSession, useSessionContext } from '@/features/auth';
+import { useT } from '@/lib/i18n';
 
 /**
  * Shown on every page while the company is read-only — its subscription
@@ -9,6 +10,7 @@ import { useCan, useSession, useSessionContext } from '@/features/auth';
  * already loads, so it costs no request of its own.
  */
 export function ReadOnlyBanner() {
+  const t = useT();
   const { activeCompanyId } = useSession();
   const context = useSessionContext(activeCompanyId);
   const canSeeBilling = useCan('settings:billing:read');
@@ -21,13 +23,15 @@ export function ReadOnlyBanner() {
       className="bg-destructive/10 text-destructive border-destructive/30 border-b px-6 py-2 text-sm"
     >
       <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-2">
-        <span>This company is read-only: its subscription has expired. All data is kept.</span>
+        <span>
+          {t('This company is read-only: its subscription has expired. All data is kept.')}
+        </span>
         {canSeeBilling ? (
           <Link href="/subscription" className="font-medium underline underline-offset-2">
-            Manage subscription
+            {t('Manage subscription')}
           </Link>
         ) : (
-          <span className="text-xs">Ask the account owner to renew.</span>
+          <span className="text-xs">{t('Ask the account owner to renew.')}</span>
         )}
       </div>
     </div>

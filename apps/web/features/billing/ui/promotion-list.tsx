@@ -29,6 +29,7 @@ import {
   useSavePromotion,
   useSetPromotionStatus,
 } from '../api/use-billing';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 
@@ -47,6 +48,7 @@ const selectClass =
  * anything outside 1–10000, and the database has a CHECK underneath that.
  */
 export function PromotionList() {
+  const t = useT();
   const [editing, setEditing] = useState<Promotion | 'new' | null>(null);
   const [archiving, setArchiving] = useState<Promotion | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function PromotionList() {
         status: promotion.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
       });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not change the status.');
+      setError(caught instanceof ApiError ? caught.message : t('Could not change the status.'));
     }
   };
 
@@ -100,7 +102,7 @@ export function PromotionList() {
       await archive.mutateAsync(promotion.id);
       setArchiving(null);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not archive the promotion.');
+      setError(caught instanceof ApiError ? caught.message : t('Could not archive the promotion.'));
     }
   };
 
@@ -118,34 +120,35 @@ export function PromotionList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Promotions</h2>
+          <h2 className="text-lg font-semibold">{t('Promotions')}</h2>
           <p className="text-muted-foreground text-sm">
             {promotions.isPending
-              ? 'Loading…'
+              ? t('Loading…')
               : `${total} ${total === 1 ? 'promotion' : 'promotions'}`}
           </p>
         </div>
         {canWrite ? (
           <Button size="sm" onClick={() => setEditing('new')}>
-            Add promotion
+            {t('Add promotion')}
           </Button>
         ) : null}
       </header>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Not done</AlertTitle>
+          <AlertTitle>{t('Not done')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {archiving ? (
         <Alert role="alert">
-          <AlertTitle>Archive “{archiving.name}”?</AlertTitle>
+          <AlertTitle>{t('Archive “{name}”?', { name: archiving.name })}</AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>
-              It stops applying immediately. Past redemptions keep referencing it, so old receipts
-              can still name the discount they used.
+              {t(
+                'It stops applying immediately. Past redemptions keep referencing it, so old receipts can still name the discount they used.',
+              )}
             </p>
             <div className="flex gap-2">
               <Button
@@ -155,10 +158,10 @@ export function PromotionList() {
                 onClick={() => void doArchive(archiving)}
               >
                 {archive.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Archive
+                {t('Archive')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setArchiving(null)}>
-                Keep
+                {t('Keep')}
               </Button>
             </div>
           </AlertDescription>
@@ -169,7 +172,7 @@ export function PromotionList() {
 
       <div className="grid gap-3 sm:grid-cols-[1fr_10rem_10rem]">
         <div className="grid gap-1.5">
-          <Label htmlFor="promo-search">Search</Label>
+          <Label htmlFor="promo-search">{t('Search')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -178,21 +181,21 @@ export function PromotionList() {
             <Input
               id="promo-search"
               value={search}
-              placeholder="Name or code"
+              placeholder={t('Name or code')}
               className="pl-8"
               onChange={(e) => change(() => setSearch(e.target.value))}
             />
           </div>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="promo-filter-status">Status</Label>
+          <Label htmlFor="promo-filter-status">{t('Status')}</Label>
           <select
             id="promo-filter-status"
             value={statusFilter}
             className={selectClass}
             onChange={(e) => change(() => setStatusFilter(e.target.value as PromotionStatus | ''))}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {(['ACTIVE', 'PAUSED', 'DRAFT', 'EXPIRED'] as const).map((value) => (
               <option key={value} value={value}>
                 {value.toLowerCase()}
@@ -201,30 +204,30 @@ export function PromotionList() {
           </select>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="promo-filter-type">Type</Label>
+          <Label htmlFor="promo-filter-type">{t('Type')}</Label>
           <select
             id="promo-filter-type"
             value={typeFilter}
             className={selectClass}
             onChange={(e) => change(() => setTypeFilter(e.target.value as DiscountType | ''))}
           >
-            <option value="">All</option>
-            <option value="PERCENTAGE">Percentage</option>
-            <option value="FIXED_AMOUNT">Fixed amount</option>
+            <option value="">{t('All')}</option>
+            <option value="PERCENTAGE">{t('Percentage')}</option>
+            <option value="FIXED_AMOUNT">{t('Fixed amount')}</option>
           </select>
         </div>
       </div>
 
       {promotions.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load promotions</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load promotions')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {promotions.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading promotions…</span>
+          <span className="sr-only">{t('Loading promotions…')}</span>
           {[0, 1].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -234,11 +237,12 @@ export function PromotionList() {
       {!promotions.isPending && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {filtered ? 'Nothing matches those filters' : 'No promotions yet'}
+            {filtered ? t('Nothing matches those filters') : t('No promotions yet')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            A promotion can take a percentage or a fixed amount off, optionally limited to certain
-            services, branches or staff.
+            {t(
+              'A promotion can take a percentage or a fixed amount off, optionally limited to certain services, branches or staff.',
+            )}
           </p>
         </div>
       ) : null}
@@ -248,14 +252,26 @@ export function PromotionList() {
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Code</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Discount</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Runs</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Used</th>
-                <th scope="col" className="py-2 pr-3 font-medium">State</th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Name')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Code')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Discount')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Runs')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Used')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('State')}
+                </th>
                 <th scope="col" className="py-2 font-medium">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('Actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -265,7 +281,7 @@ export function PromotionList() {
                   <td className="py-2 pr-3">
                     <span className="font-medium">{promotion.name}</span>
                     {promotion.isAutoApply ? (
-                      <span className="text-muted-foreground ml-2 text-xs">automatic</span>
+                      <span className="text-muted-foreground ml-2 text-xs">{t('automatic')}</span>
                     ) : null}
                   </td>
                   <td className="py-2 pr-3 font-mono text-xs">{promotion.code ?? '—'}</td>
@@ -275,7 +291,7 @@ export function PromotionList() {
                       : money(promotion.discountAmountMinor ?? '0')}
                     {promotion.maxDiscountMinor ? (
                       <span className="text-muted-foreground ml-1 text-xs">
-                        max {money(promotion.maxDiscountMinor)}
+                        {t('max {amount}', { amount: money(promotion.maxDiscountMinor) })}
                       </span>
                     ) : null}
                   </td>
@@ -298,7 +314,7 @@ export function PromotionList() {
                     {canWrite ? (
                       <>
                         <Button variant="ghost" size="sm" onClick={() => setEditing(promotion)}>
-                          Edit
+                          {t('Edit')}
                         </Button>
                         {promotion.status === 'ACTIVE' || promotion.status === 'PAUSED' ? (
                           <Button
@@ -307,7 +323,7 @@ export function PromotionList() {
                             disabled={setStatus.isPending}
                             onClick={() => void toggle(promotion)}
                           >
-                            {promotion.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                            {promotion.status === 'ACTIVE' ? t('Deactivate') : t('Activate')}
                           </Button>
                         ) : null}
                         <Button
@@ -316,7 +332,7 @@ export function PromotionList() {
                           className="text-destructive"
                           onClick={() => setArchiving(promotion)}
                         >
-                          Archive
+                          {t('Archive')}
                         </Button>
                       </>
                     ) : null}
@@ -331,7 +347,11 @@ export function PromotionList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -340,7 +360,7 @@ export function PromotionList() {
               disabled={offset === 0 || promotions.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -348,7 +368,7 @@ export function PromotionList() {
               disabled={offset + PAGE_SIZE >= total || promotions.isFetching}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
@@ -365,6 +385,7 @@ function QuoteTool({
   currencyCode: string;
   money: (minor: string) => string;
 }) {
+  const t = useT();
   const format = currencyFormat(currencyCode);
   const [subtotal, setSubtotal] = useState('');
   const quote = useQuotePromotion();
@@ -375,7 +396,9 @@ function QuoteTool({
     <div className="border-border/60 grid gap-3 rounded-lg border p-4">
       <div className="flex flex-wrap items-end gap-2">
         <div className="grid flex-1 gap-1.5">
-          <Label htmlFor="quote-subtotal">Try a basket ({currencyCode})</Label>
+          <Label htmlFor="quote-subtotal">
+            {t('Try a basket ({currencyCode})', { currencyCode })}
+          </Label>
           <Input
             id="quote-subtotal"
             inputMode="decimal"
@@ -391,20 +414,20 @@ function QuoteTool({
           onClick={() => quote.mutate({ subtotalMinor: parsed! })}
         >
           {quote.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Best automatic discount
+          {t('Best automatic discount')}
         </Button>
       </div>
 
       {quote.data ? (
         quote.data.applicable ? (
           <p className="text-sm">
-            <span className="font-medium">{quote.data.promotionName}</span> takes off{' '}
-            <span className="font-semibold tabular-nums">{money(quote.data.discountMinor!)}</span>,
-            leaving <span className="tabular-nums">{money(quote.data.totalMinor!)}</span>
+            <span className="font-medium">{quote.data.promotionName}</span> {t('takes off')}{' '}
+            <span className="font-semibold tabular-nums">{money(quote.data.discountMinor!)}</span>
+            {t(', leaving')} <span className="tabular-nums">{money(quote.data.totalMinor!)}</span>
             {quote.data.cappedBy === 'subtotal' ? (
               // Not an error: a fixed voucher larger than the basket is an
               // ordinary configuration, and the total is clamped at zero.
-              <span className="text-muted-foreground"> (capped at the basket total)</span>
+              <span className="text-muted-foreground"> {t('(capped at the basket total)')}</span>
             ) : null}
           </p>
         ) : (
@@ -424,6 +447,7 @@ function PromotionForm({
   currencyCode: string;
   onDone: () => void;
 }) {
+  const t = useT();
   const format = currencyFormat(currencyCode);
   const save = useSavePromotion(promotion?.id ?? null);
 
@@ -506,9 +530,7 @@ function PromotionForm({
       ...(discountAmountMinor !== undefined ? { discountAmountMinor } : {}),
       startsAt: new Date(`${startsAt}T00:00:00.000Z`).toISOString(),
       endsAt: endsAt ? new Date(`${endsAt}T00:00:00.000Z`).toISOString() : null,
-      minPurchaseMinor: minPurchase
-        ? decimalToMinorString(minPurchase, format.minorUnit)
-        : null,
+      minPurchaseMinor: minPurchase ? decimalToMinorString(minPurchase, format.minorUnit) : null,
       maxRedemptions: maxRedemptions ? Number(maxRedemptions) : null,
       maxRedemptionsPerCustomer: perCustomer ? Number(perCustomer) : null,
       // A code-only promotion is never automatic; the server enforces it too.
@@ -523,46 +545,54 @@ function PromotionForm({
       await save.mutateAsync(input);
       onDone();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not save the promotion.');
+      setError(caught instanceof ApiError ? caught.message : t('Could not save the promotion.'));
     }
   };
 
   return (
     <section className="grid max-w-2xl gap-5">
       <header className="grid gap-1">
-        <h2 className="text-lg font-semibold">{promotion ? 'Edit promotion' : 'New promotion'}</h2>
+        <h2 className="text-lg font-semibold">
+          {promotion ? t('Edit promotion') : t('New promotion')}
+        </h2>
         <p className="text-muted-foreground text-sm">
-          The server decides what a promotion is worth. Nothing here sends a discount amount for a
-          booking.
+          {t(
+            'The server decides what a promotion is worth. Nothing here sends a discount amount for a booking.',
+          )}
         </p>
       </header>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t('Could not save')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      <Field id="promo-name" label="Name" error={fieldErrors.name}>
-        <Input id="promo-name" value={name} maxLength={160} onChange={(e) => setName(e.target.value)} />
+      <Field id="promo-name" label={t('Name')} error={fieldErrors.name}>
+        <Input
+          id="promo-name"
+          value={name}
+          maxLength={160}
+          onChange={(e) => setName(e.target.value)}
+        />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="promo-type" label="Discount type">
+        <Field id="promo-type" label={t('Discount type')}>
           <select
             id="promo-type"
             value={discountType}
             className={selectClass}
             onChange={(e) => setDiscountType(e.target.value as DiscountType)}
           >
-            <option value="PERCENTAGE">Percentage</option>
-            <option value="FIXED_AMOUNT">Fixed amount</option>
+            <option value="PERCENTAGE">{t('Percentage')}</option>
+            <option value="FIXED_AMOUNT">{t('Fixed amount')}</option>
           </select>
         </Field>
 
         {discountType === 'PERCENTAGE' ? (
-          <Field id="promo-percent" label="Percentage off" error={fieldErrors.percent}>
+          <Field id="promo-percent" label={t('Percentage off')} error={fieldErrors.percent}>
             <div className="flex items-center gap-2">
               <Input
                 id="promo-percent"
@@ -576,7 +606,11 @@ function PromotionForm({
             </div>
           </Field>
         ) : (
-          <Field id="promo-amount" label={`Amount off (${currencyCode})`} error={fieldErrors.amount}>
+          <Field
+            id="promo-amount"
+            label={t('Amount off ({currencyCode})', { currencyCode })}
+            error={fieldErrors.amount}
+          >
             <Input
               id="promo-amount"
               inputMode="decimal"
@@ -589,18 +623,35 @@ function PromotionForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="promo-starts" label="Starts">
-          <Input id="promo-starts" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+        <Field id="promo-starts" label={t('Starts')}>
+          <Input
+            id="promo-starts"
+            type="date"
+            value={startsAt}
+            onChange={(e) => setStartsAt(e.target.value)}
+          />
         </Field>
-        <Field id="promo-ends" label="Ends" hint="Leave blank to run indefinitely." error={fieldErrors.endsAt}>
-          <Input id="promo-ends" type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+        <Field
+          id="promo-ends"
+          label={t('Ends')}
+          hint={t('Leave blank to run indefinitely.')}
+          error={fieldErrors.endsAt}
+        >
+          <Input
+            id="promo-ends"
+            type="date"
+            value={endsAt}
+            onChange={(e) => setEndsAt(e.target.value)}
+          />
         </Field>
       </div>
 
       <Field
         id="promo-code"
-        label="Promotion code (optional)"
-        hint="Customers type this when booking. A promotion with a code can only be used with it."
+        label={t('Promotion code (optional)')}
+        hint={t(
+          'Customers type this when booking. A promotion with a code can only be used with it.',
+        )}
         error={fieldErrors.code}
       >
         <Input
@@ -616,8 +667,8 @@ function PromotionForm({
       <div className="grid gap-4 sm:grid-cols-4">
         <Field
           id="promo-min"
-          label={`Minimum spend (${currencyCode})`}
-          hint="Measured against the whole basket."
+          label={t('Minimum spend ({currencyCode})', { currencyCode })}
+          hint={t('Measured against the whole basket.')}
         >
           <Input
             id="promo-min"
@@ -627,7 +678,7 @@ function PromotionForm({
             onChange={(e) => setMinPurchase(e.target.value)}
           />
         </Field>
-        <Field id="promo-max" label="Usage limit" hint="Blank for unlimited.">
+        <Field id="promo-max" label={t('Usage limit')} hint={t('Blank for unlimited.')}>
           <Input
             id="promo-max"
             type="number"
@@ -637,7 +688,7 @@ function PromotionForm({
             onChange={(e) => setMaxRedemptions(e.target.value)}
           />
         </Field>
-        <Field id="promo-per-customer" label="Per customer" hint="Blank for unlimited.">
+        <Field id="promo-per-customer" label={t('Per customer')} hint={t('Blank for unlimited.')}>
           <Input
             id="promo-per-customer"
             type="number"
@@ -647,7 +698,7 @@ function PromotionForm({
             onChange={(e) => setPerCustomer(e.target.value)}
           />
         </Field>
-        <Field id="promo-status" label="Status">
+        <Field id="promo-status" label={t('Status')}>
           <select
             id="promo-status"
             value={status}
@@ -674,35 +725,35 @@ function PromotionForm({
         />
         <div className="grid gap-0.5">
           <Label htmlFor="promo-auto" className="font-normal">
-            Apply automatically
+            {t('Apply automatically')}
           </Label>
           <p className="text-muted-foreground text-xs">
-            The till offers the best eligible automatic discount without anyone naming it.
-            {code.trim() ? ' Not available for a promotion with a code.' : ''}
+            {t('The till offers the best eligible automatic discount without anyone naming it.')}
+            {code.trim() ? t(' Not available for a promotion with a code.') : ''}
           </p>
         </div>
       </div>
 
       <fieldset className="grid gap-3">
-        <legend className="text-sm font-medium">Applies to</legend>
+        <legend className="text-sm font-medium">{t('Applies to')}</legend>
         <p className="text-muted-foreground -mt-2 text-xs">
-          Leave a list empty to include everything of that kind.
+          {t('Leave a list empty to include everything of that kind.')}
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           <CheckList
-            label="Services"
+            label={t('Services')}
             options={(services.data?.items ?? []).map((s) => ({ id: s.id, name: s.name }))}
             selected={serviceIds}
             onChange={setServiceIds}
           />
           <CheckList
-            label="Branches"
+            label={t('Branches')}
             options={(branches.data?.items ?? []).map((b) => ({ id: b.id, name: b.name }))}
             selected={branchIds}
             onChange={setBranchIds}
           />
           <CheckList
-            label="Staff"
+            label={t('Staff')}
             options={(employees.data?.items ?? []).map((e) => ({ id: e.id, name: e.displayName }))}
             selected={employeeIds}
             onChange={setEmployeeIds}
@@ -713,10 +764,10 @@ function PromotionForm({
       <div className="flex gap-2">
         <Button disabled={save.isPending} onClick={() => void submit()}>
           {save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          {promotion ? 'Save changes' : 'Create promotion'}
+          {promotion ? t('Save changes') : t('Create promotion')}
         </Button>
         <Button variant="outline" onClick={onDone}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </section>
@@ -761,6 +812,7 @@ function CheckList(props: {
   selected: string[];
   onChange: (ids: string[]) => void;
 }) {
+  const t = useT();
   const known = new Set(props.options.map((o) => o.id));
   const orphans = props.selected.filter((id) => !known.has(id));
   const toggle = (id: string) =>
@@ -780,7 +832,7 @@ function CheckList(props: {
       </p>
       <div className="border-border/60 grid max-h-44 gap-1 overflow-y-auto rounded-lg border p-2">
         {props.options.length === 0 && orphans.length === 0 ? (
-          <p className="text-muted-foreground text-xs">None yet.</p>
+          <p className="text-muted-foreground text-xs">{t('None yet.')}</p>
         ) : null}
         {props.options.map((option) => (
           <label key={option.id} className="flex items-center gap-2 text-sm">
@@ -796,7 +848,7 @@ function CheckList(props: {
         {orphans.map((id) => (
           <label key={id} className="text-muted-foreground flex items-center gap-2 text-sm">
             <input type="checkbox" className="size-4" checked onChange={() => toggle(id)} />
-            Unavailable item
+            {t('Unavailable item')}
           </label>
         ))}
       </div>

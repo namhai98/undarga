@@ -37,6 +37,7 @@ import {
   percent,
   shortDay,
 } from '../model/report-display';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -60,6 +61,7 @@ const TABS: Array<{ id: Tab; label: string; money?: boolean }> = [
  * columns show a dash when the caller may not see amounts.
  */
 export function ReportsView() {
+  const t = useT();
   const canRead = useCan('report:read');
   const canSeeMoney = useCan('report:revenue:read');
   const [tab, setTab] = useState<Tab>('appointments');
@@ -79,8 +81,8 @@ export function ReportsView() {
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see reports.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>{t('You do not have permission to see reports.')}</AlertDescription>
       </Alert>
     );
   }
@@ -101,23 +103,24 @@ export function ReportsView() {
     ...(serviceId ? { serviceId } : {}),
     ...(status ? { status } : {}),
   };
-  const tabs = TABS.filter((t) => !t.money || canSeeMoney);
+  const tabs = TABS.filter((item) => !item.money || canSeeMoney);
 
   return (
     <section className="grid gap-4" aria-labelledby="reports-title">
       <header className="grid gap-1">
         <h1 id="reports-title" className="text-xl font-semibold">
-          Reports
+          {t('Reports')}
         </h1>
         <p className="text-muted-foreground text-sm">
-          Days are counted in the company’s timezone. Figures are aggregated on the server; no
-          customer is named.
+          {t(
+            'Days are counted in the company’s timezone. Figures are aggregated on the server; no customer is named.',
+          )}
         </p>
       </header>
 
       <Card>
         <CardContent className="grid gap-3 pt-6">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Date presets">
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t('Date presets')}>
             {RANGE_PRESETS.map((preset) => (
               <Button
                 key={preset.id}
@@ -133,7 +136,7 @@ export function ReportsView() {
             ))}
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <Field id="report-from" label="From">
+            <Field id="report-from" label={t('From')}>
               <Input
                 id="report-from"
                 type="date"
@@ -142,7 +145,7 @@ export function ReportsView() {
                 onChange={(e) => setFrom(e.target.value)}
               />
             </Field>
-            <Field id="report-to" label="To">
+            <Field id="report-to" label={t('To')}>
               <Input
                 id="report-to"
                 type="date"
@@ -151,14 +154,14 @@ export function ReportsView() {
                 onChange={(e) => setTo(e.target.value)}
               />
             </Field>
-            <Field id="report-branch" label="Branch">
+            <Field id="report-branch" label={t('Branch')}>
               <select
                 id="report-branch"
                 className={selectClass}
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
               >
-                <option value="">All branches</option>
+                <option value="">{t('All branches')}</option>
                 {(branches.data?.items ?? []).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
@@ -166,14 +169,14 @@ export function ReportsView() {
                 ))}
               </select>
             </Field>
-            <Field id="report-employee" label="Employee">
+            <Field id="report-employee" label={t('Employee')}>
               <select
                 id="report-employee"
                 className={selectClass}
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
               >
-                <option value="">All employees</option>
+                <option value="">{t('All employees')}</option>
                 {(employees.data?.items ?? []).map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.displayName}
@@ -181,14 +184,14 @@ export function ReportsView() {
                 ))}
               </select>
             </Field>
-            <Field id="report-service" label="Service">
+            <Field id="report-service" label={t('Service')}>
               <select
                 id="report-service"
                 className={selectClass}
                 value={serviceId}
                 onChange={(e) => setServiceId(e.target.value)}
               >
-                <option value="">All services</option>
+                <option value="">{t('All services')}</option>
                 {(services.data?.items ?? []).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -196,20 +199,20 @@ export function ReportsView() {
                 ))}
               </select>
             </Field>
-            <Field id="report-status" label="Status">
+            <Field id="report-status" label={t('Status')}>
               <select
                 id="report-status"
                 className={selectClass}
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
-                <option value="">All statuses</option>
+                <option value="">{t('All statuses')}</option>
                 {REPORT_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
+                    {t(STATUS_LABEL[s])}
                   </option>
                 ))}
-                <option value="CANCELLED,NO_SHOW">Cancelled or no-show</option>
+                <option value="CANCELLED,NO_SHOW">{t('Cancelled or no-show')}</option>
               </select>
             </Field>
           </div>
@@ -223,25 +226,25 @@ export function ReportsView() {
 
       <div
         role="tablist"
-        aria-label="Report"
+        aria-label={t('Report')}
         className="border-border/60 flex gap-1 overflow-x-auto border-b"
       >
-        {tabs.map((t) => (
+        {tabs.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             role="tab"
             type="button"
-            id={`report-tab-${t.id}`}
-            aria-selected={tab === t.id}
+            id={`report-tab-${item.id}`}
+            aria-selected={tab === item.id}
             aria-controls="report-panel"
             className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm ${
-              tab === t.id
+              tab === item.id
                 ? 'border-primary font-medium'
                 : 'text-muted-foreground hover:text-foreground border-transparent'
             }`}
-            onClick={() => setTab(t.id)}
+            onClick={() => setTab(item.id)}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </div>
@@ -291,6 +294,7 @@ function ReportTab({
 // =============================================================================
 
 function AppointmentsTab({ query, currencyCode }: { query: ReportQuery; currencyCode: string }) {
+  const t = useT();
   const [limit, setLimit] = useState(10);
   const report = useReport<AppointmentsReport>('appointments', { ...query, limit });
 
@@ -320,9 +324,9 @@ function AppointmentsTab({ query, currencyCode }: { query: ReportQuery; currency
                 ['Booked value', moneyOrDash(data.totals.bookedValueMinor, currencyCode)],
               ]}
             />
-            <ChartCard title="Appointments by day">
+            <ChartCard title={t('Appointments by day')}>
               <StackedBarChart
-                title="Appointments by day"
+                title={t('Appointments by day')}
                 series={statusSeries}
                 formatLabel={shortDay}
                 data={data.byDay.map((d) => ({
@@ -338,7 +342,7 @@ function AppointmentsTab({ query, currencyCode }: { query: ReportQuery; currency
             </ChartCard>
             <div className="flex items-center justify-end gap-2">
               <Label htmlFor="breakdown-rows" className="text-xs">
-                Rows per table
+                {t('Rows per table')}
               </Label>
               <select
                 id="breakdown-rows"
@@ -355,20 +359,20 @@ function AppointmentsTab({ query, currencyCode }: { query: ReportQuery; currency
             </div>
             <div className="grid gap-4 xl:grid-cols-3">
               <BreakdownTable
-                title="By service"
-                label="Service"
+                title={t('By service')}
+                label={t('Service')}
                 page={data.byService}
                 currencyCode={currencyCode}
               />
               <BreakdownTable
-                title="By employee"
-                label="Employee"
+                title={t('By employee')}
+                label={t('Employee')}
                 page={data.byEmployee}
                 currencyCode={currencyCode}
               />
               <BreakdownTable
-                title="By branch"
-                label="Branch"
+                title={t('By branch')}
+                label={t('Branch')}
                 page={data.byBranch}
                 currencyCode={currencyCode}
               />
@@ -381,6 +385,7 @@ function AppointmentsTab({ query, currencyCode }: { query: ReportQuery; currency
 }
 
 function CustomersTab({ query }: { query: ReportQuery }) {
+  const t = useT();
   const report = useReport<CustomersReport>('customers', query);
   return (
     <Loaded report={report} name="customers">
@@ -399,24 +404,25 @@ function CustomersTab({ query }: { query: ReportQuery }) {
           />
           {data.filtered ? (
             <p className="text-muted-foreground text-xs" role="note">
-              With filters, “new” means customers created in the range who also booked in it
-              matching the filters; the company-wide total is not shown.
+              {t(
+                'With filters, “new” means customers created in the range who also booked in it matching the filters; the company-wide total is not shown.',
+              )}
             </p>
           ) : null}
           {data.totals.newCustomers === 0 && data.totals.activeCustomers === 0 ? (
             <Empty what="customer activity" />
           ) : (
             <>
-              <ChartCard title="New customers by day">
+              <ChartCard title={t('New customers by day')}>
                 <StackedBarChart
-                  title="New customers by day"
+                  title={t('New customers by day')}
                   series={[{ key: 'new', label: 'New customers', ...SERIES_COLOURS[0] }]}
                   formatLabel={shortDay}
                   data={data.byDay.map((d) => ({ label: d.date, values: { new: d.newCustomers } }))}
                 />
               </ChartCard>
               <TableCard
-                title="Customer growth"
+                title={t('Customer growth')}
                 head={['Day', 'New', 'Total customers']}
                 rows={data.byDay.map((d) => [
                   shortDay(d.date),
@@ -433,6 +439,7 @@ function CustomersTab({ query }: { query: ReportQuery }) {
 }
 
 function ServicesTab({ query, currencyCode }: { query: ReportQuery; currencyCode: string }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const limit = 25;
   const report = useReport<ServicesReport>('services', { ...query, limit, offset });
@@ -450,11 +457,11 @@ function ServicesTab({ query, currencyCode }: { query: ReportQuery; currencyCode
               ]}
             />
             <ChartCard
-              title="Booking trends"
-              description="The five most-booked services of the range."
+              title={t('Booking trends')}
+              description={t('The five most-booked services of the range.')}
             >
               <StackedBarChart
-                title="Booking trends"
+                title={t('Booking trends')}
                 formatLabel={shortDay}
                 series={data.trend.services.map((s, i) => ({
                   key: s.serviceId,
@@ -465,7 +472,7 @@ function ServicesTab({ query, currencyCode }: { query: ReportQuery; currencyCode
               />
             </ChartCard>
             <TableCard
-              title="Most booked services"
+              title={t('Most booked services')}
               head={[
                 'Service',
                 'Bookings',
@@ -494,6 +501,7 @@ function ServicesTab({ query, currencyCode }: { query: ReportQuery; currencyCode
 }
 
 function PromotionsTab({ query, currencyCode }: { query: ReportQuery; currencyCode: string }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const report = useReport<PromotionsReport>('promotions', { ...query, limit: 25, offset });
   return (
@@ -511,16 +519,16 @@ function PromotionsTab({ query, currencyCode }: { query: ReportQuery; currencyCo
                 ['Discount given', moneyOrDash(data.totals.discountMinor, currencyCode)],
               ]}
             />
-            <ChartCard title="Redemptions by day">
+            <ChartCard title={t('Redemptions by day')}>
               <StackedBarChart
-                title="Redemptions by day"
+                title={t('Redemptions by day')}
                 series={[{ key: 'r', label: 'Redemptions', ...SERIES_COLOURS[0] }]}
                 formatLabel={shortDay}
                 data={data.byDay.map((d) => ({ label: d.date, values: { r: d.redemptions } }))}
               />
             </ChartCard>
             <TableCard
-              title="Usage by promotion"
+              title={t('Usage by promotion')}
               head={['Promotion', 'Redemptions', 'Customers', 'Discount', 'All-time use']}
               rows={data.byPromotion.items.map((p) => [
                 p.name ?? 'Unnamed',
@@ -539,6 +547,7 @@ function PromotionsTab({ query, currencyCode }: { query: ReportQuery; currencyCo
 }
 
 function GiftCardsTab({ query, currencyCode }: { query: ReportQuery; currencyCode: string }) {
+  const t = useT();
   const report = useReport<GiftCardsReport>('giftCards', query);
   return (
     <Loaded report={report} name="gift cards">
@@ -546,7 +555,7 @@ function GiftCardsTab({ query, currencyCode }: { query: ReportQuery; currencyCod
         <div className="grid gap-4">
           {query.employeeId || query.serviceId || query.status ? (
             <p className="text-muted-foreground text-xs" role="note">
-              Employee, service and status filters do not apply to gift cards.
+              {t('Employee, service and status filters do not apply to gift cards.')}
             </p>
           ) : null}
           {data.inventoryVisible && data.issued && data.cards ? (
@@ -565,7 +574,7 @@ function GiftCardsTab({ query, currencyCode }: { query: ReportQuery; currencyCod
             />
           ) : (
             <p className="text-muted-foreground text-sm" role="note">
-              Card totals are company-wide and are not shown to branch-limited accounts.
+              {t('Card totals are company-wide and are not shown to branch-limited accounts.')}
             </p>
           )}
           <Stats
@@ -579,9 +588,9 @@ function GiftCardsTab({ query, currencyCode }: { query: ReportQuery; currencyCod
           {data.redemptions.totals.redemptions + data.redemptions.totals.refunds === 0 ? (
             <Empty what="gift card redemptions" />
           ) : (
-            <ChartCard title="Redemption activity by day">
+            <ChartCard title={t('Redemption activity by day')}>
               <StackedBarChart
-                title="Redemption activity by day"
+                title={t('Redemption activity by day')}
                 formatLabel={shortDay}
                 series={[
                   { key: 'redemptions', label: 'Redemptions', ...SERIES_COLOURS[0] },
@@ -601,6 +610,7 @@ function GiftCardsTab({ query, currencyCode }: { query: ReportQuery; currencyCod
 }
 
 function RevenueTab({ query, currencyCode }: { query: ReportQuery; currencyCode: string }) {
+  const t = useT();
   const revenue = useReport<RevenueReport>('revenue', query);
   const methods = useReport<PaymentMethodReport>('paymentMethods', query);
   const money = (minor: string) => moneyOrDash(minor, currencyCode);
@@ -620,7 +630,7 @@ function RevenueTab({ query, currencyCode }: { query: ReportQuery; currencyCode:
                 ]}
               />
               <TableCard
-                title="Revenue by day (settled payments)"
+                title={t('Revenue by day (settled payments)')}
                 head={['Day', 'Payments', 'Collected', 'Refunded', 'Net']}
                 rows={data.items.map((d) => [
                   shortDay(d.date),
@@ -638,7 +648,7 @@ function RevenueTab({ query, currencyCode }: { query: ReportQuery; currencyCode:
         {(data) =>
           data.items.length === 0 ? null : (
             <TableCard
-              title="By payment method"
+              title={t('By payment method')}
               head={['Method', 'Payments', 'Collected', 'Fees', 'Net']}
               rows={data.items.map((m) => [
                 m.method.toLowerCase().replace(/_/g, ' '),
@@ -675,10 +685,11 @@ function Loaded<T>({
   name: string;
   children: (data: T) => ReactNode;
 }) {
+  const t = useT();
   if (report.isPending) {
     return (
       <div className="grid gap-3" aria-busy="true">
-        <span className="sr-only">Loading the {name} report…</span>
+        <span className="sr-only">{t('Loading the {name} report…', { name })}</span>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-16 w-full" />
@@ -692,15 +703,15 @@ function Loaded<T>({
     const status = report.error instanceof ApiError ? report.error.status : null;
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Could not load the {name} report</AlertTitle>
+        <AlertTitle>{t('Could not load the {name} report', { name })}</AlertTitle>
         <AlertDescription>
           {status === 404
-            ? 'One of the filters is not available to you.'
+            ? t('One of the filters is not available to you.')
             : status === 403
-              ? 'You do not have permission to see this report.'
+              ? t('You do not have permission to see this report.')
               : status === 400
-                ? 'Check the filters — the range may be too long (at most a year).'
-                : 'Please try again.'}
+                ? t('Check the filters — the range may be too long (at most a year).')
+                : t('Please try again.')}
         </AlertDescription>
       </Alert>
     );
@@ -709,10 +720,13 @@ function Loaded<T>({
 }
 
 function Empty({ what }: { what: string }) {
+  const t = useT();
   return (
     <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
-      <p className="text-sm font-medium">No {what} in this range</p>
-      <p className="text-muted-foreground mt-1 text-sm">Try a longer range or fewer filters.</p>
+      <p className="text-sm font-medium">{t('No {what} in this range', { what })}</p>
+      <p className="text-muted-foreground mt-1 text-sm">
+        {t('Try a longer range or fewer filters.')}
+      </p>
     </div>
   );
 }
@@ -761,6 +775,7 @@ function BreakdownTable({
   page: Page<BreakdownRow>;
   currencyCode: string;
 }) {
+  const t = useT();
   return (
     <TableCard
       title={title}
@@ -776,7 +791,7 @@ function BreakdownTable({
       footer={
         page.total > page.items.length ? (
           <p className="text-muted-foreground text-xs">
-            Showing {page.items.length} of {page.total}.
+            {t('Showing {length} of {total}.', { length: page.items.length, total: page.total })}
           </p>
         ) : null
       }
@@ -795,6 +810,7 @@ function TableCard({
   rows: string[][];
   footer?: ReactNode;
 }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>
@@ -802,7 +818,7 @@ function TableCard({
       </CardHeader>
       <CardContent className="grid gap-3">
         {rows.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nothing to show.</p>
+          <p className="text-muted-foreground text-sm">{t('Nothing to show.')}</p>
         ) : (
           <div className="relative overflow-x-auto">
             <table className="w-full text-sm">
@@ -850,11 +866,16 @@ function TableCard({
 }
 
 function Pager({ page, onOffset }: { page: Page<unknown>; onOffset: (offset: number) => void }) {
+  const t = useT();
   if (page.total <= page.limit) return null;
   return (
     <div className="flex items-center justify-between gap-3">
       <p className="text-muted-foreground text-xs">
-        {page.offset + 1}–{Math.min(page.offset + page.limit, page.total)} of {page.total}
+        {t('{from}–{to} of {total}', {
+          from: page.offset + 1,
+          to: Math.min(page.offset + page.limit, page.total),
+          total: page.total,
+        })}
       </p>
       <div className="flex gap-2">
         <Button
@@ -863,7 +884,7 @@ function Pager({ page, onOffset }: { page: Page<unknown>; onOffset: (offset: num
           disabled={page.offset === 0}
           onClick={() => onOffset(Math.max(0, page.offset - page.limit))}
         >
-          Previous
+          {t('Previous')}
         </Button>
         <Button
           size="sm"
@@ -871,7 +892,7 @@ function Pager({ page, onOffset }: { page: Page<unknown>; onOffset: (offset: num
           disabled={page.offset + page.limit >= page.total}
           onClick={() => onOffset(page.offset + page.limit)}
         >
-          Next
+          {t('Next')}
         </Button>
       </div>
     </div>
@@ -886,4 +907,3 @@ function Field({ id, label, children }: { id: string; label: string; children: R
     </div>
   );
 }
-

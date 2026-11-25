@@ -1,5 +1,6 @@
 'use client';
 
+import { defaultTimezone } from '@/lib/timezones';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/features/auth';
 import {
@@ -101,4 +102,13 @@ export function useUpdateCompanyBranding() {
       queryClient.setQueryData(companyKeys.branding(activeCompanyId!), branding);
     },
   });
+}
+
+/**
+ * The time zone times are shown and entered in on company-wide screens: the
+ * company's own, not this device's. Falls back to the device while loading.
+ */
+export function useBusinessTimezone(): string {
+  const company = useCompany();
+  return company.data?.defaultTimezoneName ?? defaultTimezone();
 }

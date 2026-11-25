@@ -9,6 +9,7 @@ import { PublicBookingPayment } from '@/features/payments';
 import type { PublicBookingConfirmation } from '@/services/public-booking.service';
 import { formatDay, wallTime } from '../model/booking-flow';
 import { price } from './steps';
+import { useT } from '@/lib/i18n';
 
 /**
  * The end of the flow: what was booked, as the server recorded it. Everything
@@ -22,6 +23,7 @@ export function BookingConfirmation(props: {
   locale?: string;
   onBookAnother: () => void;
 }) {
+  const t = useT();
   const c = props.confirmation;
   const date = c.startsAt.slice(0, 10);
   const pending = c.status === 'PENDING';
@@ -31,27 +33,30 @@ export function BookingConfirmation(props: {
       <CardHeader className="grid justify-items-center gap-2 text-center">
         <CheckCircle2 aria-hidden className="text-primary size-12" />
         <CardTitle className="text-xl">
-          {pending ? 'Request received' : 'You’re booked'}, {c.customer.firstName}
+          {pending ? t('Request received') : t('You’re booked')}, {c.customer.firstName}
         </CardTitle>
         <p className="text-muted-foreground text-sm">
           {pending
-            ? 'The business will confirm your appointment shortly.'
-            : 'Your appointment is confirmed.'}
+            ? t('The business will confirm your appointment shortly.')
+            : t('Your appointment is confirmed.')}
         </p>
       </CardHeader>
       <CardContent className="grid gap-4">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <Row label="Service" value={`${c.service.name} (${c.service.durationMin} min)`} />
+          <Row label={t('Service')} value={`${c.service.name} (${c.service.durationMin} min)`} />
           <Row
-            label="When"
+            label={t('When')}
             value={`${formatDay(date, props.locale, true)}, ${wallTime(c.startsAt)}–${wallTime(c.endsAt)}`}
           />
-          <Row label="With" value={c.employee?.name ?? 'Our team'} />
-          <Row label="Where" value={[c.branch.name, c.branch.address].filter(Boolean).join(' — ')} />
+          <Row label={t('With')} value={c.employee?.name ?? 'Our team'} />
+          <Row
+            label={t('Where')}
+            value={[c.branch.name, c.branch.address].filter(Boolean).join(' — ')}
+          />
           {c.price.discountMinor === '0' ? (
-            <Row label="Price" value={price(c.price.amountMinor, c.price.currencyCode)} />
+            <Row label={t('Price')} value={price(c.price.amountMinor, c.price.currencyCode)} />
           ) : null}
-          <Row label="Reference" value={c.appointmentNumber} mono />
+          <Row label={t('Reference')} value={c.appointmentNumber} mono />
         </dl>
         {c.price.discountMinor !== '0' ? (
           <PriceBreakdown
@@ -68,19 +73,23 @@ export function BookingConfirmation(props: {
           </div>
         ) : null}
         <p className="text-muted-foreground text-xs">
-          Times are in {c.timezone}.
-          {c.branch.phone ? ` To change or cancel, call ${c.branch.phone} and quote your reference.` : ' Quote your reference if you need to change or cancel.'}
+          {t('Times are in')} {c.timezone}.
+          {c.branch.phone
+            ? t(' To change or cancel, call {phone} and quote your reference.', {
+                phone: c.branch.phone,
+              })
+            : t(' Quote your reference if you need to change or cancel.')}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="w-full sm:w-fit" onClick={props.onBookAnother}>
-            Book another appointment
+            {t('Book another appointment')}
           </Button>
           {/* Sign-in is by a code to the email on the booking. */}
           <Link
             href={`/portal/${props.slug}`}
             className={`${buttonVariants({ variant: 'ghost' })} w-full sm:w-fit`}
           >
-            Manage my bookings
+            {t('Manage my bookings')}
           </Link>
         </div>
       </CardContent>

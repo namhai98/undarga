@@ -12,6 +12,7 @@ import { useCan } from '@/features/auth';
 import { ApiError } from '@/services/api-error';
 import type { BookingSettings } from '@/services/booking-settings.service';
 import { useBookingSettings, useUpdateBookingSettings } from '../api/use-booking-settings';
+import { useT } from '@/lib/i18n';
 
 /**
  * The company's booking rules: how much notice, how far ahead, the
@@ -20,14 +21,17 @@ import { useBookingSettings, useUpdateBookingSettings } from '../api/use-booking
  * page, rescheduling, the customer portal and recurring series alike.
  */
 export function BookingSettingsPage() {
+  const t = useT();
   const canRead = useCan('settings:read');
   const settings = useBookingSettings();
 
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see booking settings.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>
+          {t('You do not have permission to see booking settings.')}
+        </AlertDescription>
       </Alert>
     );
   }
@@ -35,18 +39,18 @@ export function BookingSettingsPage() {
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Booking rules</h1>
+        <h1 className="text-xl font-semibold">{t('Booking rules')}</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
-          These apply everywhere an appointment is booked, moved or cancelled — by staff, online and
-          in the customer portal. A service can override the notice, booking window and cancellation
-          deadline on its own settings.
+          {t(
+            'These apply everywhere an appointment is booked, moved or cancelled — by staff, online and in the customer portal. A service can override the notice, booking window and cancellation deadline on its own settings.',
+          )}
         </p>
       </header>
       {settings.isPending ? <Skeleton className="h-72 w-full" aria-busy="true" /> : null}
       {settings.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load booking rules</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load booking rules')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
       {settings.data ? (
@@ -57,6 +61,7 @@ export function BookingSettingsPage() {
 }
 
 function SettingsForm({ saved }: { saved: BookingSettings }) {
+  const t = useT();
   const canWrite = useCan('settings:write');
   const update = useUpdateBookingSettings();
   const [notice, setNotice] = useState(String(saved.minimumBookingNoticeMinutes));
@@ -109,21 +114,21 @@ function SettingsForm({ saved }: { saved: BookingSettings }) {
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">When bookings can be made</CardTitle>
+          <CardTitle className="text-base">{t('When bookings can be made')}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <NumberField
             id="rule-notice"
-            label="Minimum notice (minutes)"
-            hint="No booking can start sooner than this. 0 = up to the last minute."
+            label={t('Minimum notice (minutes)')}
+            hint={t('No booking can start sooner than this. 0 = up to the last minute.')}
             value={notice}
             onChange={setNotice}
             disabled={!canWrite}
           />
           <NumberField
             id="rule-advance"
-            label="Book up to (days ahead)"
-            hint="Dates further ahead are not offered."
+            label={t('Book up to (days ahead)')}
+            hint={t('Dates further ahead are not offered.')}
             value={advance}
             onChange={setAdvance}
             disabled={!canWrite}
@@ -133,43 +138,44 @@ function SettingsForm({ saved }: { saved: BookingSettings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Cancelling and rescheduling</CardTitle>
+          <CardTitle className="text-base">{t('Cancelling and rescheduling')}</CardTitle>
           <CardDescription>
-            After a deadline, staff must confirm the change as late (it needs the “cancel any
-            appointment” permission and is recorded as late). Customers cannot change it at all.
+            {t(
+              'After a deadline, staff must confirm the change as late (it needs the “cancel any appointment” permission and is recorded as late). Customers cannot change it at all.',
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <NumberField
             id="rule-cancel"
-            label="Cancellation deadline (hours before)"
+            label={t('Cancellation deadline (hours before)')}
             value={cancelHours}
             onChange={setCancelHours}
             disabled={!canWrite}
           />
           <NumberField
             id="rule-reschedule"
-            label="Rescheduling deadline (hours before)"
-            hint="Leave empty to use the cancellation deadline."
+            label={t('Rescheduling deadline (hours before)')}
+            hint={t('Leave empty to use the cancellation deadline.')}
             value={rescheduleHours}
             onChange={setRescheduleHours}
             disabled={!canWrite || !reschedulingAllowed}
           />
           <Check
-            label="Appointments may be rescheduled"
+            label={t('Appointments may be rescheduled')}
             checked={reschedulingAllowed}
             onChange={setReschedulingAllowed}
             disabled={!canWrite}
           />
           <span />
           <Check
-            label="Customers may cancel online"
+            label={t('Customers may cancel online')}
             checked={customerCancel}
             onChange={setCustomerCancel}
             disabled={!canWrite}
           />
           <Check
-            label="Customers may reschedule online"
+            label={t('Customers may reschedule online')}
             checked={customerReschedule}
             onChange={setCustomerReschedule}
             disabled={!canWrite || !reschedulingAllowed}
@@ -193,12 +199,12 @@ function SettingsForm({ saved }: { saved: BookingSettings }) {
         <div>
           <Button disabled={problems.length > 0 || update.isPending} onClick={() => void save()}>
             {update.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Save booking rules
+            {t('Save booking rules')}
           </Button>
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
-          You can view these rules but not change them.
+          {t('You can view these rules but not change them.')}
         </p>
       )}
     </div>

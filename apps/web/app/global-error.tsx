@@ -1,4 +1,5 @@
 'use client';
+import { useT } from '@/lib/i18n';
 
 /**
  * Last-resort error boundary.
@@ -18,6 +19,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   return (
     <html lang="en">
       <body
@@ -32,17 +34,18 @@ export default function GlobalError({
       >
         <main style={{ maxWidth: '32rem' }}>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            Something went wrong
+            {t('Something went wrong')}
           </h1>
           <p style={{ color: '#555', fontSize: '0.875rem', marginBottom: '1rem' }}>
-            The page could not be displayed. Trying again is usually enough; if it keeps
-            happening, quote the reference below.
+            {t(
+              'The page could not be displayed. Trying again is usually enough; if it keeps happening, quote the reference below.',
+            )}
           </p>
           {/* `digest` is a server-generated hash, safe to show. The message itself is
               not: in production it can carry internal detail. */}
           {error.digest ? (
             <p style={{ color: '#777', fontSize: '0.75rem', marginBottom: '1rem' }}>
-              Reference: <code>{error.digest}</code>
+              {t('Reference:')} <code>{error.digest}</code>
             </p>
           ) : null}
           <button
@@ -56,7 +59,7 @@ export default function GlobalError({
               cursor: 'pointer',
             }}
           >
-            Try again
+            {t('Try again')}
           </button>
         </main>
       </body>

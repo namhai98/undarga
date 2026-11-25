@@ -21,6 +21,7 @@ import { useCreateAppointment } from '../api/use-appointments';
 import { bookingErrorMessage, localTime, todayIso } from '../model/appointment-display';
 import { RecurringBooking } from './recurring-booking';
 import { SlotPicker } from './slot-picker';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -36,6 +37,7 @@ const selectClass =
  * book. Changing an earlier step clears everything after it.
  */
 export function BookingWizard() {
+  const t = useT();
   const router = useRouter();
   const canBook = useCan('appointment:write');
 
@@ -82,8 +84,8 @@ export function BookingWizard() {
   if (!canBook) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to book appointments.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>{t('You do not have permission to book appointments.')}</AlertDescription>
       </Alert>
     );
   }
@@ -104,7 +106,7 @@ export function BookingWizard() {
       });
       router.push(`/appointments/${created.id}`);
     } catch (caught) {
-      setError(bookingErrorMessage(caught, 'Could not book this appointment.'));
+      setError(bookingErrorMessage(caught, 'Could not book this appointment.', t));
       // The slot list was invalidated; make the user pick again rather than
       // resubmitting a time that is gone.
       setSlot(null);
@@ -119,21 +121,21 @@ export function BookingWizard() {
         className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} -ml-2 w-fit`}
       >
         <ArrowLeft aria-hidden className="size-4" />
-        All appointments
+        {t('All appointments')}
       </Link>
-      <h2 className="text-lg font-semibold">New appointment</h2>
+      <h2 className="text-lg font-semibold">{t('New appointment')}</h2>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Not booked</AlertTitle>
+          <AlertTitle>{t('Not booked')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
-      <Step n={1} title="Where and what">
+      <Step n={1} title={t('Where and what')}>
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="book-branch">Branch</Label>
+            <Label htmlFor="book-branch">{t('Branch')}</Label>
             <select
               id="book-branch"
               className={selectClass}
@@ -143,7 +145,7 @@ export function BookingWizard() {
                 resetFrom('service');
               }}
             >
-              <option value="">Select…</option>
+              <option value="">{t('Select…')}</option>
               {(branches.data?.items ?? []).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
@@ -152,7 +154,7 @@ export function BookingWizard() {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="book-service">Service</Label>
+            <Label htmlFor="book-service">{t('Service')}</Label>
             <select
               id="book-service"
               className={selectClass}
@@ -163,7 +165,7 @@ export function BookingWizard() {
                 resetFrom('date');
               }}
             >
-              <option value="">Select…</option>
+              <option value="">{t('Select…')}</option>
               {(services.data?.items ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} · {s.durationMin}m
@@ -172,7 +174,7 @@ export function BookingWizard() {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="book-date">Date</Label>
+            <Label htmlFor="book-date">{t('Date')}</Label>
             <input
               id="book-date"
               type="date"
@@ -189,7 +191,7 @@ export function BookingWizard() {
         </div>
       </Step>
 
-      <Step n={2} title="Time" muted={!serviceId}>
+      <Step n={2} title={t('Time')} muted={!serviceId}>
         <SlotPicker
           branchId={branchId}
           serviceId={serviceId}
@@ -203,21 +205,23 @@ export function BookingWizard() {
         />
       </Step>
 
-      <Step n={3} title="With whom" muted={!slot}>
+      <Step n={3} title={t('With whom')} muted={!slot}>
         {!slot ? (
-          <p className="text-muted-foreground text-sm">Pick a time first.</p>
+          <p className="text-muted-foreground text-sm">{t('Pick a time first.')}</p>
         ) : (
           <div className="grid gap-3">
             {service?.requiresEmployee && slot.employeeIds.length > 0 ? (
               <div className="grid gap-1.5 sm:max-w-xs">
-                <Label htmlFor="book-employee">Employee</Label>
+                <Label htmlFor="book-employee">{t('Employee')}</Label>
                 <select
                   id="book-employee"
                   className={selectClass}
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
                 >
-                  <option value="">Any available ({slot.employeeIds.length})</option>
+                  <option value="">
+                    {t('Any available ({length})', { length: slot.employeeIds.length })}
+                  </option>
                   {slot.employeeIds.map((id) => (
                     <option key={id} value={id}>
                       {nameOf(id)}
@@ -226,31 +230,33 @@ export function BookingWizard() {
                 </select>
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">No specific employee needed.</p>
+              <p className="text-muted-foreground text-sm">{t('No specific employee needed.')}</p>
             )}
             {service?.requiresResource ? (
               <p className="text-muted-foreground text-sm">
-                Room / equipment: assigned automatically ({slot.resourceIds.length} available).
+                {t('Room / equipment: assigned automatically ({length} available).', {
+                  length: slot.resourceIds.length,
+                })}
               </p>
             ) : null}
           </div>
         )}
       </Step>
 
-      <Step n={4} title="Customer" muted={!slot}>
+      <Step n={4} title={t('Customer')} muted={!slot}>
         <div className="grid gap-3">
           <div className="grid gap-1.5 sm:max-w-sm">
-            <Label htmlFor="book-customer-search">Find customer</Label>
+            <Label htmlFor="book-customer-search">{t('Find customer')}</Label>
             <Input
               id="book-customer-search"
               value={customerSearch}
-              placeholder="Name, phone or email"
+              placeholder={t('Name, phone or email')}
               disabled={!slot}
               onChange={(e) => setCustomerSearch(e.target.value)}
             />
           </div>
           {slot ? (
-            <div role="radiogroup" aria-label="Customers" className="grid gap-1">
+            <div role="radiogroup" aria-label={t('Customers')} className="grid gap-1">
               {(customers.data?.items ?? []).map((c) => (
                 <label
                   key={c.id}
@@ -271,11 +277,10 @@ export function BookingWizard() {
               ))}
               {customers.data && customers.data.items.length === 0 ? (
                 <p className="text-muted-foreground text-sm">
-                  Nobody matches.{' '}
+                  {t('Nobody matches.')}{' '}
                   <Link href="/customers" className="underline">
-                    Add a customer
-                  </Link>{' '}
-                  first.
+                    {t('Add a customer first')}
+                  </Link>
                 </p>
               ) : null}
             </div>
@@ -283,22 +288,25 @@ export function BookingWizard() {
         </div>
       </Step>
 
-      <Step n={5} title="Confirm" muted={!slot || !customerId}>
+      <Step n={5} title={t('Confirm')} muted={!slot || !customerId}>
         {slot && customerId ? (
           <div className="grid gap-3">
             <dl className="grid gap-1 text-sm sm:grid-cols-2">
-              <Summary label="Branch" value={branch?.name} />
-              <Summary label="Service" value={service?.name} />
+              <Summary label={t('Branch')} value={branch?.name} />
+              <Summary label={t('Service')} value={service?.name} />
               <Summary
-                label="When"
+                label={t('When')}
                 value={`${date} ${localTime(slot.startAt)}–${localTime(slot.endAt)}`}
               />
-              <Summary label="Employee" value={employeeId ? nameOf(employeeId) : 'Any available'} />
-              <Summary label="Customer" value={customerName} />
+              <Summary
+                label={t('Employee')}
+                value={employeeId ? nameOf(employeeId) : 'Any available'}
+              />
+              <Summary label={t('Customer')} value={customerName} />
             </dl>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="book-customer-note">Note from customer</Label>
+                <Label htmlFor="book-customer-note">{t('Note from customer')}</Label>
                 <Input
                   id="book-customer-note"
                   value={customerNote}
@@ -307,7 +315,7 @@ export function BookingWizard() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="book-internal-note">Internal note</Label>
+                <Label htmlFor="book-internal-note">{t('Internal note')}</Label>
                 <Input
                   id="book-internal-note"
                   value={internalNote}
@@ -322,7 +330,7 @@ export function BookingWizard() {
                 checked={repeat}
                 onChange={(e) => setRepeat(e.target.checked)}
               />
-              Repeat this appointment (recurring)
+              {t('Repeat this appointment (recurring)')}
             </label>
             {repeat ? (
               <RecurringBooking
@@ -366,14 +374,14 @@ export function BookingWizard() {
                 <div>
                   <Button disabled={create.isPending} onClick={() => void submit()}>
                     {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                    Book appointment
+                    {t('Book appointment')}
                   </Button>
                 </div>
               </>
             )}
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm">Choose a time and a customer.</p>
+          <p className="text-muted-foreground text-sm">{t('Choose a time and a customer.')}</p>
         )}
       </Step>
     </section>

@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { LocaleSwitcher } from '@/components/locale-switcher';
 import { RequireSession, SignOutButton, useSession } from '@/features/auth';
 import { OnboardingGate } from '@/features/onboarding';
 import { ReadOnlyBanner } from '@/features/subscription';
+import { useT } from '@/lib/i18n';
 
 /**
  * Shell for everything behind a session.
@@ -31,6 +33,7 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
 }
 
 function AppBar() {
+  const t = useT();
   const { user, activeCompany } = useSession();
 
   return (
@@ -38,7 +41,7 @@ function AppBar() {
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-6 py-3">
         <div className="flex min-w-0 items-baseline gap-2">
           <Link href="/dashboard" className="text-sm font-semibold">
-            Undarga
+            {t('Undarga')}
           </Link>
           {activeCompany ? (
             <span className="text-muted-foreground truncate text-sm">
@@ -49,8 +52,14 @@ function AppBar() {
 
         <div className="flex shrink-0 items-center gap-2">
           {user ? (
-            <span className="text-muted-foreground hidden text-xs sm:inline">{user.email}</span>
+            <Link
+              href="/account"
+              className="text-muted-foreground max-w-40 truncate text-xs hover:underline"
+            >
+              {user.email}
+            </Link>
           ) : null}
+          <LocaleSwitcher />
           <SignOutButton />
         </div>
       </div>

@@ -30,6 +30,7 @@ import {
   sendBrowserTo,
   when,
 } from '../model/calendar-display';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full max-w-sm rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -45,15 +46,16 @@ const selectClass =
  * `schedule:write:own`. The API enforces the same rules.
  */
 export function CalendarIntegrationPage({ justConnected = false }: { justConnected?: boolean }) {
+  const t = useT();
   const canRead = useCan('schedule:read');
   const overview = useCalendarOverview();
 
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
+        <AlertTitle>{t('Not available')}</AlertTitle>
         <AlertDescription>
-          You do not have permission to see calendar integrations.
+          {t('You do not have permission to see calendar integrations.')}
         </AlertDescription>
       </Alert>
     );
@@ -62,18 +64,18 @@ export function CalendarIntegrationPage({ justConnected = false }: { justConnect
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Calendar integration</h1>
+        <h1 className="text-xl font-semibold">{t('Calendar integration')}</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
-          Appointments are added to the connected calendar automatically. Busy times in that
-          calendar can block bookings. This is one-way: changes made in the calendar do not change
-          appointments, and calendar events never include customer details.
+          {t(
+            'Appointments are added to the connected calendar automatically. Busy times in that calendar can block bookings. This is one-way: changes made in the calendar do not change appointments, and calendar events never include customer details.',
+          )}
         </p>
       </header>
 
       {justConnected ? (
         <Alert role="status">
           <AlertDescription>
-            Calendar connected. Upcoming appointments are being added.
+            {t('Calendar connected. Upcoming appointments are being added.')}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -81,8 +83,8 @@ export function CalendarIntegrationPage({ justConnected = false }: { justConnect
       {overview.isPending ? <Skeleton className="h-60 w-full" aria-busy="true" /> : null}
       {overview.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load calendars</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load calendars')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
       {overview.data ? <Overview data={overview.data} /> : null}
@@ -91,43 +93,48 @@ export function CalendarIntegrationPage({ justConnected = false }: { justConnect
 }
 
 function Overview({ data }: { data: CalendarOverview }) {
+  const t = useT();
   const canManageAny = useCan('schedule:write:any');
   const usable = data.providers.filter((p) => p.configured);
   return (
     <>
-      <section aria-label="Providers" className="flex flex-wrap gap-2">
+      <section aria-label={t('Providers')} className="flex flex-wrap gap-2">
         {data.providers.map((p) => (
           <Badge key={p.provider} variant={p.configured ? 'default' : 'secondary'}>
-            {p.label}: {p.configured ? 'available' : 'not set up on this server'}
+            {p.label}: {p.configured ? 'available' : t('not set up on this server')}
           </Badge>
         ))}
       </section>
 
       {!data.encryptionAvailable ? (
         <Alert role="status">
-          <AlertTitle>Calendar connections are not available yet</AlertTitle>
+          <AlertTitle>{t('Calendar connections are not available yet')}</AlertTitle>
           <AlertDescription>
-            The server has no encryption key for storing calendar access, so no calendar can be
-            connected. An administrator needs to set SECRETS_ENCRYPTION_KEY.
+            {t(
+              'The server has no encryption key for storing calendar access, so no calendar can be connected. An administrator needs to set SECRETS_ENCRYPTION_KEY.',
+            )}
           </AlertDescription>
         </Alert>
       ) : usable.length === 0 ? (
         <Alert role="status">
-          <AlertTitle>No calendar provider is set up</AlertTitle>
+          <AlertTitle>{t('No calendar provider is set up')}</AlertTitle>
           <AlertDescription>
-            An administrator needs to add Google or Microsoft OAuth credentials before calendars can
-            be connected.
+            {t(
+              'An administrator needs to add Google or Microsoft OAuth credentials before calendars can be connected.',
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
 
       {data.employees.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm font-medium">No calendars you can manage</p>
+          <p className="text-sm font-medium">{t('No calendars you can manage')}</p>
           <p className="text-muted-foreground mt-1 text-sm">
             {canManageAny
-              ? 'Add active staff first; each staff member can then have a calendar connected.'
-              : 'You can connect your own calendar once your login is linked to your staff profile.'}
+              ? t('Add active staff first; each staff member can then have a calendar connected.')
+              : t(
+                  'You can connect your own calendar once your login is linked to your staff profile.',
+                )}
           </p>
         </div>
       ) : (
@@ -152,6 +159,7 @@ function EmployeeCalendar({
   employee: CalendarEmployee;
   providers: CalendarProvider[];
 }) {
+  const t = useT();
   const start = useStartCalendarConnection();
   const [error, setError] = useState<string | null>(null);
   const connection = employee.connection;
@@ -176,20 +184,20 @@ function EmployeeCalendar({
           <CardTitle>
             {employee.displayName}
             {employee.isSelf ? (
-              <span className="text-muted-foreground font-normal"> (you)</span>
+              <span className="text-muted-foreground font-normal"> {t('(you)')}</span>
             ) : null}
           </CardTitle>
           {connection ? (
             <Badge variant={connection.status === 'ACTIVE' ? 'default' : 'destructive'}>
-              {STATUS_LABEL[connection.status]}
+              {t(STATUS_LABEL[connection.status])}
             </Badge>
           ) : (
-            <Badge variant="secondary">Not connected</Badge>
+            <Badge variant="secondary">{t('Not connected')}</Badge>
           )}
         </div>
         {connection ? (
           <CardDescription>
-            {PROVIDER_LABEL[connection.provider]}
+            {t(PROVIDER_LABEL[connection.provider])}
             {connection.accountEmail ? ` · ${connection.accountEmail}` : ''}
           </CardDescription>
         ) : null}
@@ -204,7 +212,7 @@ function EmployeeCalendar({
         {!connection ? (
           <div className="flex flex-wrap gap-2">
             {providers.length === 0 ? (
-              <p className="text-muted-foreground">No provider is available to connect.</p>
+              <p className="text-muted-foreground">{t('No provider is available to connect.')}</p>
             ) : (
               providers.map((provider) => (
                 <Button
@@ -217,7 +225,7 @@ function EmployeeCalendar({
                   {start.isPending && start.variables?.provider === provider ? (
                     <Loader2 className="animate-spin" aria-hidden />
                   ) : null}
-                  Connect {PROVIDER_LABEL[provider]}
+                  {t('Connect')} {t(PROVIDER_LABEL[provider])}
                 </Button>
               ))
             )}
@@ -243,6 +251,7 @@ function ConnectionDetails({
   reconnect: () => void;
   reconnecting: boolean;
 }) {
+  const t = useT();
   const connection = employee.connection!;
   const active = connection.status === 'ACTIVE';
   const [choosing, setChoosing] = useState(false);
@@ -268,31 +277,33 @@ function ConnectionDetails({
     <div className="grid gap-3">
       {connection.status === 'NEEDS_REAUTH' ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Reconnect this calendar</AlertTitle>
+          <AlertTitle>{t('Reconnect this calendar')}</AlertTitle>
           <AlertDescription>
-            {connection.lastError ?? 'The calendar no longer accepts our access.'} Appointments are
-            not being synced, and its busy times are not used, until it is reconnected.
+            {connection.lastError ?? t('The calendar no longer accepts our access.')}{' '}
+            {t(
+              'Appointments are not being synced, and its busy times are not used, until it is reconnected.',
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
 
       <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[11rem_1fr]">
-        <dt className="text-muted-foreground">Calendar</dt>
+        <dt className="text-muted-foreground">{t('Calendar')}</dt>
         <dd>
           {connection.calendarName ??
-            (connection.calendarId === 'primary' ? 'Primary calendar' : connection.calendarId)}
+            (connection.calendarId === 'primary' ? t('Primary calendar') : connection.calendarId)}
         </dd>
-        <dt className="text-muted-foreground">Last synced</dt>
+        <dt className="text-muted-foreground">{t('Last synced')}</dt>
         <dd>{when(connection.lastSyncAt)}</dd>
         {connection.useForAvailability ? (
           <>
-            <dt className="text-muted-foreground">Busy times updated</dt>
+            <dt className="text-muted-foreground">{t('Busy times updated')}</dt>
             <dd>{when(connection.busySyncedAt)}</dd>
           </>
         ) : null}
         {connection.lastError && active ? (
           <>
-            <dt className="text-muted-foreground">Last error</dt>
+            <dt className="text-muted-foreground">{t('Last error')}</dt>
             <dd className="text-destructive">
               {connection.lastError}{' '}
               <span className="text-muted-foreground">({when(connection.lastErrorAt)})</span>
@@ -301,10 +312,14 @@ function ConnectionDetails({
         ) : null}
         {connection.failedEvents > 0 ? (
           <>
-            <dt className="text-muted-foreground">Not synced</dt>
+            <dt className="text-muted-foreground">{t('Not synced')}</dt>
             <dd>
-              {connection.failedEvents} appointment{connection.failedEvents === 1 ? '' : 's'}
-              {status.data?.queue.pending ? ` · ${status.data.queue.pending} waiting to retry` : ''}
+              {connection.failedEvents === 1
+                ? t('1 appointment')
+                : t('{count} appointments', { count: connection.failedEvents })}
+              {status.data?.queue.pending
+                ? t(' · {count} waiting to retry', { count: status.data.queue.pending })
+                : ''}
             </dd>
           </>
         ) : null}
@@ -312,7 +327,7 @@ function ConnectionDetails({
 
       {choosing && active ? (
         <div className="grid gap-1.5">
-          <Label htmlFor={`calendar-${connection.id}`}>Add appointments to</Label>
+          <Label htmlFor={`calendar-${connection.id}`}>{t('Add appointments to')}</Label>
           {choices.isPending ? (
             <Skeleton className="h-8 w-60" />
           ) : choices.error ? (
@@ -335,11 +350,11 @@ function ConnectionDetails({
                 ).then(() => setChoosing(false));
               }}
             >
-              <option value="">Choose a calendar…</option>
+              <option value="">{t('Choose a calendar…')}</option>
               {(choices.data ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.primary ? ' (primary)' : ''}
+                  {c.primary ? t(' (primary)') : ''}
                 </option>
               ))}
             </select>
@@ -348,7 +363,7 @@ function ConnectionDetails({
       ) : null}
 
       <fieldset className="grid gap-2" disabled={!active || update.isPending}>
-        <legend className="sr-only">Sync options</legend>
+        <legend className="sr-only">{t('Sync options')}</legend>
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -367,7 +382,7 @@ function ConnectionDetails({
               )
             }
           />
-          Use busy times in this calendar to block bookings
+          {t('Use busy times in this calendar to block bookings')}
         </label>
         <label className="flex items-center gap-2">
           <input
@@ -385,7 +400,7 @@ function ConnectionDetails({
               )
             }
           />
-          Keep completed appointments in the calendar
+          {t('Keep completed appointments in the calendar')}
         </label>
       </fieldset>
 
@@ -414,11 +429,11 @@ function ConnectionDetails({
               }
             >
               {resync.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Sync now
+              {t('Sync now')}
             </Button>
             {!choosing ? (
               <Button size="sm" variant="outline" onClick={() => setChoosing(true)}>
-                Change calendar
+                {t('Change calendar')}
               </Button>
             ) : null}
           </>
@@ -429,7 +444,7 @@ function ConnectionDetails({
           disabled={reconnecting}
           onClick={reconnect}
         >
-          Reconnect
+          {t('Reconnect')}
         </Button>
         {confirming ? (
           <>
@@ -445,21 +460,23 @@ function ConnectionDetails({
                 )
               }
             >
-              Yes, disconnect
+              {t('Yes, disconnect')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-              Keep it
+              {t('Keep it')}
             </Button>
           </>
         ) : (
           <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
-            Disconnect
+            {t('Disconnect')}
           </Button>
         )}
       </div>
       {confirming ? (
         <p className="text-muted-foreground text-xs">
-          Upcoming appointments are removed from the calendar and the stored access is deleted.
+          {t(
+            'Upcoming appointments are removed from the calendar and the stored access is deleted.',
+          )}
         </p>
       ) : null}
     </div>

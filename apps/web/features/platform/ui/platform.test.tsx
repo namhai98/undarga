@@ -24,7 +24,15 @@ const COMPANY_ID = '11111111-1111-4111-8111-111111111111';
 
 const dashboard = {
   windowDays: 30,
-  companies: { total: 12, active: 8, suspended: 2, disabled: 1, pendingSetup: 1, newInWindow: 3, byStatus: {} },
+  companies: {
+    total: 12,
+    active: 8,
+    suspended: 2,
+    disabled: 1,
+    pendingSetup: 1,
+    newInWindow: 3,
+    byStatus: {},
+  },
   subscriptions: {
     total: 11,
     trial: 4,
@@ -71,7 +79,15 @@ const detail = (status = 'ACTIVE') => ({
   locale: 'mn',
   updatedAt: '2026-01-01T00:00:00.000Z',
   deletedAt: null,
-  counts: { branches: 2, employees: 5, services: 9, customers: 140, appointments: 610, activeUsers: 3, roles: 6 },
+  counts: {
+    branches: 2,
+    employees: 5,
+    services: 9,
+    customers: 140,
+    appointments: 610,
+    activeUsers: 3,
+    roles: 6,
+  },
   subscription: null,
   recentActivity: [
     {
@@ -106,7 +122,14 @@ const subscriptionView = {
   },
   periodKey: '2026-10',
   usage: [
-    { metric: 'APPOINTMENTS', used: 2100, limit: 2000, percentUsed: 105, overLimit: true, updatedAt: '2026-10-07T00:00:00.000Z' },
+    {
+      metric: 'APPOINTMENTS',
+      used: 2100,
+      limit: 2000,
+      percentUsed: 105,
+      overLimit: true,
+      updatedAt: '2026-10-07T00:00:00.000Z',
+    },
   ],
   entitlements: [],
   history: [],
@@ -355,7 +378,9 @@ describe('PlatformCompanyDetail', () => {
     renderWithProviders(<PlatformCompanyDetail companyId={COMPANY_ID} />);
 
     expect(await screen.findByRole('heading', { name: 'Acme Salon' })).toBeInTheDocument();
-    expect(screen.getByText('Active', { selector: '[data-slot="badge"], span' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Active', { selector: '[data-slot="badge"], span' }),
+    ).toBeInTheDocument();
 
     for (const [label, value] of [
       ['Branches', '2'],
@@ -509,5 +534,72 @@ describe('PlatformCompanyUsers', () => {
     renderWithProviders(<PlatformCompanyUsers companyId={COMPANY_ID} />);
 
     expect(await screen.findByText('Could not load users')).toBeInTheDocument();
+  });
+});
+
+describe('Platform MFA', () => {
+  it('asks for the authenticator code after a correct password, then signs in with it', async () => {
+    platformTokenStore.clear();
+    let attempts = 0;
+    route({
+      'POST /api/v1/platform/auth/login': (_url, init) => {
+        attempts += 1;
+        const body = JSON.parse(String(init.body));
+        return body.mfaCode === '123456'
+          ? json(envelope({ accessToken: 'platform-token', expiresIn: 900 }))
+          : apiError(401, 'MFA_REQUIRED');
+      },
+      'GET /api/v1/platform/dashboard': () => json(envelope(dashboard)),
+      'GET /api/v1/platform/auth/mfa': () => json(envelope({ enrolled: true, available: true })),
+    });
+
+    renderWithProviders(
+      <PlatformShell>
+        <p>console content</p>
+      </PlatformShell>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Email'), 'ops@acme.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'right-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    // No error: just the next step.
+    const code = await screen.findByLabelText('Authenticator code');
+    expect(screen.queryByRole('alert')).toBeNull();
+    await userEvent.type(code, '123456');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify and sign in' }));
+
+    expect(await screen.findByText('console content')).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it('sets up two-factor: shows the key once and confirms it with a code', async () => {
+    route({
+      'GET /api/v1/platform/dashboard': () => json(envelope(dashboard)),
+      'GET /api/v1/platform/auth/mfa': () => json(envelope({ enrolled: false, available: true })),
+      'POST /api/v1/platform/auth/mfa/setup': () =>
+        json(
+          envelope({
+            secret: 'JBSWY3DPEHPK3PXP',
+            otpauthUri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP',
+          }),
+        ),
+      'POST /api/v1/platform/auth/mfa/confirm': () => json(envelope({ enrolled: true })),
+    });
+
+    renderWithProviders(<PlatformDashboard />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Set up two-factor authentication' }),
+    );
+    expect(await screen.findByText('JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Code from the app'), '654321');
+    await userEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+
+    await waitFor(() => {
+      const confirm = calls('/api/v1/platform/auth/mfa/confirm');
+      expect(confirm).toHaveLength(1);
+      expect(JSON.parse(String(confirm[0]!.init.body))).toEqual({ code: '654321' });
+    });
   });
 });

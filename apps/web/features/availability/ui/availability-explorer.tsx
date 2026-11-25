@@ -12,6 +12,7 @@ import type {
   AvailabilityUnavailableReason,
 } from '@/services/availability.service';
 import { useAvailability, useBookableServices } from '../api/use-availability';
+import { useT, type Translate } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -47,6 +48,7 @@ function hhmm(iso: string): string {
  * the customer booking page.
  */
 export function AvailabilityExplorer() {
+  const t = useT();
   const canRead = useCan('availability:read');
 
   const branches = useBranches();
@@ -74,9 +76,10 @@ export function AvailabilityExplorer() {
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
+        <AlertTitle>{t('Not available')}</AlertTitle>
         <AlertDescription>
-          You do not have the <code>availability:read</code> permission in this company.
+          {t('You do not have the')} <code>availability:read</code>{' '}
+          {t('permission in this company.')}
         </AlertDescription>
       </Alert>
     );
@@ -87,22 +90,22 @@ export function AvailabilityExplorer() {
   return (
     <section className="grid gap-4">
       <header className="grid gap-1">
-        <h2 className="text-lg font-semibold">Availability</h2>
+        <h2 className="text-lg font-semibold">{t('Availability')}</h2>
         <p className="text-muted-foreground text-sm">
-          What the engine says is bookable. Read-only — nothing here creates an appointment.
+          {t('What the engine says is bookable. Read-only — nothing here creates an appointment.')}
         </p>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="grid gap-1.5">
-          <Label htmlFor="availability-branch">Branch</Label>
+          <Label htmlFor="availability-branch">{t('Branch')}</Label>
           <select
             id="availability-branch"
             className={selectClass}
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
-            <option value="">Select…</option>
+            <option value="">{t('Select…')}</option>
             {(branches.data?.items ?? []).map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -112,14 +115,14 @@ export function AvailabilityExplorer() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="availability-service">Service</Label>
+          <Label htmlFor="availability-service">{t('Service')}</Label>
           <select
             id="availability-service"
             className={selectClass}
             value={serviceId}
             onChange={(e) => setServiceId(e.target.value)}
           >
-            <option value="">Select…</option>
+            <option value="">{t('Select…')}</option>
             {(services.data?.items ?? []).map((service) => (
               <option key={service.id} value={service.id}>
                 {service.name} · {service.durationMin}m
@@ -129,7 +132,7 @@ export function AvailabilityExplorer() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="availability-date">Date</Label>
+          <Label htmlFor="availability-date">{t('Date')}</Label>
           <input
             id="availability-date"
             type="date"
@@ -141,14 +144,14 @@ export function AvailabilityExplorer() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="availability-employee">Employee (optional)</Label>
+          <Label htmlFor="availability-employee">{t('Employee (optional)')}</Label>
           <select
             id="availability-employee"
             className={selectClass}
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
           >
-            <option value="">Any</option>
+            <option value="">{t('Any')}</option>
             {(employees.data?.items ?? []).map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.displayName}
@@ -159,23 +162,29 @@ export function AvailabilityExplorer() {
       </div>
 
       {!ready ? (
-        <p className="text-muted-foreground text-sm">Choose a branch, a service and a date.</p>
+        <p className="text-muted-foreground text-sm">
+          {t('Choose a branch, a service and a date.')}
+        </p>
       ) : availability.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Calculating availability…</span>
+          <span className="sr-only">{t('Calculating availability…')}</span>
           <Skeleton className="h-5 w-40" />
           <Skeleton className="h-24 w-full" />
         </div>
       ) : availability.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not calculate availability</AlertTitle>
-          <AlertDescription>Please check the selection and try again.</AlertDescription>
+          <AlertTitle>{t('Could not calculate availability')}</AlertTitle>
+          <AlertDescription>{t('Please check the selection and try again.')}</AlertDescription>
         </Alert>
       ) : day && day.slots.length > 0 ? (
         <div className="grid gap-3">
           <p className="text-muted-foreground text-xs">
-            {day.slots.length} slot{day.slots.length === 1 ? '' : 's'} · {day.serviceDurationMin}m
-            service · times in {day.timezone}
+            {t(
+              day.slots.length === 1
+                ? '1 slot · {duration}m service · times in {timezone}'
+                : '{count} slots · {duration}m service · times in {timezone}',
+              { count: day.slots.length, duration: day.serviceDurationMin, timezone: day.timezone },
+            )}
           </p>
           <ul className="flex flex-wrap gap-2">
             {day.slots.map((slot) => (
@@ -183,13 +192,23 @@ export function AvailabilityExplorer() {
                 <span
                   className="border-border/60 bg-background inline-flex items-center rounded-lg border px-2.5 py-1 text-sm tabular-nums"
                   title={
-                    `Books ${hhmm(slot.startAt)}–${hhmm(slot.endAt)}; ` +
-                    `occupies ${hhmm(slot.reservedFrom)}–${hhmm(slot.reservedTo)}` +
+                    t('Books {hhmm}–{hhmm2}; ', {
+                      hhmm: hhmm(slot.startAt),
+                      hhmm2: hhmm(slot.endAt),
+                    }) +
+                    t('occupies {hhmm}–{hhmm2}', {
+                      hhmm: hhmm(slot.reservedFrom),
+                      hhmm2: hhmm(slot.reservedTo),
+                    }) +
                     (slot.employeeIds.length
-                      ? ` · ${slot.employeeIds.length} staff candidate${slot.employeeIds.length === 1 ? '' : 's'}`
+                      ? slot.employeeIds.length === 1
+                        ? t(' · 1 staff candidate')
+                        : t(' · {count} staff candidates', { count: slot.employeeIds.length })
                       : '') +
                     (slot.resourceIds.length
-                      ? ` · ${slot.resourceIds.length} resource candidate${slot.resourceIds.length === 1 ? '' : 's'}`
+                      ? slot.resourceIds.length === 1
+                        ? t(' · 1 resource candidate')
+                        : t(' · {count} resource candidates', { count: slot.resourceIds.length })
                       : '')
                   }
                 >
@@ -204,9 +223,9 @@ export function AvailabilityExplorer() {
           <p className="text-sm font-medium">
             {day?.unavailableReason
               ? REASON_COPY[day.unavailableReason]
-              : 'No available times for this date.'}
+              : t('No available times for this date.')}
           </p>
-          <p className="text-muted-foreground mt-1 text-sm">Try another date or branch.</p>
+          <p className="text-muted-foreground mt-1 text-sm">{t('Try another date or branch.')}</p>
         </div>
       )}
 
@@ -224,22 +243,25 @@ export function AvailabilityExplorer() {
 
 /** The rules behind the day, and who is away — so an empty day explains itself. */
 function DayDetails({ day, nameOf }: { day: AvailabilityDay; nameOf: (id: string) => string }) {
+  const t = useT();
   const away = day.employeesUnavailable ?? [];
   if (!day.rules && away.length === 0) return null;
   return (
-    <div className="grid gap-2 text-sm" aria-label="Booking rules and absences">
+    <div className="grid gap-2 text-sm" aria-label={t('Booking rules and absences')}>
       {day.rules ? (
         <p className="text-muted-foreground text-xs">
-          Rules: at least {describeNotice(day.rules.minimumNoticeMinutes)} notice · up to{' '}
-          {day.rules.maximumAdvanceDays} days ahead
+          {t('Rules: at least {notice} notice · up to {days} days ahead', {
+            notice: describeNotice(day.rules.minimumNoticeMinutes, t),
+            days: day.rules.maximumAdvanceDays,
+          })}
           {day.rules.maxConcurrentBookings
-            ? ` · at most ${day.rules.maxConcurrentBookings} at once`
+            ? t(' · at most {max} at once', { max: day.rules.maxConcurrentBookings })
             : ''}
         </p>
       ) : null}
       {away.length ? (
         <div className="grid gap-1">
-          <p className="font-medium">Unavailable staff</p>
+          <p className="font-medium">{t('Unavailable staff')}</p>
           <ul className="text-muted-foreground grid gap-0.5 text-xs">
             {away.map((a, i) => (
               <li key={`${a.employeeId}-${i}`} className="tabular-nums">
@@ -255,9 +277,9 @@ function DayDetails({ day, nameOf }: { day: AvailabilityDay; nameOf: (id: string
 }
 
 /** 90 → "90 minutes", 120 → "2 hours", 1440 → "1 day". */
-function describeNotice(minutes: number): string {
-  const unit = (n: number, u: string) => `${n} ${u}${n === 1 ? '' : 's'}`;
-  if (minutes > 0 && minutes % 1440 === 0) return unit(minutes / 1440, 'day');
-  if (minutes > 0 && minutes % 60 === 0) return unit(minutes / 60, 'hour');
-  return unit(minutes, 'minute');
+function describeNotice(minutes: number, t: Translate): string {
+  const unit = (n: number, one: string, many: string) => (n === 1 ? t(one) : t(many, { count: n }));
+  if (minutes > 0 && minutes % 1440 === 0) return unit(minutes / 1440, '1 day', '{count} days');
+  if (minutes > 0 && minutes % 60 === 0) return unit(minutes / 60, '1 hour', '{count} hours');
+  return unit(minutes, '1 minute', '{count} minutes');
 }

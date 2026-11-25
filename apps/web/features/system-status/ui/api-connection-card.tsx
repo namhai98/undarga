@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiError, ApiNetworkError } from '@/services/api-error';
 import { useReadiness } from '../api/use-health';
+import { useT } from '@/lib/i18n';
 
 const STATE_LABEL: Record<string, string> = {
   up: 'Connected',
@@ -19,24 +20,27 @@ const STATE_LABEL: Record<string, string> = {
  * render. If this card is green, the whole chain is wired.
  */
 export function ApiConnectionCard() {
+  const t = useT();
   const { data, error, isPending, isFetching } = useReadiness();
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-4">
-          <span>API connection</span>
+          <span>{t('API connection')}</span>
           {isFetching ? (
-            <span className="text-muted-foreground text-xs font-normal">checking…</span>
+            <span className="text-muted-foreground text-xs font-normal">{t('checking…')}</span>
           ) : null}
         </CardTitle>
         <CardDescription>
-          Live readiness of the backend and its dependencies, polled every 15 seconds.
+          {t('Live readiness of the backend and its dependencies, polled every 15 seconds.')}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {isPending ? <p className="text-muted-foreground text-sm">Contacting the API…</p> : null}
+        {isPending ? (
+          <p className="text-muted-foreground text-sm">{t('Contacting the API…')}</p>
+        ) : null}
 
         {error ? <ConnectionError error={error} /> : null}
 
@@ -62,15 +66,7 @@ export function ApiConnectionCard() {
   );
 }
 
-function StatusRow({
-  label,
-  state,
-  detail,
-}: {
-  label: string;
-  state: string;
-  detail?: string;
-}) {
+function StatusRow({ label, state, detail }: { label: string; state: string; detail?: string }) {
   const variant =
     state === 'up' ? 'default' : state === 'not_configured' ? 'secondary' : 'destructive';
 
@@ -93,12 +89,13 @@ function StatusRow({
  * them apart is most of the debugging at this stage.
  */
 function ConnectionError({ error }: { error: unknown }) {
+  const t = useT();
   if (error instanceof ApiNetworkError) {
     return (
       <p className="text-destructive text-sm">
-        Could not reach the API. Is it running on the URL in{' '}
-        <code className="font-mono text-xs">NEXT_PUBLIC_API_URL</code>, and does{' '}
-        <code className="font-mono text-xs">CORS_ORIGINS</code> include this origin?
+        {t('Could not reach the API. Is it running on the URL in')}{' '}
+        <code className="font-mono text-xs">NEXT_PUBLIC_API_URL</code>
+        {t(', and does CORS_ORIGINS include this origin?')}
       </p>
     );
   }
@@ -106,16 +103,17 @@ function ConnectionError({ error }: { error: unknown }) {
   if (error instanceof ApiError) {
     return (
       <p className="text-destructive text-sm">
-        API returned <span className="font-mono text-xs">{error.code}</span> ({error.status}).
+        {t('API returned')} <span className="font-mono text-xs">{error.code}</span> ({error.status}
+        ).
         {error.requestId ? (
           <>
             {' '}
-            Request <span className="font-mono text-xs">{error.requestId}</span>.
+            {t('Request')} <span className="font-mono text-xs">{error.requestId}</span>.
           </>
         ) : null}
       </p>
     );
   }
 
-  return <p className="text-destructive text-sm">Unexpected error contacting the API.</p>;
+  return <p className="text-destructive text-sm">{t('Unexpected error contacting the API.')}</p>;
 }

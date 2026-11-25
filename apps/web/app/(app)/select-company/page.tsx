@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompanySwitcher, useSession } from '@/features/auth';
+import { useT } from '@/lib/i18n';
 
 /**
  * Choose which company to work in.
@@ -15,6 +16,7 @@ import { CompanySwitcher, useSession } from '@/features/auth';
  * through, because a picker offering a single option is furniture.
  */
 export default function SelectCompanyPage() {
+  const t = useT();
   const router = useRouter();
   const { memberships, isLoadingCompany } = useSession();
 
@@ -27,7 +29,7 @@ export default function SelectCompanyPage() {
   if (isLoadingCompany || memberships.length <= 1) {
     return (
       <div className="grid gap-3" aria-busy="true">
-        <span className="sr-only">Loading your companies…</span>
+        <span className="sr-only">{t('Loading your companies…')}</span>
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-24 w-full" />
       </div>
@@ -37,9 +39,11 @@ export default function SelectCompanyPage() {
   return (
     <div className="mx-auto grid w-full max-w-md gap-6">
       <div className="grid gap-1">
-        <h1 className="text-xl font-semibold">Choose a company</h1>
+        <h1 className="text-xl font-semibold">{t('Choose a company')}</h1>
         <p className="text-muted-foreground text-sm">
-          You belong to {memberships.length}. Everything you do applies to the one you pick.
+          {t('You belong to {length}. Everything you do applies to the one you pick.', {
+            length: memberships.length,
+          })}
         </p>
       </div>
 
@@ -49,7 +53,7 @@ export default function SelectCompanyPage() {
         href="/onboarding?new=1"
         className={`${buttonVariants({ variant: 'outline', size: 'sm' })} w-fit`}
       >
-        Create another company
+        {t('Create another company')}
       </Link>
     </div>
   );

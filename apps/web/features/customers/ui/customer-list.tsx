@@ -13,6 +13,7 @@ import { useCan } from '@/features/auth';
 import type { Customer, CustomerQuery, CustomerStatus } from '@/services/customers.service';
 import { useCustomers } from '../api/use-customers';
 import { CustomerForm } from './customer-form';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 
@@ -44,6 +45,7 @@ const selectClass =
  * Every filter is a server query parameter, not a client-side `.filter()`.
  */
 export function CustomerList() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<CustomerStatus | ''>('');
   const [hasVisited, setHasVisited] = useState<'' | 'true' | 'false'>('');
@@ -88,22 +90,24 @@ export function CustomerList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Customers</h2>
+          <h2 className="text-lg font-semibold">{t('Customers')}</h2>
           <p className="text-muted-foreground text-sm">
-            {customers.isPending ? 'Loading…' : `${total} ${total === 1 ? 'customer' : 'customers'}`}
+            {customers.isPending
+              ? t('Loading…')
+              : `${total} ${total === 1 ? 'customer' : 'customers'}`}
           </p>
         </div>
         {/* Hidden without the permission — the API refuses it regardless. */}
         {canWrite ? (
           <Button size="sm" onClick={() => setCreating(true)}>
-            Add customer
+            {t('Add customer')}
           </Button>
         ) : null}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="grid gap-1.5 sm:col-span-2">
-          <Label htmlFor="customer-search">Search</Label>
+          <Label htmlFor="customer-search">{t('Search')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -112,7 +116,7 @@ export function CustomerList() {
             <Input
               id="customer-search"
               value={search}
-              placeholder="Name, phone or email"
+              placeholder={t('Name, phone or email')}
               className="pl-8"
               onChange={(e) => changeFilter(() => setSearch(e.target.value))}
             />
@@ -120,14 +124,14 @@ export function CustomerList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="customer-status">Status</Label>
+          <Label htmlFor="customer-status">{t('Status')}</Label>
           <select
             id="customer-status"
             value={status}
             className={selectClass}
             onChange={(e) => changeFilter(() => setStatus(e.target.value as CustomerStatus | ''))}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {Object.entries(STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -137,7 +141,7 @@ export function CustomerList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="customer-visited">Visits</Label>
+          <Label htmlFor="customer-visited">{t('Visits')}</Label>
           <select
             id="customer-visited"
             value={hasVisited}
@@ -146,14 +150,14 @@ export function CustomerList() {
               changeFilter(() => setHasVisited(e.target.value as '' | 'true' | 'false'))
             }
           >
-            <option value="">Everyone</option>
-            <option value="true">Has visited</option>
-            <option value="false">Never visited</option>
+            <option value="">{t('Everyone')}</option>
+            <option value="true">{t('Has visited')}</option>
+            <option value="false">{t('Never visited')}</option>
           </select>
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="customer-sort">Sort by</Label>
+          <Label htmlFor="customer-sort">{t('Sort by')}</Label>
           <select
             id="customer-sort"
             value={sortBy}
@@ -173,14 +177,14 @@ export function CustomerList() {
 
       {customers.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load customers</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load customers')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {customers.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading customers…</span>
+          <span className="sr-only">{t('Loading customers…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -190,10 +194,10 @@ export function CustomerList() {
       {!customers.isPending && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {filtered ? 'Nobody matches those filters' : 'No customers yet'}
+            {filtered ? t('Nobody matches those filters') : t('No customers yet')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            {filtered ? 'Try widening the search.' : 'Add the people you book work for.'}
+            {filtered ? t('Try widening the search.') : t('Add the people you book work for.')}
           </p>
         </div>
       ) : null}
@@ -204,12 +208,24 @@ export function CustomerList() {
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Phone</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Email</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Visits</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Last visit</th>
-                <th scope="col" className="py-2 font-medium">Status</th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Name')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Phone')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Email')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Visits')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Last visit')}
+                </th>
+                <th scope="col" className="py-2 font-medium">
+                  {t('Status')}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -224,7 +240,11 @@ export function CustomerList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -233,7 +253,7 @@ export function CustomerList() {
               disabled={offset === 0 || customers.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -242,7 +262,7 @@ export function CustomerList() {
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               {customers.isFetching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
@@ -252,6 +272,7 @@ export function CustomerList() {
 }
 
 function CustomerRow({ customer }: { customer: Customer }) {
+  const t = useT();
   return (
     <tr className="border-border/40 border-b last:border-0">
       <td className="py-2 pr-3">
@@ -269,16 +290,18 @@ function CustomerRow({ customer }: { customer: Customer }) {
         {customer.totalNoShows > 0 ? (
           // Worth surfacing: it changes whether reception asks for a deposit.
           <span className="text-muted-foreground ml-1 text-xs">
-            ({customer.totalNoShows} no-show{customer.totalNoShows === 1 ? '' : 's'})
+            {customer.totalNoShows === 1
+              ? t('(1 no-show)')
+              : t('({count} no-shows)', { count: customer.totalNoShows })}
           </span>
         ) : null}
       </td>
       <td className="text-muted-foreground py-2 pr-3">
-        {customer.lastVisitAt ? new Date(customer.lastVisitAt).toLocaleDateString() : 'Never'}
+        {customer.lastVisitAt ? new Date(customer.lastVisitAt).toLocaleDateString() : t('Never')}
       </td>
       <td className="py-2">
         <Badge variant={customer.status === 'ACTIVE' ? 'default' : 'secondary'}>
-          {STATUS_LABEL[customer.status]}
+          {t(STATUS_LABEL[customer.status])}
         </Badge>
       </td>
     </tr>

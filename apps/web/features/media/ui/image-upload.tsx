@@ -13,6 +13,7 @@ import {
   type FilePurpose,
   type StoredFile,
 } from '@/services/files.service';
+import { plainT, useT } from '@/lib/i18n';
 
 export interface ImageUploadProps {
   purpose: FilePurpose;
@@ -63,6 +64,7 @@ export function ImageUpload({
   maxBytes = DEFAULT_MAX_IMAGE_BYTES,
   onChange,
 }: ImageUploadProps) {
+  const t = useT();
   const { activeCompanyId } = useSession();
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -121,7 +123,7 @@ export function ImageUpload({
     if (file.size > maxBytes) {
       setPhase({
         kind: 'failed',
-        message: `The image is larger than ${megabytes(maxBytes)}.`,
+        message: t('The image is larger than {megabytes}.', { megabytes: megabytes(maxBytes) }),
         canRetry: false,
       });
       return;
@@ -160,7 +162,7 @@ export function ImageUpload({
             // eslint-disable-next-line @next/next/no-img-element -- API-served, already sized server-side
             <img
               src={shown}
-              alt={picked ? `${label} preview` : label}
+              alt={picked ? t('{label} preview', { label }) : label}
               className="h-full w-full object-cover"
             />
           ) : (
@@ -183,7 +185,7 @@ export function ImageUpload({
                 type="file"
                 accept={ACCEPTED_IMAGE_TYPES.join(',')}
                 className="sr-only"
-                aria-label={`Choose ${label.toLowerCase()}`}
+                aria-label={t('Choose {value}', { value: label.toLowerCase() })}
                 disabled={uploading || removing}
                 onChange={(e) => {
                   choose(e.target.files?.[0]);
@@ -198,7 +200,7 @@ export function ImageUpload({
                   disabled={uploading || removing}
                   onClick={() => input.current?.click()}
                 >
-                  {fileId ? 'Replace' : 'Upload'}
+                  {fileId ? t('Replace') : t('Upload')}
                 </Button>
                 {fileId && !uploading ? (
                   <Button
@@ -209,7 +211,7 @@ export function ImageUpload({
                     onClick={() => void remove()}
                   >
                     {removing ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                    Remove
+                    {t('Remove')}
                   </Button>
                 ) : null}
                 {uploading ? (
@@ -219,7 +221,7 @@ export function ImageUpload({
                     variant="ghost"
                     onClick={() => abort.current?.abort()}
                   >
-                    Cancel
+                    {t('Cancel')}
                   </Button>
                 ) : null}
               </div>
@@ -230,7 +232,7 @@ export function ImageUpload({
             <div className="grid gap-1">
               <div
                 role="progressbar"
-                aria-label={`Uploading ${label.toLowerCase()}`}
+                aria-label={t('Uploading {value}', { value: label.toLowerCase() })}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(phase.progress * 100)}
@@ -260,7 +262,7 @@ export function ImageUpload({
                     variant="outline"
                     onClick={() => void send(picked.file)}
                   >
-                    Try again
+                    {t('Try again')}
                   </Button>
                 </div>
               ) : null}
@@ -298,7 +300,11 @@ function failure(error: unknown, fallback = 'The upload failed.'): Phase {
     }
   }
   // Network failure: worth another go.
-  return { kind: 'failed', message: `${fallback} Check your connection.`, canRetry: true };
+  return {
+    kind: 'failed',
+    message: plainT('{fallback} Check your connection.', { fallback }),
+    canRetry: true,
+  };
 }
 
 function megabytes(bytes: number): string {

@@ -9,6 +9,7 @@ import {
   useUpdateCustomerNotificationPreferences,
 } from '../api/use-notifications';
 import { notificationErrorMessage } from '../model/notification-display';
+import { useT } from '@/lib/i18n';
 
 const CHANNELS = [
   { key: 'email', label: 'Email', missing: 'No valid email address on file.' },
@@ -21,6 +22,7 @@ const CHANNELS = [
  * asks; each switch saves on its own. Not rendered without `customer:read`.
  */
 export function CustomerNotificationPreferences({ customerId }: { customerId: string }) {
+  const t = useT();
   const canRead = useCan('customer:read');
   const canWrite = useCan('customer:write');
   const preferences = useCustomerNotificationPreferences(customerId, canRead);
@@ -42,17 +44,18 @@ export function CustomerNotificationPreferences({ customerId }: { customerId: st
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notifications</CardTitle>
+        <CardTitle>{t('Notifications')}</CardTitle>
         <CardDescription>
-          Booking confirmations, reminders and gift-card messages. Company-wide switches still
-          apply.
+          {t(
+            'Booking confirmations, reminders and gift-card messages. Company-wide switches still apply.',
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2">
         {preferences.isPending ? <Skeleton className="h-16 w-full" /> : null}
         {preferences.error ? (
           <p role="alert" className="text-destructive text-sm">
-            Could not load notification preferences.
+            {t('Could not load notification preferences.')}
           </p>
         ) : null}
         {data

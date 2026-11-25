@@ -25,6 +25,7 @@ import {
   statusVariant,
   subscriptionErrorMessage,
 } from '../model/subscription-display';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 10;
 
@@ -39,6 +40,7 @@ const PAGE_SIZE = 10;
  * (features/payments); it is marked paid only when the provider confirms.
  */
 export function SubscriptionPage() {
+  const t = useT();
   const canRead = useCan('settings:billing:read');
   const canWrite = useCan('settings:billing:write');
   const overview = useSubscription();
@@ -46,15 +48,17 @@ export function SubscriptionPage() {
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see the subscription.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>
+          {t('You do not have permission to see the subscription.')}
+        </AlertDescription>
       </Alert>
     );
   }
   if (overview.isPending) {
     return (
       <div className="grid gap-4" aria-busy="true">
-        <span className="sr-only">Loading the subscription…</span>
+        <span className="sr-only">{t('Loading the subscription…')}</span>
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-60 w-full" />
       </div>
@@ -63,8 +67,8 @@ export function SubscriptionPage() {
   if (overview.error || !overview.data) {
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Could not load the subscription</AlertTitle>
-        <AlertDescription>Please try again.</AlertDescription>
+        <AlertTitle>{t('Could not load the subscription')}</AlertTitle>
+        <AlertDescription>{t('Please try again.')}</AlertDescription>
       </Alert>
     );
   }
@@ -73,10 +77,11 @@ export function SubscriptionPage() {
   return (
     <div className="grid gap-6">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Subscription</h1>
+        <h1 className="text-xl font-semibold">{t('Subscription')}</h1>
         <p className="text-muted-foreground text-sm">
-          Your plan, what it allows, and your invoices. An open invoice can be paid online; it is
-          marked paid only once the payment provider confirms it.
+          {t(
+            'Your plan, what it allows, and your invoices. An open invoice can be paid online; it is marked paid only once the payment provider confirms it.',
+          )}
         </p>
       </header>
       <CurrentPlan data={data} canWrite={canWrite} />
@@ -90,6 +95,7 @@ export function SubscriptionPage() {
 // -----------------------------------------------------------------------------
 
 function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite: boolean }) {
+  const t = useT();
   const action = useSubscriptionAction();
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
@@ -110,11 +116,11 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
     return (
       <Card>
         <CardHeader>
-          <CardTitle>No plan yet</CardTitle>
+          <CardTitle>{t('No plan yet')}</CardTitle>
           <CardDescription>
             {data.trialAvailable
-              ? 'This company has no subscription. Start a free trial of a plan below.'
-              : 'This company has no subscription.'}
+              ? t('This company has no subscription. Start a free trial of a plan below.')
+              : t('This company has no subscription.')}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -127,7 +133,7 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
         <div className="grid gap-1">
           <CardTitle className="flex flex-wrap items-center gap-2">
             {sub.plan.name}
-            <Badge variant={statusVariant(sub.status)}>{STATUS_LABEL[sub.status]}</Badge>
+            <Badge variant={statusVariant(sub.status)}>{t(STATUS_LABEL[sub.status])}</Badge>
           </CardTitle>
           <CardDescription>
             {price(sub.plan.priceMinor, sub.plan.currencyCode, sub.plan.interval)}
@@ -142,11 +148,11 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
                 onClick={() => void run(() => action.mutateAsync({ kind: 'reactivate' }))}
               >
                 {action.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                {sub.status === 'EXPIRED' ? 'Renew' : 'Keep my subscription'}
+                {sub.status === 'EXPIRED' ? t('Renew') : t('Keep my subscription')}
               </Button>
             ) : (
               <Button size="sm" variant="outline" onClick={() => setCancelling(true)}>
-                Cancel subscription
+                {t('Cancel subscription')}
               </Button>
             )}
           </div>
@@ -156,18 +162,26 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
         <dl className="grid gap-3 sm:grid-cols-3">
           {sub.trial ? (
             <Fact
-              label="Trial"
-              value={`${sub.trial.daysLeft} day${sub.trial.daysLeft === 1 ? '' : 's'} left · ends ${day(sub.trial.endsAt)}`}
+              label={t('Trial')}
+              value={t(
+                sub.trial.daysLeft === 1
+                  ? '1 day left · ends {date}'
+                  : '{days} days left · ends {date}',
+                { days: sub.trial.daysLeft, date: day(sub.trial.endsAt) },
+              )}
             />
           ) : null}
           <Fact
-            label="Billing period"
+            label={t('Billing period')}
             value={`${day(sub.currentPeriod.start)} – ${day(sub.currentPeriod.end)}`}
           />
           {data.openInvoice ? (
             <Fact
-              label="Invoice due"
-              value={`${money(data.openInvoice.totalMinor, data.openInvoice.currencyCode)} by ${day(data.openInvoice.dueAt)}`}
+              label={t('Invoice due')}
+              value={t('{amount} by {date}', {
+                amount: money(data.openInvoice.totalMinor, data.openInvoice.currencyCode),
+                date: day(data.openInvoice.dueAt),
+              })}
             />
           ) : null}
         </dl>
@@ -185,41 +199,47 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
         {sub.status === 'CANCELLED' ? (
           <Alert role="status">
             <AlertDescription>
-              Cancelled. Everything keeps working until {day(sub.currentPeriod.end)}; after that the
-              company becomes read-only. No data is deleted.
+              {t(
+                'Cancelled. Everything keeps working until {date}; after that the company becomes read-only. No data is deleted.',
+                { date: day(sub.currentPeriod.end) },
+              )}
             </AlertDescription>
           </Alert>
         ) : null}
         {sub.status === 'PAST_DUE' ? (
           <Alert role="status">
             <AlertDescription>
-              Payment is overdue. Everything keeps working until {day(sub.graceEndsAt)}; settle the
-              open invoice to avoid becoming read-only.
+              {t(
+                'Payment is overdue. Everything keeps working until {date}; settle the open invoice to avoid becoming read-only.',
+                { date: day(sub.graceEndsAt) },
+              )}
             </AlertDescription>
           </Alert>
         ) : null}
         {sub.readOnly ? (
           <Alert variant="destructive" role="alert">
-            <AlertTitle>The subscription has expired</AlertTitle>
+            <AlertTitle>{t('The subscription has expired')}</AlertTitle>
             <AlertDescription>
-              The company is read-only: everything can be viewed, nothing can be changed. All data
-              is kept. Renew or choose a plan to continue.
+              {t(
+                'The company is read-only: everything can be viewed, nothing can be changed. All data is kept. Renew or choose a plan to continue.',
+              )}
             </AlertDescription>
           </Alert>
         ) : null}
 
         {cancelling ? (
           <section
-            aria-label="Cancel subscription"
+            aria-label={t('Cancel subscription')}
             className="border-border/60 grid gap-3 rounded-lg border p-4"
           >
             <p className="text-sm">
-              The subscription ends on {day(sub.trial?.endsAt ?? sub.currentPeriod.end)}. Until then
-              nothing changes; afterwards the company is read-only until it renews. No data is
-              deleted.
+              {t(
+                'The subscription ends on {date}. Until then nothing changes; afterwards the company is read-only until it renews. No data is deleted.',
+                { date: day(sub.trial?.endsAt ?? sub.currentPeriod.end) },
+              )}
             </p>
             <div className="grid gap-1.5">
-              <Label htmlFor="cancel-reason">Reason (optional)</Label>
+              <Label htmlFor="cancel-reason">{t('Reason (optional)')}</Label>
               <Input
                 id="cancel-reason"
                 value={reason}
@@ -241,10 +261,10 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
                   )
                 }
               >
-                Cancel subscription
+                {t('Cancel subscription')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setCancelling(false)}>
-                Keep it
+                {t('Keep it')}
               </Button>
             </div>
           </section>
@@ -261,14 +281,17 @@ function CurrentPlan({ data, canWrite }: { data: SubscriptionOverview; canWrite:
 }
 
 function Usage({ data }: { data: SubscriptionOverview }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Usage</CardTitle>
-        <CardDescription>Against your plan’s limits. Updated within a minute.</CardDescription>
+        <CardTitle>{t('Usage')}</CardTitle>
+        <CardDescription>
+          {t('Against your plan’s limits. Updated within a minute.')}
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ul className="grid gap-3 sm:grid-cols-2" aria-label="Usage">
+        <ul className="grid gap-3 sm:grid-cols-2" aria-label={t('Usage')}>
           {data.usage.map((u) => {
             const ratio =
               u.limit === null || u.limit === 0
@@ -310,6 +333,7 @@ function Usage({ data }: { data: SubscriptionOverview }) {
 }
 
 function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWrite: boolean }) {
+  const t = useT();
   const action = useSubscriptionAction();
   const [choosing, setChoosing] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -318,12 +342,15 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
 
   const verb = (plan: Plan): string => {
     if (!sub)
-      return plan.trialDays > 0 ? `Start ${plan.trialDays}-day trial` : `Choose ${plan.name}`;
-    if (plan.current && sub.status === 'TRIAL') return `Subscribe to ${plan.name}`;
-    if (plan.current && sub.status === 'EXPIRED') return `Renew ${plan.name}`;
+      return plan.trialDays > 0
+        ? t('Start {trialDays}-day trial', { trialDays: plan.trialDays })
+        : t('Choose {name}', { name: plan.name });
+    if (plan.current && sub.status === 'TRIAL')
+      return t('Subscribe to {name}', { name: plan.name });
+    if (plan.current && sub.status === 'EXPIRED') return t('Renew {name}', { name: plan.name });
     return BigInt(plan.priceMinor) > currentPrice
-      ? `Upgrade to ${plan.name}`
-      : `Downgrade to ${plan.name}`;
+      ? t('Upgrade to {name}', { name: plan.name })
+      : t('Downgrade to {name}', { name: plan.name });
   };
   const isCurrent = (plan: Plan) =>
     plan.current && sub !== null && sub.status !== 'TRIAL' && sub.status !== 'EXPIRED';
@@ -346,27 +373,35 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
   return (
     <section className="grid gap-3" aria-labelledby="plans-title">
       <h2 id="plans-title" className="text-lg font-semibold">
-        Plans
+        {t('Plans')}
       </h2>
 
       {choosing ? (
-        <Alert role="alertdialog" aria-label={`Confirm ${choosing.name}`}>
+        <Alert role="alertdialog" aria-label={t('Confirm {name}', { name: choosing.name })}>
           <AlertTitle>{verb(choosing)}?</AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>
               {!sub && choosing.trialDays > 0
-                ? `A free ${choosing.trialDays}-day trial of ${choosing.name}. No invoice until you subscribe.`
+                ? t('A free {trialDays}-day trial of {name}. No invoice until you subscribe.', {
+                    trialDays: choosing.trialDays,
+                    name: choosing.name,
+                  })
                 : choosing.priceMinor === '0'
-                  ? `${choosing.name} is free. It takes effect now.`
-                  : `${price(choosing.priceMinor, choosing.currencyCode, choosing.interval)}, starting today. An invoice is issued now; any unpaid invoice for your current plan is cancelled.`}
+                  ? t('{name} is free. It takes effect now.', { name: choosing.name })
+                  : t(
+                      '{price}, starting today. An invoice is issued now; any unpaid invoice for your current plan is cancelled.',
+                      {
+                        price: price(choosing.priceMinor, choosing.currencyCode, choosing.interval),
+                      },
+                    )}
             </p>
             <div className="flex gap-2">
               <Button size="sm" disabled={action.isPending} onClick={() => void confirm(choosing)}>
                 {action.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Confirm
+                {t('Confirm')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setChoosing(null)}>
-                Back
+                {t('Back')}
               </Button>
             </div>
           </AlertDescription>
@@ -375,7 +410,7 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Plan not changed</AlertTitle>
+          <AlertTitle>{t('Plan not changed')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -385,12 +420,12 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
           <Card
             key={plan.key}
             className={plan.current ? 'ring-primary ring-2' : ''}
-            aria-label={`${plan.name} plan`}
+            aria-label={t('{name} plan', { name: plan.name })}
           >
             <CardHeader>
               <CardTitle className="flex items-center justify-between gap-2">
                 {plan.name}
-                {plan.current ? <Badge>Current</Badge> : null}
+                {plan.current ? <Badge>{t('Current')}</Badge> : null}
               </CardTitle>
               <CardDescription>{plan.description}</CardDescription>
               <p className="text-lg font-semibold tabular-nums">
@@ -405,18 +440,18 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
                     className={`flex items-center gap-2 ${plan.features[f] ? '' : 'text-muted-foreground'}`}
                   >
                     {plan.features[f] ? (
-                      <Check aria-label="Included" className="text-primary size-4" />
+                      <Check aria-label={t('Included')} className="text-primary size-4" />
                     ) : (
-                      <Minus aria-label="Not included" className="size-4" />
+                      <Minus aria-label={t('Not included')} className="size-4" />
                     )}
-                    {FEATURE_LABEL[f]}
+                    {t(FEATURE_LABEL[f])}
                   </li>
                 ))}
               </ul>
               <dl className="grid gap-0.5 text-xs">
                 {limits.map((l) => (
                   <div key={l} className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">{LIMIT_LABEL[l]}</dt>
+                    <dt className="text-muted-foreground">{t(LIMIT_LABEL[l])}</dt>
                     <dd className="tabular-nums">{limitText(plan.limits[l])}</dd>
                   </div>
                 ))}
@@ -424,7 +459,7 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
               {canWrite ? (
                 isCurrent(plan) ? (
                   <Button size="sm" variant="outline" disabled>
-                    Current plan
+                    {t('Current plan')}
                   </Button>
                 ) : (
                   <Button
@@ -448,10 +483,12 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
         ))}
       </div>
       {!canWrite ? (
-        <p className="text-muted-foreground text-xs">Only the account owner can change the plan.</p>
+        <p className="text-muted-foreground text-xs">
+          {t('Only the account owner can change the plan.')}
+        </p>
       ) : sub?.status === 'CANCELLED' ? (
         <p className="text-muted-foreground text-xs">
-          Keep your subscription first to change plans.
+          {t('Keep your subscription first to change plans.')}
         </p>
       ) : null}
     </section>
@@ -459,6 +496,7 @@ function PlanComparison({ data, canWrite }: { data: SubscriptionOverview; canWri
 }
 
 function BillingHistory() {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const invoices = useInvoices({ limit: PAGE_SIZE, offset });
   const items = invoices.data?.items ?? [];
@@ -467,17 +505,17 @@ function BillingHistory() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Billing history</CardTitle>
+        <CardTitle>{t('Billing history')}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
         {invoices.isPending ? <Skeleton className="h-24 w-full" /> : null}
         {invoices.error ? (
           <p role="alert" className="text-destructive text-sm">
-            Could not load invoices.
+            {t('Could not load invoices.')}
           </p>
         ) : null}
         {!invoices.isPending && !invoices.error && items.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No invoices yet.</p>
+          <p className="text-muted-foreground text-sm">{t('No invoices yet.')}</p>
         ) : null}
         {items.length > 0 ? (
           <div className="relative overflow-x-auto">
@@ -485,25 +523,25 @@ function BillingHistory() {
               <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
                 <tr>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Invoice
+                    {t('Invoice')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Date
+                    {t('Date')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Plan
+                    {t('Plan')}
                   </th>
                   <th scope="col" className="py-2 pr-3 text-right font-medium">
-                    Amount
+                    {t('Amount')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Currency
+                    {t('Currency')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Status
+                    {t('Status')}
                   </th>
                   <th scope="col" className="py-2 font-medium">
-                    Due
+                    {t('Due')}
                   </th>
                 </tr>
               </thead>
@@ -531,12 +569,12 @@ function BillingHistory() {
                               : 'outline'
                         }
                       >
-                        {INVOICE_STATUS_LABEL[invoice.status]}
+                        {t(INVOICE_STATUS_LABEL[invoice.status])}
                       </Badge>
                     </td>
                     <td className="text-muted-foreground py-2 whitespace-nowrap">
                       {invoice.status === 'PAID'
-                        ? `Paid ${day(invoice.paidAt)}`
+                        ? t('Paid {day}', { day: day(invoice.paidAt) })
                         : day(invoice.dueAt)}
                     </td>
                   </tr>
@@ -548,7 +586,11 @@ function BillingHistory() {
         {total > PAGE_SIZE ? (
           <div className="flex items-center justify-between gap-3">
             <p className="text-muted-foreground text-xs">
-              {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+              {t('{from}–{to} of {total}', {
+                from: offset + 1,
+                to: Math.min(offset + PAGE_SIZE, total),
+                total: total,
+              })}
             </p>
             <div className="flex gap-2">
               <Button
@@ -557,7 +599,7 @@ function BillingHistory() {
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               >
-                Previous
+                {t('Previous')}
               </Button>
               <Button
                 size="sm"
@@ -565,7 +607,7 @@ function BillingHistory() {
                 disabled={offset + PAGE_SIZE >= total}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
               >
-                Next
+                {t('Next')}
               </Button>
             </div>
           </div>

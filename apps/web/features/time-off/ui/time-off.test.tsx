@@ -210,3 +210,42 @@ describe('BookingSettingsPage', () => {
     expect(screen.getByLabelText('Minimum notice (minutes)')).toBeDisabled();
   });
 });
+
+describe('TimeOffPage time zone', () => {
+  it('reads the times as the business’s wall clock, not this device’s', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/time-off') && init?.method === 'POST') {
+        return Promise.resolve(json(envelope(entry()), 201));
+      }
+      if (url.includes('/time-off')) return Promise.resolve(json(list([])));
+      if (url.endsWith('/companies/co-1')) {
+        return Promise.resolve(
+          json(envelope({ id: 'co-1', defaultTimezoneName: 'Asia/Ulaanbaatar' })),
+        );
+      }
+      return Promise.resolve(json(employees));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<TimeOffPage />, { session: session(['timeoff:request', 'company:read']) });
+
+    expect(
+      await screen.findByText(/business’s time zone \(Asia\/Ulaanbaatar\)/),
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText('From'), '2026-11-02T09:00');
+    await user.type(screen.getByLabelText('Until'), '2026-11-02T13:00');
+    await user.click(screen.getByRole('button', { name: 'Request time off' }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([, i]) => (i as RequestInit | undefined)?.method === 'POST',
+      );
+      const body = JSON.parse(String((call![1] as RequestInit).body));
+      // 09:00 in Ulaanbaatar (UTC+8), whatever zone the test runner is in.
+      expect(body.startsAt).toBe('2026-11-02T01:00:00.000Z');
+      expect(body.endsAt).toBe('2026-11-02T05:00:00.000Z');
+    });
+  });
+});

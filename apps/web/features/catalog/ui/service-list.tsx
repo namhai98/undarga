@@ -18,6 +18,7 @@ import type { CatalogStatus, ServiceQuery, ServiceSummary } from '@/services/cat
 import { useServiceCategories, useServices } from '../api/use-catalog';
 import { ServiceForm } from './service-form';
 import { ServiceAssignments } from './service-assignments';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 
@@ -51,6 +52,7 @@ const selectClass =
  * finished admin dashboard.
  */
 export function ServiceList() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [branchId, setBranchId] = useState('');
@@ -110,9 +112,11 @@ export function ServiceList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Services</h2>
+          <h2 className="text-lg font-semibold">{t('Services')}</h2>
           <p className="text-muted-foreground text-sm">
-            {services.isPending ? 'Loading…' : `${total} ${total === 1 ? 'service' : 'services'}`}
+            {services.isPending
+              ? t('Loading…')
+              : `${total} ${total === 1 ? 'service' : 'services'}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -120,12 +124,12 @@ export function ServiceList() {
             href="/services/categories"
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
-            Categories
+            {t('Categories')}
           </Link>
           {/* Hidden without the permission — the API refuses it regardless. */}
           {canWrite ? (
             <Button size="sm" onClick={() => setEditing('new')}>
-              Add service
+              {t('Add service')}
             </Button>
           ) : null}
         </div>
@@ -133,7 +137,7 @@ export function ServiceList() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="grid gap-1.5 sm:col-span-2 lg:col-span-1">
-          <Label htmlFor="service-search">Search</Label>
+          <Label htmlFor="service-search">{t('Search')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -142,7 +146,7 @@ export function ServiceList() {
             <Input
               id="service-search"
               value={search}
-              placeholder="Name or code"
+              placeholder={t('Name or code')}
               className="pl-8"
               onChange={(e) => changeFilter(() => setSearch(e.target.value))}
             />
@@ -150,14 +154,14 @@ export function ServiceList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="service-category">Category</Label>
+          <Label htmlFor="service-category">{t('Category')}</Label>
           <select
             id="service-category"
             value={categoryId}
             className={selectClass}
             onChange={(e) => changeFilter(() => setCategoryId(e.target.value))}
           >
-            <option value="">All categories</option>
+            <option value="">{t('All categories')}</option>
             {(categories.data?.items ?? []).map((category) => (
               <option key={category.id} value={category.id}>
                 {category.parentId ? '— ' : ''}
@@ -168,14 +172,14 @@ export function ServiceList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="service-branch">Branch</Label>
+          <Label htmlFor="service-branch">{t('Branch')}</Label>
           <select
             id="service-branch"
             value={branchId}
             className={selectClass}
             onChange={(e) => changeFilter(() => setBranchId(e.target.value))}
           >
-            <option value="">All branches</option>
+            <option value="">{t('All branches')}</option>
             {(branches.data?.items ?? []).map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -185,14 +189,14 @@ export function ServiceList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="service-employee">Employee</Label>
+          <Label htmlFor="service-employee">{t('Employee')}</Label>
           <select
             id="service-employee"
             value={employeeId}
             className={selectClass}
             onChange={(e) => changeFilter(() => setEmployeeId(e.target.value))}
           >
-            <option value="">Anyone</option>
+            <option value="">{t('Anyone')}</option>
             {(employees.data?.items ?? []).map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.displayName}
@@ -202,14 +206,14 @@ export function ServiceList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="service-status">Status</Label>
+          <Label htmlFor="service-status">{t('Status')}</Label>
           <select
             id="service-status"
             value={status}
             className={selectClass}
             onChange={(e) => changeFilter(() => setStatus(e.target.value as CatalogStatus | ''))}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {Object.entries(STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -221,7 +225,7 @@ export function ServiceList() {
         <div className="grid gap-1.5">
           {/* Bookable at all is `status`; this is only whether the PUBLIC site
               shows it. An internal-only service is active and not listed. */}
-          <Label htmlFor="service-bookable">Online booking</Label>
+          <Label htmlFor="service-bookable">{t('Online booking')}</Label>
           <select
             id="service-bookable"
             value={bookable}
@@ -230,14 +234,14 @@ export function ServiceList() {
               changeFilter(() => setBookable(e.target.value as '' | 'true' | 'false'))
             }
           >
-            <option value="">Any</option>
-            <option value="true">Listed publicly</option>
-            <option value="false">Internal only</option>
+            <option value="">{t('Any')}</option>
+            <option value="true">{t('Listed publicly')}</option>
+            <option value="false">{t('Internal only')}</option>
           </select>
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="service-sort">Sort by</Label>
+          <Label htmlFor="service-sort">{t('Sort by')}</Label>
           <select
             id="service-sort"
             value={sortBy}
@@ -257,14 +261,14 @@ export function ServiceList() {
 
       {services.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load services</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load services')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {services.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading services…</span>
+          <span className="sr-only">{t('Loading services…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -274,10 +278,10 @@ export function ServiceList() {
       {!services.isPending && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {filtered ? 'Nothing matches those filters' : 'No services yet'}
+            {filtered ? t('Nothing matches those filters') : t('No services yet')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            {filtered ? 'Try widening the search.' : 'Add the things customers can book.'}
+            {filtered ? t('Try widening the search.') : t('Add the things customers can book.')}
           </p>
         </div>
       ) : null}
@@ -288,15 +292,29 @@ export function ServiceList() {
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Category</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Duration</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Price</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Offered at</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Online</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Status</th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Name')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Category')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Duration')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Price')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Offered at')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Online')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Status')}
+                </th>
                 <th scope="col" className="py-2 font-medium">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('Actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -318,7 +336,11 @@ export function ServiceList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -327,7 +349,7 @@ export function ServiceList() {
               disabled={offset === 0 || services.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -336,7 +358,7 @@ export function ServiceList() {
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               {services.isFetching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
@@ -356,6 +378,7 @@ function ServiceRow({
   onEdit: () => void;
   onAssign: () => void;
 }) {
+  const t = useT();
   const buffers = service.bufferBeforeMin + service.bufferAfterMin;
 
   return (
@@ -368,12 +391,12 @@ function ServiceRow({
       </td>
       <td className="text-muted-foreground py-2 pr-3">{service.categoryName ?? '—'}</td>
       <td className="py-2 pr-3">
-        {service.durationMin} min
+        {t('{minutes} min', { minutes: service.durationMin })}
         {buffers > 0 ? (
           // The window a booking actually occupies, which is what the calendar
           // will block out — not the same number as the duration sold.
           <span className="text-muted-foreground ml-1 text-xs">
-            (+{buffers} buffer)
+            {t('(+{buffers} buffer)', { buffers })}
           </span>
         ) : null}
       </td>
@@ -387,30 +410,30 @@ function ServiceRow({
         {service.branchCount === 0 ? (
           // Not pedantry: a service assigned to no branch cannot be booked
           // anywhere, and nothing else on this screen would say so.
-          <span className="text-amber-600 dark:text-amber-500">No branches</span>
+          <span className="text-amber-600 dark:text-amber-500">{t('No branches')}</span>
         ) : (
           `${service.branchCount} ${service.branchCount === 1 ? 'branch' : 'branches'}`
         )}
       </td>
       <td className="py-2 pr-3">
         {service.isOnlineBookable ? (
-          <Badge variant="secondary">Listed</Badge>
+          <Badge variant="secondary">{t('Listed')}</Badge>
         ) : (
-          <span className="text-muted-foreground">Internal</span>
+          <span className="text-muted-foreground">{t('Internal')}</span>
         )}
       </td>
       <td className="py-2 pr-3">
         <Badge variant={service.status === 'ACTIVE' ? 'default' : 'secondary'}>
-          {STATUS_LABEL[service.status]}
+          {t(STATUS_LABEL[service.status])}
         </Badge>
       </td>
       <td className="py-2 text-right whitespace-nowrap">
         <Button variant="ghost" size="sm" onClick={onAssign}>
-          {canWrite ? 'Assign' : 'View'}
+          {canWrite ? t('Assign') : t('View')}
         </Button>
         {canWrite ? (
           <Button variant="ghost" size="sm" onClick={onEdit}>
-            Edit
+            {t('Edit')}
           </Button>
         ) : null}
       </td>

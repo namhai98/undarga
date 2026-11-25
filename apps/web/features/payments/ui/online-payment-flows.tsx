@@ -28,11 +28,13 @@ import {
   useStartPublicPayment,
 } from '../api/use-online-payments';
 import { OnlineCheckout, money } from './online-checkout';
+import { useT } from '@/lib/i18n';
 
 /** What a start failure means to the person looking at the button. */
 function startError(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code === 'PAYMENTS_UNAVAILABLE') return 'Online payments are not available right now.';
+    if (error.code === 'PAYMENTS_UNAVAILABLE')
+      return 'Online payments are not available right now.';
     if (error.code === 'PAYMENT_PROVIDER_ERROR') {
       return 'The payment provider did not respond. Please try again in a moment.';
     }
@@ -70,6 +72,7 @@ export function AppointmentOnlinePayment({
   appointmentId: string;
   canRefund?: boolean;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +87,10 @@ export function AppointmentOnlinePayment({
   const begin = async () => {
     setError(null);
     try {
-      const started = await start.mutateAsync({ appointmentId, idempotencyKey: newIdempotencyKey() });
+      const started = await start.mutateAsync({
+        appointmentId,
+        idempotencyKey: newIdempotencyKey(),
+      });
       setId(started.id);
     } catch (caught) {
       setError(startError(caught));
@@ -94,30 +100,35 @@ export function AppointmentOnlinePayment({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Online payment</CardTitle>
+        <CardTitle>{t('Online payment')}</CardTitle>
         <CardDescription>
-          The customer pays with their bank app or card on the provider&rsquo;s page. The
-          appointment is marked paid only when the provider confirms it.
+          {t(
+            'The customer pays with their bank app or card on the provider&rsquo;s page. The appointment is marked paid only when the provider confirms it.',
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {error ? (
           <Alert variant="destructive" role="alert">
-            <AlertTitle>Could not start the payment</AlertTitle>
+            <AlertTitle>{t('Could not start the payment')}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
 
         {!id ? (
           <Button className="w-fit" disabled={start.isPending} onClick={() => void begin()}>
-            {start.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CreditCard aria-hidden />}
-            Collect online payment
+            {start.isPending ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <CreditCard aria-hidden />
+            )}
+            {t('Collect online payment')}
           </Button>
         ) : payment.isPending ? (
           <Skeleton className="h-40 w-full" />
         ) : payment.error || !payment.data ? (
           <Alert variant="destructive" role="alert">
-            <AlertDescription>Could not load the payment status.</AlertDescription>
+            <AlertDescription>{t('Could not load the payment status.')}</AlertDescription>
           </Alert>
         ) : (
           <OnlineCheckout
@@ -147,6 +158,7 @@ export function AppointmentOnlinePayment({
 
 /** Full refund through the provider, with a reason and a confirmation step. */
 function RefundForm({ paymentId, payment }: { paymentId: string; payment: OnlinePaymentBase }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +167,7 @@ function RefundForm({ paymentId, payment }: { paymentId: string; payment: Online
   if (!confirming) {
     return (
       <Button variant="outline" size="sm" className="w-fit" onClick={() => setConfirming(true)}>
-        Refund
+        {t('Refund')}
       </Button>
     );
   }
@@ -163,7 +175,7 @@ function RefundForm({ paymentId, payment }: { paymentId: string; payment: Online
   return (
     <div className="border-border/60 grid gap-3 rounded-lg border p-3">
       <p className="text-sm font-medium">
-        Refund {money(payment.amountMinor, payment.currencyCode)} to the payer?
+        {t('Refund')} {money(payment.amountMinor, payment.currencyCode)} {t('to the payer?')}
       </p>
       {error ? (
         <p role="alert" className="text-destructive text-sm">
@@ -171,8 +183,13 @@ function RefundForm({ paymentId, payment }: { paymentId: string; payment: Online
         </p>
       ) : null}
       <div className="grid gap-1.5">
-        <Label htmlFor="refund-reason">Reason</Label>
-        <Input id="refund-reason" value={reason} maxLength={512} onChange={(e) => setReason(e.target.value)} />
+        <Label htmlFor="refund-reason">{t('Reason')}</Label>
+        <Input
+          id="refund-reason"
+          value={reason}
+          maxLength={512}
+          onChange={(e) => setReason(e.target.value)}
+        />
       </div>
       <div className="flex gap-2">
         <Button
@@ -181,16 +198,20 @@ function RefundForm({ paymentId, payment }: { paymentId: string; payment: Online
           disabled={reason.trim().length < 3 || refund.isPending}
           onClick={() => {
             setError(null);
-            refund.mutateAsync({ id: paymentId, reason: reason.trim() }).catch((caught: unknown) => {
-              setError(caught instanceof ApiError ? caught.message : 'The refund did not go through.');
-            });
+            refund
+              .mutateAsync({ id: paymentId, reason: reason.trim() })
+              .catch((caught: unknown) => {
+                setError(
+                  caught instanceof ApiError ? caught.message : t('The refund did not go through.'),
+                );
+              });
           }}
         >
           {refund.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Confirm refund
+          {t('Confirm refund')}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-          Keep the payment
+          {t('Keep the payment')}
         </Button>
       </div>
     </div>
@@ -212,6 +233,7 @@ export function InvoiceOnlinePayment({
   amountMinor: string;
   currencyCode: string;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -237,15 +259,19 @@ export function InvoiceOnlinePayment({
     <div className="grid gap-4">
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not start the payment</AlertTitle>
+          <AlertTitle>{t('Could not start the payment')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {!id ? (
         <Button className="w-fit" disabled={pay.isPending} onClick={() => void begin()}>
-          {pay.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CreditCard aria-hidden />}
-          Pay {invoiceNumber} — {money(amountMinor, currencyCode)}
+          {pay.isPending ? (
+            <Loader2 className="animate-spin" aria-hidden />
+          ) : (
+            <CreditCard aria-hidden />
+          )}
+          {t('Pay')} {invoiceNumber} — {money(amountMinor, currencyCode)}
         </Button>
       ) : payment.data ? (
         <div className="border-border/60 rounded-lg border p-4">
@@ -275,6 +301,7 @@ export function InvoiceOnlinePayment({
 // =============================================================================
 
 export function PublicBookingPayment({ slug, offer }: { slug: string; offer: PublicPaymentOffer }) {
+  const t = useT();
   const [id, setId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,25 +323,30 @@ export function PublicBookingPayment({ slug, offer }: { slug: string; offer: Pub
     <div className="grid gap-3">
       <div className="grid gap-1">
         <p className="text-sm font-medium">
-          {offer.purpose === 'DEPOSIT' ? 'Pay the deposit now' : 'Pay now'}
+          {offer.purpose === 'DEPOSIT' ? t('Pay the deposit now') : t('Pay now')}
         </p>
         <p className="text-muted-foreground text-xs">
-          Optional — your booking is confirmed either way. You pay on the provider&rsquo;s secure
-          page or with your bank app; we never see your card details.
+          {t(
+            'Optional — your booking is confirmed either way. You pay on the provider&rsquo;s secure page or with your bank app; we never see your card details.',
+          )}
         </p>
       </div>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not start the payment</AlertTitle>
+          <AlertTitle>{t('Could not start the payment')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {!id ? (
         <Button className="w-fit" disabled={start.isPending} onClick={() => void begin()}>
-          {start.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CreditCard aria-hidden />}
-          Pay {money(offer.amountMinor, offer.currencyCode)}
+          {start.isPending ? (
+            <Loader2 className="animate-spin" aria-hidden />
+          ) : (
+            <CreditCard aria-hidden />
+          )}
+          {t('Pay')} {money(offer.amountMinor, offer.currencyCode)}
         </Button>
       ) : payment.data ? (
         <OnlineCheckout

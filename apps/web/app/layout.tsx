@@ -1,11 +1,17 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import { LOCALE_COOKIE, parseLocale } from '@/lib/i18n';
+import { getT } from '@/lib/i18n/server';
 import { AppProviders } from '@/providers';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'Undarga — Booking Platform',
-  description: 'Multi-tenant booking platform for companies with multiple branches.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t('Undarga — Booking Platform'),
+    description: t('Multi-tenant booking platform for companies with multiple branches.'),
+  };
+}
 
 /**
  * Root layout — a Server Component.
@@ -20,11 +26,14 @@ export const metadata: Metadata = {
  * Fonts come from the system stack defined in globals.css rather than
  * next/font/google — see the note there.
  */
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  // The language is a cookie so the server renders the same words the
+  // browser will: no flash of English, no hydration mismatch.
+  const locale = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang={locale} className="h-full antialiased">
       <body className="bg-background text-foreground min-h-full">
-        <AppProviders>{children}</AppProviders>
+        <AppProviders locale={locale}>{children}</AppProviders>
       </body>
     </html>
   );

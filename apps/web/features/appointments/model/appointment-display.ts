@@ -1,4 +1,5 @@
 import type { AppointmentStatus, StatusAction } from '@/services/appointments.service';
+import { plainT, type Translate } from '@/lib/i18n/translate';
 import { ApiError } from '@/services/api-error';
 
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
@@ -65,68 +66,103 @@ export function todayIso(offsetDays = 0): string {
   ).padStart(2, '0')}`;
 }
 
-/** Human copy for the errors a booking screen should explain, not just show. */
-export function bookingErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ApiError)) return fallback;
+/**
+ * Human copy for the errors a booking screen should explain, not just show.
+ * `t` translates it; the server's own sentences (`error.message`) stay as sent.
+ */
+export function bookingErrorMessage(
+  error: unknown,
+  fallback: string,
+  t: Translate = plainT,
+): string {
+  if (!(error instanceof ApiError)) return t(fallback);
   switch (error.code) {
     case 'SLOT_TAKEN':
-      return 'Someone booked that time a moment ago. The list has been refreshed — please pick another slot.';
+      return t(
+        'Someone booked that time a moment ago. The list has been refreshed — please pick another slot.',
+      );
     case 'SLOT_UNAVAILABLE': {
       // A rule or an absence: the server's sentence says which, in plain words.
       const reason = typeof error.details?.reason === 'string' ? error.details.reason : '';
       return SLOT_REASON_MESSAGE[reason]
-        ? SLOT_REASON_MESSAGE[reason](error.details ?? {})
-        : 'That time is no longer available. The list has been refreshed — please pick another slot.';
+        ? SLOT_REASON_MESSAGE[reason](error.details ?? {}, t)
+        : t(
+            'That time is no longer available. The list has been refreshed — please pick another slot.',
+          );
     }
     case 'BOOKING_RULE_VIOLATION':
     case 'TIME_OFF_CONFLICT':
     case 'SERIES_CONFLICT':
       return error.message;
     case 'INVALID_STATUS_TRANSITION':
-      return 'This appointment has changed since you opened it. Reload to see its current status.';
+      return t(
+        'This appointment has changed since you opened it. Reload to see its current status.',
+      );
     case 'SERVICE_NOT_BOOKABLE':
-      return 'This service is not currently bookable.';
+      return t('This service is not currently bookable.');
     case 'PROMOTION_NOT_APPLICABLE':
-      return `The promotion code could not be applied: ${error.message} Nothing was booked.`;
+      return t('The promotion code could not be applied: {reason} Nothing was booked.', {
+        reason: error.message,
+      });
     case 'VALIDATION_FAILED':
     case 'RESOURCE_NOT_FOUND':
       return error.message;
     default:
-      return fallback;
+      return t(fallback);
   }
 }
 
-const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+/** "1 day" / "{count} days" — English needs the two forms, Mongolian maps both. */
+const UNIT = {
+  day: ['1 day', '{count} days'],
+  hour: ['1 hour', '{count} hours'],
+  minute: ['1 minute', '{count} minutes'],
+  week: ['1 week', '{count} weeks'],
+  month: ['1 month', '{count} months'],
+  time: ['1 time', '{count} times'],
+} as const;
+
+const plural = (n: number, unit: keyof typeof UNIT, t: Translate) =>
+  n === 1 ? t(UNIT[unit][0]) : t(UNIT[unit][1], { count: n });
 
 /** Notice in the largest whole unit: 90 → "90 minutes", 1440 → "1 day". */
-export function describeNotice(minutes: number): string {
-  if (minutes > 0 && minutes % 1440 === 0) return plural(minutes / 1440, 'day');
-  if (minutes > 0 && minutes % 60 === 0) return plural(minutes / 60, 'hour');
-  return plural(minutes, 'minute');
+export function describeNotice(minutes: number, t: Translate = plainT): string {
+  if (minutes > 0 && minutes % 1440 === 0) return plural(minutes / 1440, 'day', t);
+  if (minutes > 0 && minutes % 60 === 0) return plural(minutes / 60, 'hour', t);
+  return plural(minutes, 'minute', t);
 }
 
 /** Why a time cannot be booked — the reasons the server reports in `details.reason`. */
-const SLOT_REASON_MESSAGE: Record<string, (d: Record<string, unknown>) => string> = {
-  MINIMUM_NOTICE: (d) =>
+const SLOT_REASON_MESSAGE: Record<string, (d: Record<string, unknown>, t: Translate) => string> = {
+  MINIMUM_NOTICE: (d, t) =>
     typeof d.minimumNoticeMinutes === 'number'
-      ? `That time is too soon. Bookings need at least ${describeNotice(d.minimumNoticeMinutes)} notice.`
-      : 'That time is too soon: bookings need more notice.',
-  BEYOND_BOOKING_WINDOW: (d) =>
+      ? t('That time is too soon. Bookings need at least {notice} notice.', {
+          notice: describeNotice(d.minimumNoticeMinutes, t),
+        })
+      : t('That time is too soon: bookings need more notice.'),
+  BEYOND_BOOKING_WINDOW: (d, t) =>
     typeof d.maximumAdvanceDays === 'number'
-      ? `That date is too far ahead. Bookings open ${plural(d.maximumAdvanceDays, 'day')} in advance.`
-      : 'That date is too far ahead to book yet.',
-  DATE_IN_PAST: () => 'That time has already passed.',
-  EMPLOYEE_TIME_OFF: () => 'The chosen staff member is away (time off) at that time.',
-  EMPLOYEE_NOT_AVAILABLE: () => 'The chosen staff member is not available at that time.',
-  RESOURCE_UNAVAILABLE: () =>
-    'The room or equipment this service needs is unavailable at that time (maintenance or blocked).',
-  RESOURCE_NOT_AVAILABLE: () => 'No room or equipment this service needs is free at that time.',
-  MAX_CONCURRENT_BOOKINGS: (d) =>
+      ? t('That date is too far ahead. Bookings open {days} in advance.', {
+          days: plural(d.maximumAdvanceDays, 'day', t),
+        })
+      : t('That date is too far ahead to book yet.'),
+  DATE_IN_PAST: (_d, t) => t('That time has already passed.'),
+  EMPLOYEE_TIME_OFF: (_d, t) => t('The chosen staff member is away (time off) at that time.'),
+  EMPLOYEE_NOT_AVAILABLE: (_d, t) => t('The chosen staff member is not available at that time.'),
+  RESOURCE_UNAVAILABLE: (_d, t) =>
+    t(
+      'The room or equipment this service needs is unavailable at that time (maintenance or blocked).',
+    ),
+  RESOURCE_NOT_AVAILABLE: (_d, t) =>
+    t('No room or equipment this service needs is free at that time.'),
+  MAX_CONCURRENT_BOOKINGS: (d, t) =>
     typeof d.maxConcurrentBookings === 'number'
-      ? `This service is fully booked at that time (at most ${d.maxConcurrentBookings} at once).`
-      : 'This service is fully booked at that time.',
-  BRANCH_CLOSED: () => 'The branch is closed at that time.',
-  NO_ELIGIBLE_EMPLOYEE: () => 'Nobody who provides this service is free at that time.',
+      ? t('This service is fully booked at that time (at most {max} at once).', {
+          max: d.maxConcurrentBookings,
+        })
+      : t('This service is fully booked at that time.'),
+  BRANCH_CLOSED: (_d, t) => t('The branch is closed at that time.'),
+  NO_ELIGIBLE_EMPLOYEE: (_d, t) => t('Nobody who provides this service is free at that time.'),
 };
 
 /** The deadline rule a refused cancel / reschedule hit, if any. */
@@ -136,27 +172,41 @@ export function ruleViolation(error: unknown): string | null {
 }
 
 /** Plain words for a series occurrence that cannot be booked. */
-export function occurrenceReason(reason: string | null, message: string | null): string {
-  if (reason && SLOT_REASON_MESSAGE[reason]) return SLOT_REASON_MESSAGE[reason]({});
-  if (reason === 'SLOT_TAKEN') return 'Already booked at that time.';
-  return message ?? 'Cannot be booked.';
+export function occurrenceReason(
+  reason: string | null,
+  message: string | null,
+  t: Translate = plainT,
+): string {
+  if (reason && SLOT_REASON_MESSAGE[reason]) return SLOT_REASON_MESSAGE[reason]({}, t);
+  if (reason === 'SLOT_TAKEN') return t('Already booked at that time.');
+  return message ?? t('Cannot be booked.');
 }
 
 export const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
-export function describeRecurrence(r: {
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
-  interval: number;
-  weekdays: number[];
-  endDate: string | null;
-  count: number | null;
-}): string {
-  const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month' }[r.frequency];
-  const every = r.interval === 1 ? `Every ${unit}` : `Every ${r.interval} ${unit}s`;
+export function describeRecurrence(
+  r: {
+    frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    interval: number;
+    weekdays: number[];
+    endDate: string | null;
+    count: number | null;
+  },
+  t: Translate = plainT,
+): string {
+  const unit = ({ DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month' } as const)[r.frequency];
+  const every =
+    r.interval === 1
+      ? t({ day: 'Every day', week: 'Every week', month: 'Every month' }[unit])
+      : t('Every {every}', { every: plural(r.interval, unit, t) });
   const days =
     r.frequency === 'WEEKLY' && r.weekdays.length
-      ? ` on ${r.weekdays.map((d) => WEEKDAY_SHORT[d]).join(', ')}`
+      ? t(' on {days}', { days: r.weekdays.map((d) => t(WEEKDAY_SHORT[d] ?? '')).join(', ') })
       : '';
-  const end = r.endDate ? `, until ${r.endDate}` : r.count ? `, ${plural(r.count, 'time')}` : '';
-  return `${every}${days}${end}`;
+  const end = r.endDate
+    ? t(', until {date}', { date: r.endDate })
+    : r.count
+      ? ', ' + plural(r.count, 'time', t)
+      : '';
+  return every + days + end;
 }

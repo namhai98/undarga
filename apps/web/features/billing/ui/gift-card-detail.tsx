@@ -27,6 +27,7 @@ import {
   todayInputValue,
 } from '../model/gift-card-display';
 import { CustomerPicker, type PickedCustomer } from './customer-picker';
+import { useT } from '@/lib/i18n';
 
 const LEDGER_PAGE = 20;
 
@@ -45,6 +46,7 @@ function newIdempotencyKey(): string {
  * than being subtracted here.
  */
 export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
+  const t = useT();
   const card = useGiftCard(giftCardId);
   const [panel, setPanel] = useState<Panel>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
   if (card.isPending) {
     return (
       <div className="grid gap-4" aria-busy="true">
-        <span className="sr-only">Loading gift card…</span>
+        <span className="sr-only">{t('Loading gift card…')}</span>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -70,12 +72,12 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
         <BackLink />
         <Alert variant={missing ? 'default' : 'destructive'} role="alert">
           <AlertTitle>
-            {missing ? 'Gift card not found' : 'Could not load this gift card'}
+            {missing ? t('Gift card not found') : t('Could not load this gift card')}
           </AlertTitle>
           <AlertDescription>
             {missing
-              ? 'It may belong to another company, or the link is wrong.'
-              : 'Please try again.'}
+              ? t('It may belong to another company, or the link is wrong.')
+              : t('Please try again.')}
           </AlertDescription>
         </Alert>
       </div>
@@ -97,10 +99,10 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold">
-              Gift card <span className="font-mono">••••-{data.last4}</span>
+              {t('Gift card')} <span className="font-mono">••••-{data.last4}</span>
             </h1>
             <Badge variant={giftCardStatusVariant(data.status)}>
-              {GIFT_CARD_STATUS_LABEL[data.status]}
+              {t(GIFT_CARD_STATUS_LABEL[data.status])}
             </Badge>
           </div>
           {!data.isRedeemable && data.problem ? (
@@ -111,17 +113,17 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
         <div className="flex flex-wrap gap-2">
           {canRedeem && data.isRedeemable ? (
             <Button size="sm" onClick={() => setPanel('redeem')}>
-              Redeem
+              {t('Redeem')}
             </Button>
           ) : null}
           {canIssue && !closed ? (
             <Button size="sm" variant="outline" onClick={() => setPanel('edit')}>
-              Edit
+              {t('Edit')}
             </Button>
           ) : null}
           {canIssue && !closed && data.status !== 'DISABLED' ? (
             <Button size="sm" variant="outline" onClick={() => setPanel('disable')}>
-              Disable
+              {t('Disable')}
             </Button>
           ) : null}
           {canAdjust && data.status === 'DISABLED' ? (
@@ -134,7 +136,7 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
               className="text-destructive"
               onClick={() => setPanel('void')}
             >
-              Void
+              {t('Void')}
             </Button>
           ) : null}
         </div>
@@ -175,43 +177,45 @@ export function GiftCardDetail({ giftCardId }: { giftCardId: string }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Balance</CardTitle>
+          <CardTitle>{t('Balance')}</CardTitle>
           <CardDescription>
-            Moves only through the ledger below — never edited directly.
+            {t('Moves only through the ledger below — never edited directly.')}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-3">
-            <Detail label="Current balance">
+            <Detail label={t('Current balance')}>
               <span className="text-2xl font-semibold tabular-nums">
                 {giftCardMoney(data.currentBalanceMinor, data.currencyCode)}
               </span>
             </Detail>
-            <Detail label="Initial balance">
+            <Detail label={t('Initial balance')}>
               <span className="tabular-nums">
                 {giftCardMoney(data.initialBalanceMinor, data.currencyCode)}
               </span>
             </Detail>
-            <Detail label="Currency">{data.currencyCode}</Detail>
-            <Detail label="Status">{GIFT_CARD_STATUS_LABEL[data.status]}</Detail>
-            <Detail label="Expiry">
-              {data.expiresAt ? new Date(data.expiresAt).toLocaleDateString() : 'Never expires'}
+            <Detail label={t('Currency')}>{data.currencyCode}</Detail>
+            <Detail label={t('Status')}>{t(GIFT_CARD_STATUS_LABEL[data.status])}</Detail>
+            <Detail label={t('Expiry')}>
+              {data.expiresAt ? new Date(data.expiresAt).toLocaleDateString() : t('Never expires')}
             </Detail>
-            <Detail label="Customer">
+            <Detail label={t('Customer')}>
               {data.issuedToCustomerId ? (
                 <Link href={`/customers/${data.issuedToCustomerId}`} className="hover:underline">
-                  {data.issuedToName ?? 'Customer'}
+                  {data.issuedToName ?? t('Customer')}
                 </Link>
               ) : (
-                <span className="text-muted-foreground">Not assigned</span>
+                <span className="text-muted-foreground">{t('Not assigned')}</span>
               )}
             </Detail>
-            {data.recipientName ? <Detail label="Recipient">{data.recipientName}</Detail> : null}
-            <Detail label="Issued">
+            {data.recipientName ? (
+              <Detail label={t('Recipient')}>{data.recipientName}</Detail>
+            ) : null}
+            <Detail label={t('Issued')}>
               {data.issuedAt ? new Date(data.issuedAt).toLocaleDateString() : '—'}
             </Detail>
             {data.status === 'DISABLED' && data.disabledReason ? (
-              <Detail label="Disabled because">{data.disabledReason}</Detail>
+              <Detail label={t('Disabled because')}>{data.disabledReason}</Detail>
             ) : null}
           </dl>
         </CardContent>
@@ -233,6 +237,7 @@ function RedeemPanel({
   onDone: (message: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const format = currencyFormat(card.currencyCode);
   const actions = useGiftCardActions(card.id);
   const [amount, setAmount] = useState('');
@@ -248,7 +253,7 @@ function RedeemPanel({
   const submit = async () => {
     setError(null);
     if (parsed === null || !valid) {
-      setError('Enter an amount.');
+      setError(t('Enter an amount.'));
       return;
     }
     try {
@@ -258,8 +263,12 @@ function RedeemPanel({
         idempotencyKey: key,
       });
       onDone(
-        `Redeemed ${giftCardMoney(parsed, card.currencyCode)}. ` +
-          `Balance now ${giftCardMoney(result.card.currentBalanceMinor, card.currencyCode)}.`,
+        t('Redeemed {giftCardMoney}. ', {
+          giftCardMoney: giftCardMoney(parsed, card.currencyCode),
+        }) +
+          t('Balance now {giftCardMoney}.', {
+            giftCardMoney: giftCardMoney(result.card.currentBalanceMinor, card.currencyCode),
+          }),
       );
     } catch (caught) {
       setError(giftCardErrorMessage(caught, 'Could not redeem the card.'));
@@ -267,10 +276,12 @@ function RedeemPanel({
   };
 
   return (
-    <Panel title="Redeem" error={error}>
+    <Panel title={t('Redeem')} error={error}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor="redeem-amount">Amount ({card.currencyCode})</Label>
+          <Label htmlFor="redeem-amount">
+            {t('Amount ({currencyCode})', { currencyCode: card.currencyCode })}
+          </Label>
           <Input
             id="redeem-amount"
             inputMode="decimal"
@@ -279,11 +290,11 @@ function RedeemPanel({
             onChange={(e) => setAmount(e.target.value)}
           />
           <p className="text-muted-foreground text-xs">
-            Up to {giftCardMoney(card.currentBalanceMinor, card.currencyCode)}.
+            {t('Up to')} {giftCardMoney(card.currentBalanceMinor, card.currencyCode)}.
           </p>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="redeem-note">Note</Label>
+          <Label htmlFor="redeem-note">{t('Note')}</Label>
           <Input
             id="redeem-note"
             value={note}
@@ -293,7 +304,7 @@ function RedeemPanel({
         </div>
       </div>
       <PanelButtons
-        label="Redeem"
+        label={t('Redeem')}
         pending={actions.redeem.isPending}
         disabled={!valid}
         onSubmit={() => void submit()}
@@ -312,6 +323,7 @@ function EditPanel({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const actions = useGiftCardActions(card.id);
   const [customer, setCustomer] = useState<PickedCustomer | null>(
     card.issuedToCustomerId
@@ -328,7 +340,7 @@ function EditPanel({
     const originalDay = card.expiresAt ? card.expiresAt.slice(0, 10) : '';
     const expiryChanged = neverExpires ? card.expiresAt !== null : expiresOn !== originalDay;
     if (!neverExpires && !expiresOn) {
-      setError('Choose an expiry date, or tick “Never expires”.');
+      setError(t('Choose an expiry date, or tick “Never expires”.'));
       return;
     }
     try {
@@ -346,11 +358,11 @@ function EditPanel({
   };
 
   return (
-    <Panel title="Edit gift card" error={error}>
+    <Panel title={t('Edit gift card')} error={error}>
       <div className="grid gap-4 sm:grid-cols-2">
         <CustomerPicker id="edit-customer" value={customer} onChange={setCustomer} />
         <div className="grid gap-1.5">
-          <Label htmlFor="edit-recipient">Recipient name</Label>
+          <Label htmlFor="edit-recipient">{t('Recipient name')}</Label>
           <Input
             id="edit-recipient"
             value={recipientName}
@@ -359,7 +371,7 @@ function EditPanel({
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="edit-expires">Expires</Label>
+          <Label htmlFor="edit-expires">{t('Expires')}</Label>
           <Input
             id="edit-expires"
             type="date"
@@ -374,15 +386,15 @@ function EditPanel({
               checked={neverExpires}
               onChange={(e) => setNeverExpires(e.target.checked)}
             />
-            Never expires
+            {t('Never expires')}
           </label>
         </div>
       </div>
       <p className="text-muted-foreground text-xs">
-        The balance and currency cannot be edited. To correct a balance, use an adjustment.
+        {t('The balance and currency cannot be edited. To correct a balance, use an adjustment.')}
       </p>
       <PanelButtons
-        label="Save"
+        label={t('Save')}
         pending={actions.update.isPending}
         onSubmit={() => void submit()}
         onCancel={onCancel}
@@ -402,6 +414,7 @@ function ReasonPanel({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const actions = useGiftCardActions(card.id);
   const pending = action === 'disable' ? actions.disable.isPending : actions.void.isPending;
   const [reason, setReason] = useState('');
@@ -414,7 +427,7 @@ function ReasonPanel({
       else await actions.void.mutateAsync(reason.trim());
       onDone();
     } catch (caught) {
-      setError(giftCardErrorMessage(caught, `Could not ${action} the card.`));
+      setError(giftCardErrorMessage(caught, t('Could not {action} the card.', { action })));
     }
   };
 
@@ -422,11 +435,14 @@ function ReasonPanel({
     <Panel title={action === 'disable' ? 'Disable this card?' : 'Void this card?'} error={error}>
       <p className="text-sm">
         {action === 'disable'
-          ? 'It cannot be used until it is re-enabled. Its balance is kept.'
-          : `The remaining balance (${giftCardMoney(card.currentBalanceMinor, card.currencyCode)}) is written off and the card can never be used again. To stop it temporarily, disable it instead.`}
+          ? t('It cannot be used until it is re-enabled. Its balance is kept.')
+          : t(
+              'The remaining balance ({giftCardMoney}) is written off and the card can never be used again. To stop it temporarily, disable it instead.',
+              { giftCardMoney: giftCardMoney(card.currentBalanceMinor, card.currencyCode) },
+            )}
       </p>
       <div className="grid gap-1.5">
-        <Label htmlFor={`${action}-reason`}>Reason</Label>
+        <Label htmlFor={`${action}-reason`}>{t('Reason')}</Label>
         <Input
           id={`${action}-reason`}
           value={reason}
@@ -448,6 +464,7 @@ function ReasonPanel({
 }
 
 function EnableButton({ card, onDone }: { card: GiftCard; onDone: () => void }) {
+  const t = useT();
   const actions = useGiftCardActions(card.id);
   const [error, setError] = useState<string | null>(null);
 
@@ -467,7 +484,7 @@ function EnableButton({ card, onDone }: { card: GiftCard; onDone: () => void }) 
         }}
       >
         {actions.enable.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Re-enable
+        {t('Re-enable')}
       </Button>
       {error ? (
         <p role="alert" className="text-destructive w-full text-sm">
@@ -489,6 +506,7 @@ function Ledger({
   canRefund: boolean;
   onRefunded: (message: string) => void;
 }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const [refunding, setRefunding] = useState<GiftCardTransaction | null>(null);
   const transactions = useGiftCardTransactions(card.id, { limit: LEDGER_PAGE, offset });
@@ -498,9 +516,9 @@ function Ledger({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Transactions</CardTitle>
+        <CardTitle>{t('Transactions')}</CardTitle>
         <CardDescription>
-          Append-only. Every balance change is a row here, with the balance it left.
+          {t('Append-only. Every balance change is a row here, with the balance it left.')}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
@@ -518,8 +536,8 @@ function Ledger({
 
         {transactions.error ? (
           <Alert variant="destructive" role="alert">
-            <AlertTitle>Could not load transactions</AlertTitle>
-            <AlertDescription>Please try again.</AlertDescription>
+            <AlertTitle>{t('Could not load transactions')}</AlertTitle>
+            <AlertDescription>{t('Please try again.')}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -531,22 +549,22 @@ function Ledger({
               <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
                 <tr>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    When
+                    {t('When')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Type
+                    {t('Type')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Amount
+                    {t('Amount')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Balance after
+                    {t('Balance after')}
                   </th>
                   <th scope="col" className="py-2 pr-3 font-medium">
-                    Note
+                    {t('Note')}
                   </th>
                   <th scope="col" className="py-2 font-medium">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t('Actions')}</span>
                   </th>
                 </tr>
               </thead>
@@ -556,7 +574,7 @@ function Ledger({
                     <td className="text-muted-foreground py-1.5 pr-3 whitespace-nowrap">
                       {new Date(row.occurredAt).toLocaleString()}
                     </td>
-                    <td className="py-1.5 pr-3">{TRANSACTION_LABEL[row.type]}</td>
+                    <td className="py-1.5 pr-3">{t(TRANSACTION_LABEL[row.type])}</td>
                     <td className="py-1.5 pr-3 tabular-nums">
                       {signedMoney(row.amountMinor, row.currencyCode)}
                     </td>
@@ -564,10 +582,12 @@ function Ledger({
                       {giftCardMoney(row.balanceAfterMinor, row.currencyCode)}
                     </td>
                     <td className="text-muted-foreground py-1.5 pr-3 text-xs">
-                      {row.reason ?? (row.paymentId ? 'Payment' : '')}
+                      {row.reason ?? (row.paymentId ? t('Payment') : '')}
                       {row.refundedMinor && row.refundedMinor !== '0' ? (
                         <span className="block">
-                          {giftCardMoney(row.refundedMinor, row.currencyCode)} refunded
+                          {t('{amount} refunded', {
+                            amount: giftCardMoney(row.refundedMinor, row.currencyCode),
+                          })}
                         </span>
                       ) : null}
                     </td>
@@ -577,7 +597,7 @@ function Ledger({
                       row.refundableMinor &&
                       row.refundableMinor !== '0' ? (
                         <Button variant="ghost" size="sm" onClick={() => setRefunding(row)}>
-                          Refund
+                          {t('Refund')}
                         </Button>
                       ) : null}
                     </td>
@@ -591,7 +611,11 @@ function Ledger({
         {total > LEDGER_PAGE ? (
           <div className="flex items-center justify-between gap-3">
             <p className="text-muted-foreground text-xs">
-              {offset + 1}–{Math.min(offset + LEDGER_PAGE, total)} of {total}
+              {t('{from}–{to} of {total}', {
+                from: offset + 1,
+                to: Math.min(offset + LEDGER_PAGE, total),
+                total: total,
+              })}
             </p>
             <div className="flex gap-2">
               <Button
@@ -600,7 +624,7 @@ function Ledger({
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - LEDGER_PAGE))}
               >
-                Newer
+                {t('Newer')}
               </Button>
               <Button
                 variant="outline"
@@ -608,7 +632,7 @@ function Ledger({
                 disabled={offset + LEDGER_PAGE >= total}
                 onClick={() => setOffset(offset + LEDGER_PAGE)}
               >
-                Older
+                {t('Older')}
               </Button>
             </div>
           </div>
@@ -629,6 +653,7 @@ function RefundPanel({
   onDone: (message: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const format = currencyFormat(card.currencyCode);
   const refundable = redemption.refundableMinor ?? '0';
   const actions = useGiftCardActions(card.id);
@@ -651,7 +676,9 @@ function RefundPanel({
         idempotencyKey: key,
       });
       onDone(
-        `Refunded to the card. Balance now ${giftCardMoney(result.card.currentBalanceMinor, card.currencyCode)}.`,
+        t('Refunded to the card. Balance now {giftCardMoney}.', {
+          giftCardMoney: giftCardMoney(result.card.currentBalanceMinor, card.currencyCode),
+        }),
       );
     } catch (caught) {
       setError(giftCardErrorMessage(caught, 'Could not refund.'));
@@ -659,25 +686,27 @@ function RefundPanel({
   };
 
   return (
-    <Panel title="Refund a redemption" error={error}>
+    <Panel title={t('Refund a redemption')} error={error}>
       <p className="text-sm">
-        Up to {giftCardMoney(refundable, card.currencyCode)} of this redemption can go back on the
-        card.
+        {t('Up to')} {giftCardMoney(refundable, card.currencyCode)}{' '}
+        {t('of this redemption can go back on the card.')}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor="refund-amount">Amount ({card.currencyCode})</Label>
+          <Label htmlFor="refund-amount">
+            {t('Amount ({currencyCode})', { currencyCode: card.currencyCode })}
+          </Label>
           <Input
             id="refund-amount"
             inputMode="decimal"
             value={amount}
-            placeholder="All of it"
+            placeholder={t('All of it')}
             className="tabular-nums"
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="refund-reason">Reason</Label>
+          <Label htmlFor="refund-reason">{t('Reason')}</Label>
           <Input
             id="refund-reason"
             value={reason}
@@ -687,7 +716,7 @@ function RefundPanel({
         </div>
       </div>
       <PanelButtons
-        label="Refund"
+        label={t('Refund')}
         pending={actions.refund.isPending}
         disabled={amountInvalid || reason.trim().length < 3}
         onSubmit={() => void submit()}
@@ -729,6 +758,7 @@ function PanelButtons(props: {
   onSubmit: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex gap-2">
       <Button
@@ -741,7 +771,7 @@ function PanelButtons(props: {
         {props.label}
       </Button>
       <Button size="sm" variant="outline" onClick={props.onCancel}>
-        Cancel
+        {t('Cancel')}
       </Button>
     </div>
   );
@@ -757,13 +787,14 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link
       href="/gift-cards"
       className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} w-fit`}
     >
       <ArrowLeft aria-hidden className="size-4" />
-      Gift cards
+      {t('Gift cards')}
     </Link>
   );
 }

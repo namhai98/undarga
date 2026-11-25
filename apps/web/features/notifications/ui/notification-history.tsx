@@ -26,6 +26,7 @@ import {
   retryState,
   statusVariant,
 } from '../model/notification-display';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 const selectClass =
@@ -45,6 +46,7 @@ const selectClass =
  * `settings:write` decides whether to send it again.
  */
 export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo[] }) {
+  const t = useT();
   const [status, setStatus] = useState('');
   const [channel, setChannel] = useState('');
   const [type, setType] = useState('');
@@ -76,7 +78,7 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
 
   const items = notifications.data?.items ?? [];
   const total = notifications.data?.total ?? 0;
-  const label = (t: string) => catalog.find((c) => c.type === t)?.label ?? humanType(t);
+  const label = (item: string) => catalog.find((c) => c.type === item)?.label ?? humanType(item);
 
   const pump = async () => {
     setError(null);
@@ -93,31 +95,35 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
   };
 
   return (
-    <section className="grid gap-4" aria-label="Notification history">
+    <section className="grid gap-4" aria-label={t('Notification history')}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-muted-foreground max-w-prose text-sm">
-          Messages are queued by bookings, reminders, payments and gift cards and sent in the
-          background. <strong className="font-medium">Accepted</strong> means the provider took the
-          message; <strong className="font-medium">Delivered</strong> means it confirmed delivery.
+          {t(
+            'Messages are queued by bookings, reminders, payments and gift cards and sent in the background.',
+          )}{' '}
+          <strong className="font-medium">{t('Accepted')}</strong>{' '}
+          {t('means the provider took the message;')}{' '}
+          <strong className="font-medium">{t('Delivered')}</strong>{' '}
+          {t('means it confirmed delivery.')}
         </p>
         {canRun ? (
           <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => void pump()}>
             {run.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Process queue now
+            {t('Process queue now')}
           </Button>
         ) : null}
       </div>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not process the queue</AlertTitle>
+          <AlertTitle>{t('Could not process the queue')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {retryError ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not retry</AlertTitle>
+          <AlertTitle>{t('Could not retry')}</AlertTitle>
           <AlertDescription>{retryError}</AlertDescription>
         </Alert>
       ) : null}
@@ -125,9 +131,15 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
       {run.data ? (
         <Alert role="status">
           <AlertDescription>
-            {run.data.reminders} reminder{run.data.reminders === 1 ? '' : 's'} scheduled,{' '}
-            {run.data.dispatched} event{run.data.dispatched === 1 ? '' : 's'} turned into messages,{' '}
-            {run.data.sent} sent, {run.data.failed} failed.
+            {t(
+              'Reminders scheduled: {reminders}. Events turned into messages: {dispatched}. Sent: {sent}. Failed: {failed}.',
+              {
+                reminders: run.data.reminders,
+                dispatched: run.data.dispatched,
+                sent: run.data.sent,
+                failed: run.data.failed,
+              },
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -135,11 +147,11 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
       {stats.data ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <Stat
-            label="Accepted or delivered"
+            label={t('Accepted or delivered')}
             value={(stats.data.byStatus.SENT ?? 0) + (stats.data.byStatus.DELIVERED ?? 0)}
           />
           <Stat
-            label="Failed, retrying or unknown"
+            label={t('Failed, retrying or unknown')}
             value={
               (stats.data.byStatus.FAILED ?? 0) +
               (stats.data.byStatus.RETRYING ?? 0) +
@@ -147,7 +159,7 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
             }
           />
           <Stat
-            label="Events waiting"
+            label={t('Events waiting')}
             value={stats.data.pendingEvents}
             // Climbing and never falling means the worker is not running.
             warn={stats.data.pendingEvents > 0}
@@ -156,26 +168,31 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Filter id="notif-type" label="Type" value={type} onChange={filter(setType)}>
-          {catalog.map((t) => (
-            <option key={t.type} value={t.type}>
-              {t.label}
+        <Filter id="notif-type" label={t('Type')} value={type} onChange={filter(setType)}>
+          {catalog.map((item) => (
+            <option key={item.type} value={item.type}>
+              {item.label}
             </option>
           ))}
         </Filter>
-        <Filter id="notif-channel" label="Channel" value={channel} onChange={filter(setChannel)}>
+        <Filter
+          id="notif-channel"
+          label={t('Channel')}
+          value={channel}
+          onChange={filter(setChannel)}
+        >
           {(['EMAIL', 'SMS', 'PUSH'] as const).map((value) => (
             <option key={value} value={value}>
-              {CHANNEL_LABEL[value]}
+              {t(CHANNEL_LABEL[value])}
             </option>
           ))}
         </Filter>
-        <Filter id="notif-status" label="Status" value={status} onChange={filter(setStatus)}>
+        <Filter id="notif-status" label={t('Status')} value={status} onChange={filter(setStatus)}>
           {(
             ['PENDING', 'SENT', 'DELIVERED', 'RETRYING', 'FAILED', 'UNKNOWN', 'CANCELLED'] as const
           ).map((value) => (
             <option key={value} value={value}>
-              {STATUS_LABEL[value]}
+              {t(STATUS_LABEL[value])}
             </option>
           ))}
         </Filter>
@@ -183,14 +200,14 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
 
       {notifications.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load notifications</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load notifications')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {notifications.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading notifications…</span>
+          <span className="sr-only">{t('Loading notifications…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-10 w-full" />
           ))}
@@ -199,9 +216,9 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
 
       {!notifications.isPending && !notifications.error && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm font-medium">Nothing to show</p>
+          <p className="text-sm font-medium">{t('Nothing to show')}</p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Messages appear here when a booking, a reminder or a gift card produces one.
+            {t('Messages appear here when a booking, a reminder or a gift card produces one.')}
           </p>
         </div>
       ) : null}
@@ -212,25 +229,25 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Created
+                  {t('Created')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Type
+                  {t('Type')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Channel
+                  {t('Channel')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Recipient
+                  {t('Recipient')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Status
+                  {t('Status')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Accepted / delivered
+                  {t('Accepted / delivered')}
                 </th>
                 <th scope="col" className="py-2 font-medium">
-                  Error / retry
+                  {t('Error / retry')}
                 </th>
               </tr>
             </thead>
@@ -251,13 +268,13 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
                         {label(row.type)}
                       </button>
                     </td>
-                    <td className="py-2 pr-3">{CHANNEL_LABEL[row.channel]}</td>
+                    <td className="py-2 pr-3">{t(CHANNEL_LABEL[row.channel])}</td>
                     <td className="text-muted-foreground py-2 pr-3 font-mono text-xs">
                       {row.recipientAddress}
                     </td>
                     <td className="py-2 pr-3">
                       <Badge variant={statusVariant(row.status)} title={STATUS_HINT[row.status]}>
-                        {STATUS_LABEL[row.status]}
+                        {t(STATUS_LABEL[row.status])}
                       </Badge>
                     </td>
                     <td className="text-muted-foreground py-2 pr-3 whitespace-nowrap">
@@ -280,11 +297,14 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
                           size="sm"
                           variant="outline"
                           className="mt-1"
-                          aria-label={`Retry ${label(row.type)} to ${row.recipientAddress}`}
+                          aria-label={t('Retry {label} to {recipientAddress}', {
+                            label: label(row.type),
+                            recipientAddress: row.recipientAddress,
+                          })}
                           disabled={retryMessage.isPending && retryMessage.variables === row.id}
                           onClick={() => void retryRow(row.id)}
                         >
-                          Retry
+                          {t('Retry')}
                         </Button>
                       ) : null}
                     </td>
@@ -299,7 +319,11 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -308,7 +332,7 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -316,7 +340,7 @@ export function NotificationHistory({ catalog }: { catalog: NotificationTypeInfo
               disabled={offset + PAGE_SIZE >= total}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
@@ -338,36 +362,41 @@ function NotificationDetailPanel({
   label: (type: string) => string;
   onClose: () => void;
 }) {
+  const t = useT();
   const detail = useNotification(id);
   const data = detail.data;
 
   return (
     <section
-      aria-label="Notification"
+      aria-label={t('Notification')}
       className="border-border/60 grid gap-3 rounded-lg border p-4"
     >
       <header className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium">
-          {data ? `${label(data.type)} · ${CHANNEL_LABEL[data.channel]}` : 'Notification'}
+          {data ? `${label(data.type)} · ${CHANNEL_LABEL[data.channel]}` : t('Notification')}
         </h3>
-        <Button size="sm" variant="ghost" aria-label="Close" onClick={onClose}>
+        <Button size="sm" variant="ghost" aria-label={t('Close')} onClick={onClose}>
           <X aria-hidden className="size-4" />
         </Button>
       </header>
       {detail.isPending ? <Skeleton className="h-20 w-full" /> : null}
       {detail.error ? (
         <p role="alert" className="text-destructive text-sm">
-          Could not load this notification.
+          {t('Could not load this notification.')}
         </p>
       ) : null}
       {data ? (
         <div className="grid gap-2 text-sm">
           <p className="text-muted-foreground text-xs">
-            To <span className="font-mono">{data.recipientAddress}</span> ·{' '}
-            {data.customTemplate ? 'company template' : 'default wording'} ·{' '}
-            {STATUS_LABEL[data.status]}
-            {data.provider ? ` via ${providerLabel(data.provider)}` : ''}
-            {data.providerStatus ? ` (provider: ${data.providerStatus})` : ''}
+            {t('To')} <span className="font-mono">{data.recipientAddress}</span> ·{' '}
+            {data.customTemplate ? t('company template') : t('default wording')} ·{' '}
+            {t(STATUS_LABEL[data.status])}
+            {data.provider
+              ? t(' via {providerLabel}', { providerLabel: providerLabel(data.provider) })
+              : ''}
+            {data.providerStatus
+              ? t(' (provider: {providerStatus})', { providerStatus: data.providerStatus })
+              : ''}
           </p>
           {STATUS_HINT[data.status] ? (
             <p className="text-muted-foreground text-xs">{STATUS_HINT[data.status]}</p>
@@ -389,6 +418,7 @@ function Filter(props: {
   onChange: (value: string) => void;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={props.id}>{props.label}</Label>
@@ -398,7 +428,7 @@ function Filter(props: {
         className={selectClass}
         onChange={(e) => props.onChange(e.target.value)}
       >
-        <option value="">All</option>
+        <option value="">{t('All')}</option>
         {props.children}
       </select>
     </div>

@@ -7,6 +7,8 @@ import {
   type CreateEmployeeInput,
   type EmployeeDetail,
   type EmployeeQuery,
+  type EmployeeSchedule,
+  type ScheduleInput,
   type EmployeeSummary,
 } from '@/services/employees.service';
 
@@ -51,7 +53,8 @@ export function useCreateEmployee() {
     // Invalidate rather than write in: a new employee changes which page it
     // belongs on and where it sorts, and reproducing the server's ordering on
     // the client is how the two drift apart.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) }),
   });
 }
 
@@ -74,7 +77,8 @@ export function useDeleteEmployee() {
 
   return useMutation<void, unknown, string>({
     mutationFn: (employeeId) => employeesService.remove(activeCompanyId!, employeeId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) }),
   });
 }
 
@@ -101,3 +105,109 @@ export function useEmployeeBranchAssignment(employeeId: string) {
 }
 
 export type { EmployeeSummary };
+
+/** Service assignment. Invalidates the employee so its `services` list refreshes. */
+export function useEmployeeServiceAssignment(employeeId: string) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) });
+
+  return {
+    assign: useMutation({
+      mutationFn: (serviceId: string) =>
+        employeesService.assignService(activeCompanyId!, employeeId, serviceId),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (serviceId: string) =>
+        employeesService.removeService(activeCompanyId!, employeeId, serviceId),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useEmployeeSchedule(employeeId: string, branchId: string | null) {
+  const { activeCompanyId } = useSession();
+
+  return useQuery<EmployeeSchedule>({
+    queryKey: [
+      ...employeeKeys.detail(activeCompanyId ?? 'none', employeeId),
+      'schedule',
+      branchId ?? 'none',
+    ],
+    queryFn: ({ signal }) =>
+      employeesService.getSchedule(activeCompanyId!, employeeId, branchId!, signal),
+    enabled: Boolean(activeCompanyId && branchId),
+  });
+}
+
+export function useSaveEmployeeSchedule(employeeId: string) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation<EmployeeSchedule, unknown, ScheduleInput>({
+    mutationFn: (input) => employeesService.putSchedule(activeCompanyId!, employeeId, input),
+    onSuccess: (schedule) => {
+      queryClient.setQueryData(
+        [...employeeKeys.detail(activeCompanyId!, employeeId), 'schedule', schedule.branchId],
+        schedule,
+      );
+      // Availability depends on it.
+      void queryClient.invalidateQueries({ queryKey: ['availability'] });
+    },
+  });
+}
+
+/** One-off days for the next 90 days. */
+export function useScheduleExceptions(employeeId: string) {
+  const { activeCompanyId } = useSession();
+  return useQuery({
+    queryKey: [...employeeKeys.detail(activeCompanyId ?? 'none', employeeId), 'exceptions'],
+    queryFn: ({ signal }) => employeesService.listExceptions(activeCompanyId!, employeeId, signal),
+    enabled: Boolean(activeCompanyId),
+  });
+}
+
+export function useScheduleExceptionChanges(employeeId: string) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  const invalidate = () => {
+    void queryClient.invalidateQueries({
+      queryKey: [...employeeKeys.detail(activeCompanyId!, employeeId), 'exceptions'],
+    });
+    void queryClient.invalidateQueries({ queryKey: ['availability'] });
+  };
+  return {
+    put: useMutation({
+      mutationFn: (input: Parameters<typeof employeesService.putException>[2]) =>
+        employeesService.putException(activeCompanyId!, employeeId, input),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (exceptionId: string) =>
+        employeesService.removeException(activeCompanyId!, employeeId, exceptionId),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+/** Give the employee a login: an account, a membership and a one-time invitation link. */
+export function useEmployeeAccount(employeeId: string) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: employeeKeys.all(activeCompanyId!) });
+  return {
+    link: useMutation({
+      mutationFn: ({ email, roleKeys }: { email: string; roleKeys: string[] }) =>
+        employeesService.linkAccount(activeCompanyId!, employeeId, email, roleKeys),
+      onSuccess: invalidate,
+    }),
+    unlink: useMutation({
+      mutationFn: () => employeesService.unlinkAccount(activeCompanyId!, employeeId),
+      onSuccess: invalidate,
+    }),
+  };
+}

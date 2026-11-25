@@ -35,6 +35,15 @@ import {
 import { SeriesCard } from './series-card';
 import { SlotPicker } from './slot-picker';
 import { StatusBadge } from './status-badge';
+import { useT } from '@/lib/i18n';
+
+/** Fallback when the server gives no plainer reason. */
+const ACTION_FAILED: Record<StatusAction, string> = {
+  confirm: 'Could not confirm.',
+  start: 'Could not start.',
+  complete: 'Could not complete.',
+  'no-show': 'Could not mark no-show.',
+};
 
 /**
  * One appointment: who, what, when, where, its history, and what can happen
@@ -42,12 +51,13 @@ import { StatusBadge } from './status-badge';
  * transition graph decides.
  */
 export function AppointmentDetail({ appointmentId }: { appointmentId: string }) {
+  const t = useT();
   const appointment = useAppointment(appointmentId);
 
   if (appointment.isPending) {
     return (
       <div className="grid gap-4" aria-busy="true">
-        <span className="sr-only">Loading appointment…</span>
+        <span className="sr-only">{t('Loading appointment…')}</span>
         <Skeleton className="h-7 w-64" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -59,8 +69,10 @@ export function AppointmentDetail({ appointmentId }: { appointmentId: string }) 
       <div className="grid gap-4">
         <BackLink />
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Appointment not found</AlertTitle>
-          <AlertDescription>It may belong to another company, or you may not have access.</AlertDescription>
+          <AlertTitle>{t('Appointment not found')}</AlertTitle>
+          <AlertDescription>
+            {t('It may belong to another company, or you may not have access.')}
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -70,6 +82,7 @@ export function AppointmentDetail({ appointmentId }: { appointmentId: string }) 
 }
 
 function Loaded({ detail }: { detail: Detail }) {
+  const t = useT();
   const router = useRouter();
   const canWrite = useCan('appointment:write');
   // Both hooks always run — never short-circuit a hook call.
@@ -111,7 +124,7 @@ function Loaded({ detail }: { detail: Detail }) {
     try {
       await act.mutateAsync({ action });
     } catch (caught) {
-      setError(bookingErrorMessage(caught, `Could not ${ACTION_LABEL[action].toLowerCase()}.`));
+      setError(bookingErrorMessage(caught, ACTION_FAILED[action], t));
     }
   };
 
@@ -119,13 +132,17 @@ function Loaded({ detail }: { detail: Detail }) {
     if (!reason.trim()) return;
     setError(null);
     try {
-      await cancel.mutateAsync(late ? { reason: reason.trim(), lateCancellation: true } : reason.trim());
+      await cancel.mutateAsync(
+        late ? { reason: reason.trim(), lateCancellation: true } : reason.trim(),
+      );
       setMode('idle');
       setReason('');
       setLateOffer(null);
     } catch (caught) {
-      setLateOffer(ruleViolation(caught) === 'CANCELLATION_DEADLINE' && canCancelAny ? 'cancel' : null);
-      setError(bookingErrorMessage(caught, 'Could not cancel this appointment.'));
+      setLateOffer(
+        ruleViolation(caught) === 'CANCELLATION_DEADLINE' && canCancelAny ? 'cancel' : null,
+      );
+      setError(bookingErrorMessage(caught, 'Could not cancel this appointment.', t));
     }
   };
 
@@ -142,7 +159,7 @@ function Loaded({ detail }: { detail: Detail }) {
     } catch (caught) {
       const rule = ruleViolation(caught);
       setLateOffer(rule === 'RESCHEDULE_DEADLINE' && canCancelAny ? 'reschedule' : null);
-      setError(bookingErrorMessage(caught, 'Could not reschedule this appointment.'));
+      setError(bookingErrorMessage(caught, 'Could not reschedule this appointment.', t));
       // A rule refusal leaves the chosen time valid; anything else means it is gone.
       if (!rule) setNewSlot(null);
     }
@@ -157,7 +174,7 @@ function Loaded({ detail }: { detail: Detail }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
           <h1 className="flex items-center gap-2 text-xl font-semibold">
-            {detail.service?.name ?? 'Appointment'} <StatusBadge status={detail.status} />
+            {detail.service?.name ?? t('Appointment')} <StatusBadge status={detail.status} />
           </h1>
           <p className="text-muted-foreground text-sm tabular-nums">
             {localDate(detail.startsAt)} · {localTime(detail.startsAt)}–{localTime(detail.endsAt)} (
@@ -174,18 +191,28 @@ function Loaded({ detail }: { detail: Detail }) {
                     {act.isPending && act.variables?.action === action ? (
                       <Loader2 className="animate-spin" aria-hidden />
                     ) : null}
-                    {ACTION_LABEL[action]}
+                    {t(ACTION_LABEL[action])}
                   </Button>
                 ))
               : null}
             {canWrite && allowed.reschedule ? (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => setMode('reschedule')}>
-                Reschedule
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setMode('reschedule')}
+              >
+                {t('Reschedule')}
               </Button>
             ) : null}
             {canCancel && allowed.cancel ? (
-              <Button size="sm" variant="destructive" disabled={busy} onClick={() => setMode('cancel')}>
-                Cancel
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busy}
+                onClick={() => setMode('cancel')}
+              >
+                {t('Cancel')}
               </Button>
             ) : null}
           </div>
@@ -194,21 +221,22 @@ function Loaded({ detail }: { detail: Detail }) {
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Not done</AlertTitle>
+          <AlertTitle>{t('Not done')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {mode === 'cancel' ? (
         <Alert role="alert">
-          <AlertTitle>Cancel this appointment?</AlertTitle>
+          <AlertTitle>{t('Cancel this appointment?')}</AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>
-              The slot is released immediately. The appointment is kept with the reason you give —
-              it is never deleted.
+              {t(
+                'The slot is released immediately. The appointment is kept with the reason you give — it is never deleted.',
+              )}
             </p>
             <div className="grid gap-1.5 sm:max-w-md">
-              <Label htmlFor="cancel-reason">Reason (required)</Label>
+              <Label htmlFor="cancel-reason">{t('Reason (required)')}</Label>
               <Input
                 id="cancel-reason"
                 value={reason}
@@ -225,7 +253,7 @@ function Loaded({ detail }: { detail: Detail }) {
                 onClick={() => void confirmCancel()}
               >
                 {cancel.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Cancel appointment
+                {t('Cancel appointment')}
               </Button>
               {lateOffer === 'cancel' ? (
                 <Button
@@ -234,7 +262,7 @@ function Loaded({ detail }: { detail: Detail }) {
                   disabled={!reason.trim() || cancel.isPending}
                   onClick={() => void confirmCancel(true)}
                 >
-                  Cancel anyway (late cancellation)
+                  {t('Cancel anyway (late cancellation)')}
                 </Button>
               ) : null}
               <Button
@@ -245,7 +273,7 @@ function Loaded({ detail }: { detail: Detail }) {
                   setReason('');
                 }}
               >
-                Keep it
+                {t('Keep it')}
               </Button>
             </div>
           </AlertDescription>
@@ -255,16 +283,21 @@ function Loaded({ detail }: { detail: Detail }) {
       {mode === 'reschedule' ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Move to another time</CardTitle>
+            <CardTitle className="text-base">{t('Move to another time')}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
             <p className="text-muted-foreground text-sm">
-              Same service and customer
-              {detail.employee ? ` with ${detail.employee.name}` : ''}. The original is cancelled
-              and a new appointment is created, linked to it.
+              {detail.employee
+                ? t(
+                    'Same service and customer with {name}. The original is cancelled and a new appointment is created, linked to it.',
+                    { name: detail.employee.name },
+                  )
+                : t(
+                    'Same service and customer. The original is cancelled and a new appointment is created, linked to it.',
+                  )}
             </p>
             <div className="grid gap-1.5 sm:max-w-xs">
-              <Label htmlFor="reschedule-date">Date</Label>
+              <Label htmlFor="reschedule-date">{t('Date')}</Label>
               <Input
                 id="reschedule-date"
                 type="date"
@@ -285,7 +318,7 @@ function Loaded({ detail }: { detail: Detail }) {
               onSelect={setNewSlot}
             />
             <div className="grid gap-1.5 sm:max-w-md">
-              <Label htmlFor="reschedule-reason">Reason (optional)</Label>
+              <Label htmlFor="reschedule-reason">{t('Reason (optional)')}</Label>
               <Input
                 id="reschedule-reason"
                 value={reason}
@@ -300,7 +333,7 @@ function Loaded({ detail }: { detail: Detail }) {
                 onClick={() => void confirmReschedule()}
               >
                 {reschedule.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Move to {newSlot ? localTime(newSlot.startAt) : '…'}
+                {t('Move to')} {newSlot ? localTime(newSlot.startAt) : '…'}
               </Button>
               {lateOffer === 'reschedule' && newSlot ? (
                 <Button
@@ -309,7 +342,7 @@ function Loaded({ detail }: { detail: Detail }) {
                   disabled={reschedule.isPending}
                   onClick={() => void confirmReschedule(true)}
                 >
-                  Move anyway (late change)
+                  {t('Move anyway (late change)')}
                 </Button>
               ) : null}
               <Button
@@ -321,7 +354,7 @@ function Loaded({ detail }: { detail: Detail }) {
                   setReason('');
                 }}
               >
-                Back
+                {t('Back')}
               </Button>
             </div>
           </CardContent>
@@ -330,9 +363,9 @@ function Loaded({ detail }: { detail: Detail }) {
 
       {detail.rescheduledTo ? (
         <Alert role="status">
-          <AlertTitle>Rescheduled</AlertTitle>
+          <AlertTitle>{t('Rescheduled')}</AlertTitle>
           <AlertDescription>
-            Moved to{' '}
+            {t('Moved to')}{' '}
             <Link href={`/appointments/${detail.rescheduledTo.id}`} className="underline">
               {localDate(detail.rescheduledTo.startsAt)} {localTime(detail.rescheduledTo.startsAt)}{' '}
               ({detail.rescheduledTo.appointmentNumber})
@@ -345,35 +378,40 @@ function Loaded({ detail }: { detail: Detail }) {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Details</CardTitle>
+            <CardTitle>{t('Details')}</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3 sm:grid-cols-2">
-              <Field label="Customer">
+              <Field label={t('Customer')}>
                 <Link href={`/customers/${detail.customer.id}`} className="hover:underline">
                   {detail.customer.name}
                 </Link>
                 {detail.customer.phone ? (
-                  <span className="text-muted-foreground block text-xs">{detail.customer.phone}</span>
+                  <span className="text-muted-foreground block text-xs">
+                    {detail.customer.phone}
+                  </span>
                 ) : null}
               </Field>
-              <Field label="Service">
+              <Field label={t('Service')}>
                 {detail.service?.name ?? '—'}
                 {detail.durationMin ? (
                   <span className="text-muted-foreground block text-xs">
                     {detail.durationMin}m
                     {detail.bufferBeforeMin || detail.bufferAfterMin
-                      ? ` · occupies ${localTime(detail.reservedFrom!)}–${localTime(detail.reservedTo!)}`
+                      ? t(' · occupies {localTime}–{localTime2}', {
+                          localTime: localTime(detail.reservedFrom!),
+                          localTime2: localTime(detail.reservedTo!),
+                        })
                       : ''}
                   </span>
                 ) : null}
               </Field>
-              <Field label="Employee">{detail.employee?.name ?? '—'}</Field>
-              <Field label="Room / equipment">
+              <Field label={t('Employee')}>{detail.employee?.name ?? '—'}</Field>
+              <Field label={t('Room / equipment')}>
                 {detail.resources.length ? detail.resources.map((r) => r.name).join(', ') : '—'}
               </Field>
-              <Field label="Branch">{detail.branch.name}</Field>
-              <Field label="Price">
+              <Field label={t('Branch')}>{detail.branch.name}</Field>
+              <Field label={t('Price')}>
                 {detail.discountMinor !== '0' ? (
                   <PriceBreakdown
                     originalMinor={detail.subtotalMinor}
@@ -393,21 +431,28 @@ function Loaded({ detail }: { detail: Detail }) {
                   )
                 )}
               </Field>
-              <Field label="Booked via">{detail.source.toLowerCase().replace(/_/g, ' ')}</Field>
-              <Field label="Payment">{detail.paymentStatus.toLowerCase().replace(/_/g, ' ')}</Field>
-              <Field label="Customer note">{detail.customerNote ?? '—'}</Field>
-              <Field label="Internal note">{detail.internalNote ?? '—'}</Field>
+              <Field label={t('Booked via')}>
+                {detail.source.toLowerCase().replace(/_/g, ' ')}
+              </Field>
+              <Field label={t('Payment')}>
+                {detail.paymentStatus.toLowerCase().replace(/_/g, ' ')}
+              </Field>
+              <Field label={t('Customer note')}>{detail.customerNote ?? '—'}</Field>
+              <Field label={t('Internal note')}>{detail.internalNote ?? '—'}</Field>
               {detail.cancellation ? (
-                <Field label="Cancelled">
+                <Field label={t('Cancelled')}>
                   {new Date(detail.cancellation.cancelledAt).toLocaleString()}
                   <span className="text-muted-foreground block text-xs">
-                    {detail.cancellation.reason ?? 'No reason given'}
+                    {detail.cancellation.reason ?? t('No reason given')}
                   </span>
                 </Field>
               ) : null}
               {detail.rescheduledFrom ? (
-                <Field label="Moved from">
-                  <Link href={`/appointments/${detail.rescheduledFrom.id}`} className="hover:underline">
+                <Field label={t('Moved from')}>
+                  <Link
+                    href={`/appointments/${detail.rescheduledFrom.id}`}
+                    className="hover:underline"
+                  >
                     {localDate(detail.rescheduledFrom.startsAt)}{' '}
                     {localTime(detail.rescheduledFrom.startsAt)}
                   </Link>
@@ -419,7 +464,7 @@ function Loaded({ detail }: { detail: Detail }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>History</CardTitle>
+            <CardTitle>{t('History')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ol className="grid gap-3">
@@ -427,13 +472,15 @@ function Loaded({ detail }: { detail: Detail }) {
                 <li key={h.id} className="text-sm">
                   <div className="font-medium">
                     {h.fromStatus ? `${STATUS_LABEL[h.fromStatus]} → ` : ''}
-                    {STATUS_LABEL[h.toStatus]}
+                    {t(STATUS_LABEL[h.toStatus])}
                   </div>
                   <div className="text-muted-foreground text-xs">
                     {new Date(h.changedAt).toLocaleString()}
                     {h.actorLabel ? ` · ${h.actorLabel}` : ''}
                   </div>
-                  {h.reason ? <div className="text-muted-foreground text-xs">{h.reason}</div> : null}
+                  {h.reason ? (
+                    <div className="text-muted-foreground text-xs">{h.reason}</div>
+                  ) : null}
                 </li>
               ))}
             </ol>
@@ -460,13 +507,14 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link
       href="/appointments"
       className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} -ml-2 w-fit`}
     >
       <ArrowLeft aria-hidden className="size-4" />
-      All appointments
+      {t('All appointments')}
     </Link>
   );
 }

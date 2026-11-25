@@ -6,6 +6,7 @@ import { PriceBreakdown } from '@/components/price-breakdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useT } from '@/lib/i18n';
 
 /** What the server says about a code for one basket. Same shape on both APIs. */
 export interface PromotionPreview {
@@ -37,6 +38,7 @@ export function PromotionCodeField(props: {
   onApplied: (code: string | null) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [code, setCode] = useState('');
   const [pending, setPending] = useState(false);
   const [preview, setPreview] = useState<PromotionPreview | null>(null);
@@ -51,11 +53,12 @@ export function PromotionCodeField(props: {
       const result = await props.validate(trimmed);
       setPreview(result);
       props.onApplied(result.valid && result.promotion ? result.promotion.code : null);
-      if (!result.valid) setError(result.message ?? 'This code cannot be used for this booking.');
+      if (!result.valid)
+        setError(result.message ?? t('This code cannot be used for this booking.'));
     } catch {
       setPreview(null);
       props.onApplied(null);
-      setError('Could not check this code. Try again.');
+      setError(t('Could not check this code. Try again.'));
     } finally {
       setPending(false);
     }
@@ -72,7 +75,7 @@ export function PromotionCodeField(props: {
 
   return (
     <div className="grid gap-2">
-      <Label htmlFor={props.id}>Promotion code</Label>
+      <Label htmlFor={props.id}>{t('Promotion code')}</Label>
       <div className="flex gap-2">
         <Input
           id={props.id}
@@ -96,7 +99,7 @@ export function PromotionCodeField(props: {
         />
         {applied ? (
           <Button type="button" variant="outline" onClick={clear}>
-            <X aria-hidden /> Remove
+            <X aria-hidden /> {t('Remove')}
           </Button>
         ) : (
           <Button
@@ -106,7 +109,7 @@ export function PromotionCodeField(props: {
             onClick={() => void apply()}
           >
             {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Apply
+            {t('Apply')}
           </Button>
         )}
       </div>
@@ -125,7 +128,7 @@ export function PromotionCodeField(props: {
             discountLabel={applied.promotion?.name}
           />
           <p className="text-muted-foreground mt-2 text-xs">
-            The final price is confirmed when the booking is made.
+            {t('The final price is confirmed when the booking is made.')}
           </p>
         </div>
       ) : null}

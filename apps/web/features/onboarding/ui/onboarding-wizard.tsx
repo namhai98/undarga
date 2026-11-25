@@ -34,6 +34,7 @@ import {
   type WizardStep,
 } from '../model/draft';
 import { BranchStep, BusinessStep, CompanyStep, Pending, ServicesStep } from './steps';
+import { useT } from '@/lib/i18n';
 
 /** Where a server-side field error belongs: which step, which input. */
 const API_FIELDS: Record<string, [WizardStep, string]> = {
@@ -78,6 +79,7 @@ interface Finished {
  *            identifier is fixed, steps 1-3 go to /setup.
  */
 export function OnboardingWizard({ createNew = false }: { createNew?: boolean }) {
+  const t = useT();
   const session = useSession();
   const ready = session.status === 'authenticated' && !session.isLoadingCompany;
   const status = useOnboardingStatus(session.activeCompanyId, ready);
@@ -95,15 +97,15 @@ export function OnboardingWizard({ createNew = false }: { createNew?: boolean })
       return (
         <div className="mx-auto w-full max-w-2xl">
           <Alert variant="destructive" role="alert">
-            <AlertTitle>Could not load onboarding</AlertTitle>
-            <AlertDescription>Reload the page to try again.</AlertDescription>
+            <AlertTitle>{t('Could not load onboarding')}</AlertTitle>
+            <AlertDescription>{t('Reload the page to try again.')}</AlertDescription>
           </Alert>
         </div>
       );
     }
     return (
       <div className="mx-auto grid w-full max-w-2xl gap-3" aria-busy="true">
-        <span className="sr-only">Loading onboarding…</span>
+        <span className="sr-only">{t('Loading onboarding…')}</span>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-72 w-full" />
       </div>
@@ -113,14 +115,17 @@ export function OnboardingWizard({ createNew = false }: { createNew?: boolean })
   if (start.kind === 'already-done') {
     return (
       <Notice
-        title="Your company is set up"
-        body={`${start.companyName} has finished onboarding.`}
+        title={t('Your company is set up')}
+        body={t('{companyName} has finished onboarding.', { companyName: start.companyName })}
       >
         <Link href="/dashboard" className={buttonVariants({ size: 'sm' })}>
-          Go to dashboard
+          {t('Go to dashboard')}
         </Link>
-        <Link href="/onboarding?new=1" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Create another company
+        <Link
+          href="/onboarding?new=1"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          {t('Create another company')}
         </Link>
       </Notice>
     );
@@ -129,11 +134,11 @@ export function OnboardingWizard({ createNew = false }: { createNew?: boolean })
   if (start.kind === 'not-allowed') {
     return (
       <Notice
-        title="Setup is not finished yet"
+        title={t('Setup is not finished yet')}
         body="The owner or an administrator of this company needs to finish setting it up."
       >
         <Link href="/dashboard" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Continue to dashboard
+          {t('Continue to dashboard')}
         </Link>
       </Notice>
     );
@@ -174,6 +179,7 @@ function startFrom(data: OnboardingStatusView, createNew: boolean): Start {
 }
 
 function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
+  const t = useT();
   const router = useRouter();
 
   const [mode] = useState<Mode>(start.mode);
@@ -222,7 +228,9 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
     if (mapped.length > 0) {
       const [firstStep] = API_FIELDS[mapped[0]![0]]!;
       setStep(firstStep);
-      setErrors(Object.fromEntries(mapped.map(([path, message]) => [API_FIELDS[path]![1], message])));
+      setErrors(
+        Object.fromEntries(mapped.map(([path, message]) => [API_FIELDS[path]![1], message])),
+      );
       setFormError(null);
       return;
     }
@@ -241,7 +249,15 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
         });
       } else {
         await setup.mutateAsync(setupPayload(draft));
-        setTarget((t) => (t ? { ...t, name: draft.company.displayName.trim(), currencyCode: draft.business.currencyCode } : t));
+        setTarget((item) =>
+          item
+            ? {
+                ...item,
+                name: draft.company.displayName.trim(),
+                currencyCode: draft.business.currencyCode,
+              }
+            : item,
+        );
       }
       go('services');
     } catch (error) {
@@ -290,11 +306,14 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
     <div className="mx-auto grid w-full max-w-2xl gap-6">
       <header className="grid gap-1">
         <h1 className="text-xl font-semibold">
-          {mode === 'setup' || target ? `Set up ${target?.name ?? 'your company'}` : 'Set up your company'}
+          {mode === 'setup' || target
+            ? t('Set up {value}', { value: target?.name ?? t('your company') })
+            : t('Set up your company')}
         </h1>
         <p className="text-muted-foreground text-sm">
-          A few details and you are ready to take bookings. Your free trial starts when the company
-          is created.
+          {t(
+            'A few details and you are ready to take bookings. Your free trial starts when the company is created.',
+          )}
         </p>
       </header>
 
@@ -304,17 +323,25 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
         <Card>
           <CardHeader className="items-center text-center">
             <CheckCircle2 aria-hidden className="size-10 text-emerald-600" />
-            <CardTitle>{finished.companyName} is ready</CardTitle>
+            <CardTitle>
+              {t('{companyName} is ready', { companyName: finished.companyName })}
+            </CardTitle>
             <CardDescription>
               {finished.services > 0
-                ? `Your branch and ${finished.services} service${finished.services === 1 ? '' : 's'} are set up.`
-                : 'Your branch is set up. Add services from the Services page whenever you are ready.'}
+                ? finished.services === 1
+                  ? t('Your branch and 1 service are set up.')
+                  : t('Your branch and {services} services are set up.', {
+                      services: finished.services,
+                    })
+                : t(
+                    'Your branch is set up. Add services from the Services page whenever you are ready.',
+                  )}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid justify-items-center gap-2">
-            <Button onClick={() => router.replace('/dashboard')}>Go to dashboard</Button>
+            <Button onClick={() => router.replace('/dashboard')}>{t('Go to dashboard')}</Button>
             <p className="text-muted-foreground text-xs" aria-live="polite">
-              Taking you to your dashboard…
+              {t('Taking you to your dashboard…')}
             </p>
           </CardContent>
         </Card>
@@ -327,13 +354,18 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
           <CardContent className="grid gap-5">
             {formError ? (
               <Alert variant="destructive" role="alert">
-                <AlertTitle>Something went wrong</AlertTitle>
+                <AlertTitle>{t('Something went wrong')}</AlertTitle>
                 <AlertDescription>{formError}</AlertDescription>
               </Alert>
             ) : null}
 
             {step === 'company' ? (
-              <CompanyStep draft={draft} update={update} errors={errors} slugEditable={mode === 'create'} />
+              <CompanyStep
+                draft={draft}
+                update={update}
+                errors={errors}
+                slugEditable={mode === 'create'}
+              />
             ) : step === 'branch' ? (
               <BranchStep draft={draft} update={update} errors={errors} />
             ) : step === 'business' ? (
@@ -350,8 +382,13 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
               {step === 'branch' || step === 'business' ? (
-                <Button type="button" variant="ghost" disabled={busy} onClick={() => go(step === 'branch' ? 'company' : 'branch')}>
-                  Back
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => go(step === 'branch' ? 'company' : 'branch')}
+                >
+                  {t('Back')}
                 </Button>
               ) : (
                 <span />
@@ -359,25 +396,38 @@ function WizardFlow({ start }: { start: Extract<Start, { kind: 'flow' }> }) {
 
               {step === 'services' ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" disabled={busy} onClick={() => void finish(false)}>
-                    Skip for now
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void finish(false)}
+                  >
+                    {t('Skip for now')}
                   </Button>
-                  <Button type="button" disabled={busy || rows.length === 0} onClick={() => void finish(true)}>
-                    {complete.isPending ? <Pending>Finishing…</Pending> : 'Save services and finish'}
+                  <Button
+                    type="button"
+                    disabled={busy || rows.length === 0}
+                    onClick={() => void finish(true)}
+                  >
+                    {complete.isPending ? (
+                      <Pending>{t('Finishing…')}</Pending>
+                    ) : (
+                      t('Save services and finish')
+                    )}
                   </Button>
                 </div>
               ) : (
                 <Button type="button" disabled={busy} onClick={next}>
                   {step === 'business' ? (
                     busy ? (
-                      <Pending>{mode === 'create' ? 'Creating…' : 'Saving…'}</Pending>
+                      <Pending>{mode === 'create' ? t('Creating…') : t('Saving…')}</Pending>
                     ) : mode === 'create' ? (
-                      'Create company'
+                      t('Create company')
                     ) : (
-                      'Save and continue'
+                      t('Save and continue')
                     )
                   ) : (
-                    'Continue'
+                    t('Continue')
                   )}
                 </Button>
               )}
@@ -417,14 +467,19 @@ function stepDescription(step: WizardStep, mode: Mode): string {
 }
 
 function Stepper({ current }: { current: number }) {
+  const t = useT();
   return (
-    <ol className="flex flex-wrap gap-x-4 gap-y-2" aria-label="Onboarding progress">
+    <ol className="flex flex-wrap gap-x-4 gap-y-2" aria-label={t('Onboarding progress')}>
       {WIZARD_STEPS.map((s, i) => (
         <li
           key={s.key}
           aria-current={i === current ? 'step' : undefined}
           className={`flex items-center gap-2 text-sm ${
-            i === current ? 'font-medium' : i < current ? 'text-foreground' : 'text-muted-foreground'
+            i === current
+              ? 'font-medium'
+              : i < current
+                ? 'text-foreground'
+                : 'text-muted-foreground'
           }`}
         >
           <span

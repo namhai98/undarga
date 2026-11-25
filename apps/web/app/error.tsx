@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { ApiError, ApiNetworkError } from '@/services/api-error';
+import { useT } from '@/lib/i18n';
 
 /**
  * Route-level error boundary.
@@ -18,16 +19,19 @@ export default function RouteError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-4 px-6">
-      <h1 className="text-xl font-semibold">Something went wrong</h1>
+      <h1 className="text-xl font-semibold">{t('Something went wrong')}</h1>
       <p className="text-muted-foreground text-sm">{describe(error)}</p>
       {error.digest ? (
-        <p className="text-muted-foreground font-mono text-xs">Reference: {error.digest}</p>
+        <p className="text-muted-foreground font-mono text-xs">
+          {t('Reference: {digest}', { digest: error.digest })}
+        </p>
       ) : null}
       <div>
         <Button onClick={reset} variant="outline" size="sm">
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     </main>

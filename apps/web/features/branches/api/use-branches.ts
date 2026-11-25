@@ -71,8 +71,7 @@ export function useCreateBranch() {
     // Invalidate rather than write into the cache: a new branch changes the
     // ORDER of the list (sortOrder, then name), and reproducing the server's
     // ordering on the client is how the two drift apart.
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: branchKeys.list(activeCompanyId!) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: branchKeys.list(activeCompanyId!) }),
   });
 }
 
@@ -96,8 +95,7 @@ export function useDeleteBranch() {
 
   return useMutation({
     mutationFn: (branchId: string) => branchesService.remove(activeCompanyId!, branchId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: branchKeys.all(activeCompanyId!) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: branchKeys.all(activeCompanyId!) }),
   });
 }
 
@@ -110,6 +108,22 @@ export function usePutBusinessHours(branchId: string) {
       branchesService.putBusinessHours(activeCompanyId!, branchId, input),
     onSuccess: (hours) => {
       queryClient.setQueryData(branchKeys.businessHours(activeCompanyId!, branchId), hours);
+    },
+  });
+}
+
+/** Per-branch overrides; null clears one back to the company's rule. */
+export function useUpdateBranchSettings(branchId: string) {
+  const { activeCompanyId } = useSession();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: Partial<BranchSettings>) =>
+      branchesService.updateSettings(activeCompanyId!, branchId, input),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(branchKeys.settings(activeCompanyId!, branchId), settings);
+      // Availability depends on the notice and booking window.
+      void queryClient.invalidateQueries({ queryKey: ['availability'] });
     },
   });
 }

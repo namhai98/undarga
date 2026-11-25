@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
 import { useBranches } from '@/features/branches';
+import { defaultTimezone } from '@/lib/timezones';
+import { formatInZone, wallToIso } from '@/lib/zoned';
 import { ApiError } from '@/services/api-error';
 import type {
   Resource,
@@ -29,6 +31,7 @@ import {
   useResources,
   useSaveResourceWindows,
 } from '../api/use-resources';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -73,6 +76,7 @@ function message(error: unknown, fallback: string): string {
  * branch's hours; unavailable periods (maintenance…) block it entirely.
  */
 export function ResourcesPage() {
+  const t = useT();
   const canRead = useCan('resource:read');
   const canWrite = useCan('resource:write');
   const branches = useBranches();
@@ -82,8 +86,8 @@ export function ResourcesPage() {
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see resources.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>{t('You do not have permission to see resources.')}</AlertDescription>
       </Alert>
     );
   }
@@ -91,22 +95,23 @@ export function ResourcesPage() {
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Rooms and equipment</h1>
+        <h1 className="text-xl font-semibold">{t('Rooms and equipment')}</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
-          A service that needs a room or a piece of equipment is only offered when one is free. Each
-          resource takes one appointment at a time — add several of a type for parallel bookings.
+          {t(
+            'A service that needs a room or a piece of equipment is only offered when one is free. Each resource takes one appointment at a time — add several of a type for parallel bookings.',
+          )}
         </p>
       </header>
 
       <div className="grid gap-1.5 sm:max-w-xs">
-        <Label htmlFor="resources-branch">Branch</Label>
+        <Label htmlFor="resources-branch">{t('Branch')}</Label>
         <select
           id="resources-branch"
           className={selectClass}
           value={branchId}
           onChange={(e) => setBranchId(e.target.value)}
         >
-          <option value="">All branches</option>
+          <option value="">{t('All branches')}</option>
           {(branches.data?.items ?? []).map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
@@ -119,7 +124,7 @@ export function ResourcesPage() {
 
       {resources.isPending ? <Skeleton className="h-32 w-full" aria-busy="true" /> : null}
       {resources.data && resources.data.items.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No rooms or equipment yet.</p>
+        <p className="text-muted-foreground text-sm">{t('No rooms or equipment yet.')}</p>
       ) : null}
       <div className="grid gap-3">
         {(resources.data?.items ?? []).map((r) => (
@@ -131,6 +136,7 @@ export function ResourcesPage() {
 }
 
 function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
+  const t = useT();
   const branches = useBranches();
   const types = useResourceTypes();
   const createType = useCreateResourceType();
@@ -182,19 +188,19 @@ function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Add a room or equipment</CardTitle>
+        <CardTitle className="text-base">{t('Add a room or equipment')}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="resource-branch">Branch</Label>
+            <Label htmlFor="resource-branch">{t('Branch')}</Label>
             <select
               id="resource-branch"
               className={selectClass}
               value={effectiveBranch}
               onChange={(e) => setBranchId(e.target.value)}
             >
-              <option value="">Select…</option>
+              <option value="">{t('Select…')}</option>
               {(branches.data?.items ?? []).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
@@ -203,28 +209,28 @@ function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="resource-type">Type</Label>
+            <Label htmlFor="resource-type">{t('Type')}</Label>
             <select
               id="resource-type"
               className={selectClass}
               value={typeId}
               onChange={(e) => setTypeId(e.target.value)}
             >
-              <option value="">Select…</option>
-              {(types.data ?? []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({KIND_LABEL[t.kind]})
+              <option value="">{t('Select…')}</option>
+              {(types.data ?? []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ({t(KIND_LABEL[item.kind])})
                 </option>
               ))}
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="resource-name">Name</Label>
+            <Label htmlFor="resource-name">{t('Name')}</Label>
             <Input
               id="resource-name"
               value={name}
               maxLength={128}
-              placeholder="Room 1"
+              placeholder={t('Room 1')}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
@@ -235,18 +241,18 @@ function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
             onClick={() => void add()}
           >
             {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Add
+            {t('Add')}
           </Button>
-          <span className="text-muted-foreground px-2 text-sm">or a new type:</span>
+          <span className="text-muted-foreground px-2 text-sm">{t('or a new type:')}</span>
           <Input
-            aria-label="New type name"
+            aria-label={t('New type name')}
             className="w-44"
             value={newTypeName}
-            placeholder="Treatment room"
+            placeholder={t('Treatment room')}
             onChange={(e) => setNewTypeName(e.target.value)}
           />
           <select
-            aria-label="New type kind"
+            aria-label={t('New type kind')}
             className={selectClass}
             value={newTypeKind}
             onChange={(e) => setNewTypeKind(e.target.value as ResourceKind)}
@@ -262,7 +268,7 @@ function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
             disabled={!newTypeName.trim() || createType.isPending}
             onClick={() => void addType()}
           >
-            Add type
+            {t('Add type')}
           </Button>
         </div>
         {error ? (
@@ -276,6 +282,7 @@ function NewResource({ defaultBranchId }: { defaultBranchId: string }) {
 }
 
 function ResourceCard({ resource, canWrite }: { resource: Resource; canWrite: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <Card>
@@ -286,22 +293,22 @@ function ResourceCard({ resource, canWrite }: { resource: Resource; canWrite: bo
             <Badge variant="secondary">{resource.resourceTypeName}</Badge>
             <Badge variant={resource.status === 'ACTIVE' ? 'default' : 'destructive'}>
               {resource.status === 'ACTIVE'
-                ? 'Active'
+                ? t('Active')
                 : resource.status === 'OUT_OF_SERVICE'
-                  ? 'Out of service'
-                  : 'Inactive'}
+                  ? t('Out of service')
+                  : t('Inactive')}
             </Badge>
             <Button size="sm" variant="outline" onClick={() => setOpen(!open)} aria-expanded={open}>
-              {open ? 'Close' : 'Availability'}
+              {open ? t('Close') : t('Availability')}
             </Button>
           </div>
         </div>
-        {!resource.isBookable ? <CardDescription>Not bookable.</CardDescription> : null}
+        {!resource.isBookable ? <CardDescription>{t('Not bookable.')}</CardDescription> : null}
       </CardHeader>
       {open ? (
         <CardContent className="grid gap-4">
           <Windows id={resource.id} canWrite={canWrite} />
-          <Blocked id={resource.id} canWrite={canWrite} />
+          <Blocked id={resource.id} branchId={resource.branchId} canWrite={canWrite} />
         </CardContent>
       ) : null}
     </Card>
@@ -330,6 +337,7 @@ function WindowsForm({
   saved: ResourceWindow[];
   canWrite: boolean;
 }) {
+  const t = useT();
   const save = useSaveResourceWindows();
   const [rules, setRules] = useState<ResourceWindow[]>(saved);
   const [note, setNote] = useState<string | null>(null);
@@ -339,25 +347,25 @@ function WindowsForm({
     setNote(null);
     try {
       await save.mutateAsync({ id, rules });
-      setNote('Saved.');
+      setNote(t('Saved.'));
     } catch (caught) {
       setNote(message(caught, 'Could not save.'));
     }
   };
 
   return (
-    <section className="grid gap-2" aria-label="Weekly availability">
-      <h3 className="text-sm font-medium">When it can be booked</h3>
+    <section className="grid gap-2" aria-label={t('Weekly availability')}>
+      <h3 className="text-sm font-medium">{t('When it can be booked')}</h3>
       <p className="text-muted-foreground text-xs">
         {rules.length === 0
-          ? 'No windows: it follows the branch’s opening hours.'
-          : 'Only inside these windows (and within opening hours).'}
+          ? t('No windows: it follows the branch’s opening hours.')
+          : t('Only inside these windows (and within opening hours).')}
       </p>
       <ul className="grid gap-1">
         {rules.map((r, i) => (
           <li key={i} className="flex flex-wrap items-center gap-2 text-sm">
             <select
-              aria-label="Day"
+              aria-label={t('Day')}
               className={selectClass}
               value={r.dayOfWeek}
               disabled={!canWrite}
@@ -374,7 +382,7 @@ function WindowsForm({
               ))}
             </select>
             <Input
-              aria-label="From"
+              aria-label={t('From')}
               type="time"
               className="w-28"
               value={r.startsAt}
@@ -385,7 +393,7 @@ function WindowsForm({
             />
             <span>–</span>
             <Input
-              aria-label="Until"
+              aria-label={t('Until')}
               type="time"
               className="w-28"
               value={r.endsAt}
@@ -398,7 +406,7 @@ function WindowsForm({
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Remove window"
+                aria-label={t('Remove window')}
                 onClick={() => setRules(rules.filter((_, j) => j !== i))}
               >
                 <Trash2 className="size-4" aria-hidden />
@@ -417,13 +425,15 @@ function WindowsForm({
               setRules([...rules, { dayOfWeek: 1, startsAt: '09:00', endsAt: '17:00' }])
             }
           >
-            Add window
+            {t('Add window')}
           </Button>
           <Button size="sm" disabled={invalid || save.isPending} onClick={() => void submit()}>
-            Save windows
+            {t('Save windows')}
           </Button>
           {invalid ? (
-            <span className="text-destructive text-sm">Each window must end after it starts.</span>
+            <span className="text-destructive text-sm">
+              {t('Each window must end after it starts.')}
+            </span>
           ) : null}
           {note ? (
             <span role="status" className="text-sm">
@@ -436,7 +446,11 @@ function WindowsForm({
   );
 }
 
-function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
+function Blocked({ id, branchId, canWrite }: { id: string; branchId: string; canWrite: boolean }) {
+  const t = useT();
+  const branches = useBranches();
+  // The branch's zone: a room is booked on the branch's clock, not this device's.
+  const tz = branches.data?.items.find((b) => b.id === branchId)?.timezoneName ?? defaultTimezone();
   const list = useResourceUnavailability(id);
   const add = useAddResourceUnavailability();
   const remove = useRemoveResourceUnavailability();
@@ -453,8 +467,8 @@ function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
     try {
       await add.mutateAsync({
         id,
-        startsAt: new Date(from).toISOString(),
-        endsAt: new Date(to).toISOString(),
+        startsAt: wallToIso(from, tz),
+        endsAt: wallToIso(to, tz),
         reason,
         ...(allowConflicts ? { allowConflicts: true } : {}),
       });
@@ -472,20 +486,23 @@ function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
   };
 
   return (
-    <section className="grid gap-2" aria-label="Unavailable periods">
-      <h3 className="text-sm font-medium">Unavailable periods</h3>
+    <section className="grid gap-2" aria-label={t('Unavailable periods')}>
+      <h3 className="text-sm font-medium">{t('Unavailable periods')}</h3>
+      <p className="text-muted-foreground text-xs">
+        {t('Times are in the branch’s time zone ({tz}).', { tz })}
+      </p>
       <ul className="grid gap-1 text-sm">
         {(list.data?.items ?? []).map((b) => (
           <li key={b.id} className="flex flex-wrap items-center gap-2">
             <span className="tabular-nums">
-              {new Date(b.startsAt).toLocaleString()} → {new Date(b.endsAt).toLocaleString()}
+              {formatInZone(b.startsAt, tz)} → {formatInZone(b.endsAt, tz)}
             </span>
-            <Badge variant="secondary">{REASON_LABEL[b.reason]}</Badge>
+            <Badge variant="secondary">{t(REASON_LABEL[b.reason])}</Badge>
             {canWrite ? (
               <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Remove period"
+                aria-label={t('Remove period')}
                 disabled={remove.isPending}
                 onClick={() => void remove.mutateAsync({ id, unavailabilityId: b.id })}
               >
@@ -495,27 +512,27 @@ function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
           </li>
         ))}
         {list.data && list.data.items.length === 0 ? (
-          <li className="text-muted-foreground">None.</li>
+          <li className="text-muted-foreground">{t('None.')}</li>
         ) : null}
       </ul>
       {canWrite ? (
         <div className="flex flex-wrap items-end gap-2">
           <Input
-            aria-label="Unavailable from"
+            aria-label={t('Unavailable from')}
             type="datetime-local"
             className="w-52"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
           />
           <Input
-            aria-label="Unavailable until"
+            aria-label={t('Unavailable until')}
             type="datetime-local"
             className="w-52"
             value={to}
             onChange={(e) => setTo(e.target.value)}
           />
           <select
-            aria-label="Reason"
+            aria-label={t('Reason')}
             className={selectClass}
             value={reason}
             onChange={(e) => setReason(e.target.value as UnavailabilityReason)}
@@ -531,7 +548,7 @@ function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
             disabled={!from || !to || new Date(to) <= new Date(from) || add.isPending}
             onClick={() => void submit()}
           >
-            Block period
+            {t('Block period')}
           </Button>
         </div>
       ) : null}
@@ -540,10 +557,12 @@ function Blocked({ id, canWrite }: { id: string; canWrite: boolean }) {
           <p>{error}</p>
           {conflicts.length ? (
             <>
-              <p>Booked: {conflicts.map((c) => c.appointmentNumber).join(', ')}</p>
+              <p>
+                {t('Booked:')} {conflicts.map((c) => c.appointmentNumber).join(', ')}
+              </p>
               <div>
                 <Button size="sm" variant="destructive" onClick={() => void submit(true)}>
-                  Block anyway (appointments stay booked)
+                  {t('Block anyway (appointments stay booked)')}
                 </Button>
               </div>
             </>

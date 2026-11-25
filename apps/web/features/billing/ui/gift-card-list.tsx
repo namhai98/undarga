@@ -26,6 +26,7 @@ import {
   todayInputValue,
 } from '../model/gift-card-display';
 import { CustomerPicker, type PickedCustomer } from './customer-picker';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 const selectClass =
@@ -47,6 +48,7 @@ const selectClass =
  * it exactly. The last four characters, or the customer, work too.
  */
 export function GiftCardList() {
+  const t = useT();
   const [status, setStatus] = useState<GiftCardStatus | ''>('');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -82,14 +84,18 @@ export function GiftCardList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Gift cards</h2>
+          <h2 className="text-lg font-semibold">{t('Gift cards')}</h2>
           <p className="text-muted-foreground text-sm">
-            {cards.isPending ? 'Loading…' : `${total} card${total === 1 ? '' : 's'}`}
+            {cards.isPending
+              ? t('Loading…')
+              : total === 1
+                ? t('1 card')
+                : t('{total} cards', { total })}
           </p>
         </div>
         {canIssue ? (
           <Button size="sm" onClick={() => setIssuing(true)} disabled={issuing}>
-            Issue a card
+            {t('Issue a card')}
           </Button>
         ) : null}
       </header>
@@ -111,17 +117,17 @@ export function GiftCardList() {
 
       <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
         <div className="grid gap-1.5">
-          <Label htmlFor="card-search">Search</Label>
+          <Label htmlFor="card-search">{t('Search')}</Label>
           <Input
             id="card-search"
             value={searchInput}
-            placeholder="Code, last four, or customer"
+            placeholder={t('Code, last four, or customer')}
             autoComplete="off"
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="card-status">Status</Label>
+          <Label htmlFor="card-status">{t('Status')}</Label>
           <select
             id="card-status"
             value={status}
@@ -131,10 +137,10 @@ export function GiftCardList() {
               setOffset(0);
             }}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {GIFT_CARD_FILTER_STATUSES.map((value) => (
               <option key={value} value={value}>
-                {GIFT_CARD_STATUS_LABEL[value]}
+                {t(GIFT_CARD_STATUS_LABEL[value])}
               </option>
             ))}
           </select>
@@ -143,14 +149,14 @@ export function GiftCardList() {
 
       {cards.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load gift cards</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load gift cards')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {cards.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading gift cards…</span>
+          <span className="sr-only">{t('Loading gift cards…')}</span>
           {[0, 1].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -160,12 +166,12 @@ export function GiftCardList() {
       {!cards.isPending && !cards.error && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {filtered ? 'No matching gift cards' : 'No gift cards'}
+            {filtered ? t('No matching gift cards') : t('No gift cards')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
             {filtered
-              ? 'Try the full code, its last four characters, or the customer’s name.'
-              : 'Issued cards appear here. Only the last four characters are ever stored.'}
+              ? t('Try the full code, its last four characters, or the customer’s name.')
+              : t('Issued cards appear here. Only the last four characters are ever stored.')}
           </p>
         </div>
       ) : null}
@@ -176,19 +182,19 @@ export function GiftCardList() {
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Card
+                  {t('Card')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Customer
+                  {t('Customer')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Balance
+                  {t('Balance')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Expires
+                  {t('Expires')}
                 </th>
                 <th scope="col" className="py-2 font-medium">
-                  Status
+                  {t('Status')}
                 </th>
               </tr>
             </thead>
@@ -211,15 +217,17 @@ export function GiftCardList() {
                   <td className="py-2 pr-3 tabular-nums">
                     {giftCardMoney(card.currentBalanceMinor, card.currencyCode)}
                     <span className="text-muted-foreground ml-1 text-xs">
-                      of {giftCardMoney(card.initialBalanceMinor, card.currencyCode)}
+                      {t('of {amount}', {
+                        amount: giftCardMoney(card.initialBalanceMinor, card.currencyCode),
+                      })}
                     </span>
                   </td>
                   <td className="text-muted-foreground py-2 pr-3">
-                    {card.expiresAt ? new Date(card.expiresAt).toLocaleDateString() : 'Never'}
+                    {card.expiresAt ? new Date(card.expiresAt).toLocaleDateString() : t('Never')}
                   </td>
                   <td className="py-2">
                     <Badge variant={giftCardStatusVariant(card.status)}>
-                      {GIFT_CARD_STATUS_LABEL[card.status]}
+                      {t(GIFT_CARD_STATUS_LABEL[card.status])}
                     </Badge>
                   </td>
                 </tr>
@@ -232,7 +240,11 @@ export function GiftCardList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -241,7 +253,7 @@ export function GiftCardList() {
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -249,7 +261,7 @@ export function GiftCardList() {
               disabled={offset + PAGE_SIZE >= total}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>
@@ -259,15 +271,17 @@ export function GiftCardList() {
 }
 
 function IssuedPanel({ card, onDismiss }: { card: IssuedGiftCard; onDismiss: () => void }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   return (
     <Alert role="alert">
-      <AlertTitle>Card issued — write this down now</AlertTitle>
+      <AlertTitle>{t('Card issued — write this down now')}</AlertTitle>
       <AlertDescription className="grid gap-3">
         <p>
-          This code is not stored and cannot be shown again. If it is lost, the card has to be
-          voided and a new one issued.
+          {t(
+            'This code is not stored and cannot be shown again. If it is lost, the card has to be voided and a new one issued.',
+          )}
         </p>
         <code className="bg-muted rounded px-3 py-2 font-mono text-base tracking-widest">
           {card.code}
@@ -281,16 +295,16 @@ function IssuedPanel({ card, onDismiss }: { card: IssuedGiftCard; onDismiss: () 
             }}
           >
             <Copy aria-hidden className="size-4" />
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('Copied') : t('Copy')}
           </Button>
           <Link
             href={`/gift-cards/${card.id}`}
             className={buttonVariants({ size: 'sm', variant: 'outline' })}
           >
-            Open card
+            {t('Open card')}
           </Link>
           <Button size="sm" variant="ghost" onClick={onDismiss}>
-            I have it
+            {t('I have it')}
           </Button>
         </div>
       </AlertDescription>
@@ -310,6 +324,7 @@ export function IssueForm({
   onDone: (card: IssuedGiftCard) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const format = currencyFormat(currencyCode);
   const [amount, setAmount] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
@@ -329,7 +344,7 @@ export function IssueForm({
   const submit = async () => {
     setError(null);
     if (!parsed || BigInt(parsed) <= 0n) {
-      setError('Load some value onto the card.');
+      setError(t('Load some value onto the card.'));
       return;
     }
     try {
@@ -349,18 +364,20 @@ export function IssueForm({
 
   return (
     <div className="border-border/60 grid gap-4 rounded-lg border p-4">
-      <h3 className="text-sm font-medium">Issue a gift card</h3>
+      <h3 className="text-sm font-medium">{t('Issue a gift card')}</h3>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not issue</AlertTitle>
+          <AlertTitle>{t('Could not issue')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
-          <Label htmlFor="issue-amount">Initial balance ({currencyCode})</Label>
+          <Label htmlFor="issue-amount">
+            {t('Initial balance ({currencyCode})', { currencyCode })}
+          </Label>
           <Input
             id="issue-amount"
             inputMode="decimal"
@@ -375,7 +392,7 @@ export function IssueForm({
           ) : null}
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="issue-expires">Expires</Label>
+          <Label htmlFor="issue-expires">{t('Expires')}</Label>
           <Input
             id="issue-expires"
             type="date"
@@ -383,28 +400,28 @@ export function IssueForm({
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.target.value)}
           />
-          <p className="text-muted-foreground text-xs">Leave blank for never.</p>
+          <p className="text-muted-foreground text-xs">{t('Leave blank for never.')}</p>
         </div>
         <CustomerPicker id="issue-customer" value={customer} onChange={setCustomer} />
         <div className="grid gap-1.5">
-          <Label htmlFor="issue-recipient">Recipient name</Label>
+          <Label htmlFor="issue-recipient">{t('Recipient name')}</Label>
           <Input
             id="issue-recipient"
             value={recipientName}
             maxLength={128}
             onChange={(e) => setRecipientName(e.target.value)}
           />
-          <p className="text-muted-foreground text-xs">For a gift to someone not on file.</p>
+          <p className="text-muted-foreground text-xs">{t('For a gift to someone not on file.')}</p>
         </div>
       </div>
 
       <div className="flex gap-2">
         <Button size="sm" disabled={issue.isPending} onClick={() => void submit()}>
           {issue.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Issue
+          {t('Issue')}
         </Button>
         <Button size="sm" variant="outline" onClick={onCancel}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </div>
@@ -413,6 +430,7 @@ export function IssueForm({
 
 /** What the till uses before taking a payment: the code as the customer reads it. */
 function BalanceCheck() {
+  const t = useT();
   const [code, setCode] = useState('');
   const [result, setResult] = useState<GiftCardLookup | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -426,7 +444,7 @@ function BalanceCheck() {
     } catch (caught) {
       // A wrong code and another company's card are the same 404 — anything
       // else is an oracle for guessing codes.
-      setError(caught instanceof ApiError ? 'No card for that code.' : 'Lookup failed.');
+      setError(caught instanceof ApiError ? t('No card for that code.') : t('Lookup failed.'));
     }
   };
 
@@ -434,11 +452,11 @@ function BalanceCheck() {
     <div className="border-border/60 grid gap-3 rounded-lg border p-4">
       <div className="flex flex-wrap items-end gap-2">
         <div className="grid flex-1 gap-1.5">
-          <Label htmlFor="card-check">Check a balance</Label>
+          <Label htmlFor="card-check">{t('Check a balance')}</Label>
           <Input
             id="card-check"
             value={code}
-            placeholder="ABCD-EFGH-JKMN-PQRS"
+            placeholder={t('ABCD-EFGH-JKMN-PQRS')}
             autoComplete="off"
             className="font-mono uppercase"
             onChange={(e) => setCode(e.target.value)}
@@ -450,7 +468,7 @@ function BalanceCheck() {
           onClick={() => void check()}
         >
           {lookup.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Check
+          {t('Check')}
         </Button>
       </div>
 
@@ -469,7 +487,7 @@ function BalanceCheck() {
             {giftCardMoney(result.currentBalanceMinor, result.currencyCode)}
           </span>
           {result.isRedeemable ? (
-            <Badge variant="default">Usable</Badge>
+            <Badge variant="default">{t('Usable')}</Badge>
           ) : (
             <span className="text-destructive">{result.problem}</span>
           )}

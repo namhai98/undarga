@@ -14,6 +14,7 @@ import {
   notificationErrorMessage,
   offsetLabel,
 } from '../model/notification-display';
+import { useT } from '@/lib/i18n';
 
 const CHANNELS: NotificationChannel[] = ['EMAIL', 'SMS', 'PUSH'];
 const KEY: Record<NotificationChannel, 'email' | 'sms' | 'push'> = {
@@ -32,6 +33,7 @@ const MAX_REMINDERS = 4;
  * disabled.
  */
 export function NotificationSettingsForm({ settings }: { settings: NotificationSettings }) {
+  const t = useT();
   const canWrite = useCan('settings:write');
   const save = useUpdateNotificationSettings();
   const [channels, setChannels] = useState(settings.channels);
@@ -78,10 +80,11 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Channels</CardTitle>
+          <CardTitle>{t('Channels')}</CardTitle>
           <CardDescription>
-            A channel switched off here sends nothing at all, whatever a template or a customer’s
-            preference says.
+            {t(
+              'A channel switched off here sends nothing at all, whatever a template or a customer’s preference says.',
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-6">
@@ -99,22 +102,23 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
 
       <Card>
         <CardHeader>
-          <CardTitle>Appointment reminders</CardTitle>
+          <CardTitle>{t('Appointment reminders')}</CardTitle>
           <CardDescription>
-            Sent to the customer before each confirmed or pending appointment. A booking made after
-            a reminder’s moment skips that reminder rather than sending it late.
+            {t(
+              'Sent to the customer before each confirmed or pending appointment. A booking made after a reminder’s moment skips that reminder rather than sending it late.',
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           <Check
-            label="Send reminders"
+            label={t('Send reminders')}
             checked={remindersEnabled}
             disabled={disabled}
             onChange={setRemindersEnabled}
           />
           <fieldset className="grid gap-2" disabled={disabled || !remindersEnabled}>
             <legend className="text-muted-foreground mb-1 text-xs">
-              When (up to {MAX_REMINDERS})
+              {t('When (up to {MAX_REMINDERS})', { MAX_REMINDERS })}
             </legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {presets.map((minutes) => (
@@ -137,10 +141,11 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
 
       <Card>
         <CardHeader>
-          <CardTitle>Default notification preferences</CardTitle>
+          <CardTitle>{t('Default notification preferences')}</CardTitle>
           <CardDescription>
-            Which channels each message goes out on. Customers can still turn a channel off for
-            themselves; push reaches nobody until an app registers devices.
+            {t(
+              'Which channels each message goes out on. Customers can still turn a channel off for themselves; push reaches nobody until an app registers devices.',
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="relative overflow-x-auto">
@@ -148,11 +153,11 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Message
+                  {t('Message')}
                 </th>
                 {CHANNELS.map((channel) => (
                   <th key={channel} scope="col" className="py-2 pr-3 font-medium">
-                    {CHANNEL_LABEL[channel]}
+                    {t(CHANNEL_LABEL[channel])}
                   </th>
                 ))}
               </tr>
@@ -194,12 +199,12 @@ export function NotificationSettingsForm({ settings }: { settings: NotificationS
         <div>
           <Button disabled={save.isPending} onClick={() => void submit()}>
             {save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            Save settings
+            {t('Save settings')}
           </Button>
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">
-          You can view these settings but not change them.
+          {t('You can view these settings but not change them.')}
         </p>
       )}
     </div>

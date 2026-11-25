@@ -25,6 +25,7 @@ import {
   useServiceCategories,
   useUpdateService,
 } from '../api/use-catalog';
+import { plainT, useT } from '@/lib/i18n';
 
 /**
  * Everything arrives from `FormData` as a string, so the schema coerces and the
@@ -65,7 +66,7 @@ function optionalInt(min: number, max: number) {
     .string()
     .trim()
     .refine((v) => v === '' || (/^d+$/.test(v) && Number(v) >= min && Number(v) <= max), {
-      message: `Leave empty, or a whole number from ${min} to ${max}.`,
+      message: plainT('Leave empty, or a whole number from {min} to {max}.', { min, max }),
     })
     .transform((v) => (v === '' ? null : Number(v)));
 }
@@ -89,6 +90,7 @@ export function ServiceForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [formError, setFormError] = useState<string | null>(null);
   const { errors, onSubmit, applyServerErrors, setErrors } = useZodForm(formSchema);
 
@@ -112,7 +114,7 @@ export function ServiceForm({
   if (serviceId && existing.isPending) {
     return (
       <div className="grid gap-3" aria-busy="true">
-        <span className="sr-only">Loading the service…</span>
+        <span className="sr-only">{t('Loading the service…')}</span>
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -130,7 +132,9 @@ export function ServiceForm({
         price:
           format.minorUnit === 0
             ? 'Enter a whole amount.'
-            : `Enter an amount with at most ${format.minorUnit} decimal places.`,
+            : t('Enter an amount with at most {minorUnit} decimal places.', {
+                minorUnit: format.minorUnit,
+              }),
       });
       return;
     }
@@ -165,7 +169,9 @@ export function ServiceForm({
     } catch (error) {
       if (applyServerErrors(error)) return;
       setFormError(
-        error instanceof ApiError ? error.message : 'Could not save the service. Please try again.',
+        error instanceof ApiError
+          ? error.message
+          : t('Could not save the service. Please try again.'),
       );
     }
   });
@@ -177,22 +183,24 @@ export function ServiceForm({
       await remove.mutateAsync(serviceId);
       onDone();
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : 'Could not remove the service.');
+      setFormError(error instanceof ApiError ? error.message : t('Could not remove the service.'));
     }
   };
 
   return (
     <form onSubmit={handle} className="grid max-w-2xl gap-5" noValidate>
       <header className="grid gap-1">
-        <h2 className="text-lg font-semibold">{serviceId ? 'Edit service' : 'New service'}</h2>
+        <h2 className="text-lg font-semibold">
+          {serviceId ? t('Edit service') : t('New service')}
+        </h2>
         <p className="text-muted-foreground text-sm">
-          Prices are in {currencyCode}, the company currency.
+          {t('Prices are in {currencyCode}, the company currency.', { currencyCode })}
         </p>
       </header>
 
       {formError ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>{t('Could not save')}</AlertTitle>
           <AlertDescription>{formError}</AlertDescription>
         </Alert>
       ) : null}
@@ -203,8 +211,8 @@ export function ServiceForm({
           purpose="SERVICE_IMAGE"
           targetId={serviceId}
           fileId={service.imageFileId}
-          label="Service image"
-          hint="Shown on your booking page. JPEG, PNG or WebP, at least 200 × 200 pixels."
+          label={t('Service image')}
+          hint={t('Shown on your booking page. JPEG, PNG or WebP, at least 200 × 200 pixels.')}
           shape="wide"
           canEdit={canWriteImage}
           onChange={() => {
@@ -216,15 +224,15 @@ export function ServiceForm({
         />
       ) : null}
 
-      <Field id="name" label="Name" error={errors.name}>
+      <Field id="name" label={t('Name')} error={errors.name}>
         <Input id="name" name="name" defaultValue={service?.name ?? ''} required maxLength={160} />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="code"
-          label="Code"
-          hint="Optional. Your own reference, unique in this company."
+          label={t('Code')}
+          hint={t('Optional. Your own reference, unique in this company.')}
           error={errors.code}
         >
           <Input
@@ -232,19 +240,19 @@ export function ServiceForm({
             name="code"
             defaultValue={service?.code ?? ''}
             maxLength={24}
-            placeholder="CUT-60"
+            placeholder={t('CUT-60')}
             className="font-mono"
           />
         </Field>
 
-        <Field id="categoryId" label="Category" error={errors.categoryId}>
+        <Field id="categoryId" label={t('Category')} error={errors.categoryId}>
           <select
             id="categoryId"
             name="categoryId"
             defaultValue={service?.categoryId ?? ''}
             className={selectClass}
           >
-            <option value="">Uncategorised</option>
+            <option value="">{t('Uncategorised')}</option>
             {(categories.data?.items ?? []).map((category) => (
               <option key={category.id} value={category.id}>
                 {/* The em dash is the nesting: the API caps it at one level. */}
@@ -258,8 +266,8 @@ export function ServiceForm({
 
       <Field
         id="description"
-        label="Description"
-        hint="Shown to customers."
+        label={t('Description')}
+        hint={t('Shown to customers.')}
         error={errors.description}
       >
         <textarea
@@ -273,9 +281,9 @@ export function ServiceForm({
       </Field>
 
       <fieldset className="grid gap-4 sm:grid-cols-3">
-        <legend className="mb-2 text-sm font-medium">Time</legend>
+        <legend className="mb-2 text-sm font-medium">{t('Time')}</legend>
 
-        <Field id="durationMin" label="Duration" error={errors.durationMin}>
+        <Field id="durationMin" label={t('Duration')} error={errors.durationMin}>
           <div className="flex items-center gap-2">
             <Input
               id="durationMin"
@@ -289,14 +297,14 @@ export function ServiceForm({
               defaultValue={service?.durationMin ?? 60}
               className="w-24"
             />
-            <span className="text-muted-foreground text-sm">minutes</span>
+            <span className="text-muted-foreground text-sm">{t('minutes')}</span>
           </div>
         </Field>
 
         <Field
           id="bufferBeforeMin"
-          label="Buffer before"
-          hint="Setup time."
+          label={t('Buffer before')}
+          hint={t('Setup time.')}
           error={errors.bufferBeforeMin}
         >
           <div className="flex items-center gap-2">
@@ -311,14 +319,14 @@ export function ServiceForm({
               defaultValue={service?.bufferBeforeMin ?? 0}
               className="w-24"
             />
-            <span className="text-muted-foreground text-sm">minutes</span>
+            <span className="text-muted-foreground text-sm">{t('minutes')}</span>
           </div>
         </Field>
 
         <Field
           id="bufferAfterMin"
-          label="Buffer after"
-          hint="Clean-up time."
+          label={t('Buffer after')}
+          hint={t('Clean-up time.')}
           error={errors.bufferAfterMin}
         >
           <div className="flex items-center gap-2">
@@ -333,13 +341,17 @@ export function ServiceForm({
               defaultValue={service?.bufferAfterMin ?? 0}
               className="w-24"
             />
-            <span className="text-muted-foreground text-sm">minutes</span>
+            <span className="text-muted-foreground text-sm">{t('minutes')}</span>
           </div>
         </Field>
       </fieldset>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="price" label={`Price (${currencyCode})`} error={errors.price}>
+        <Field
+          id="price"
+          label={t('Price ({currencyCode})', { currencyCode })}
+          error={errors.price}
+        >
           <Input
             id="price"
             name="price"
@@ -353,8 +365,8 @@ export function ServiceForm({
 
         <Field
           id="sortOrder"
-          label="Sort order"
-          hint="Lower comes first on the booking page."
+          label={t('Sort order')}
+          hint={t('Lower comes first on the booking page.')}
           error={errors.sortOrder}
         >
           <Input
@@ -372,12 +384,12 @@ export function ServiceForm({
       </div>
 
       <fieldset className="grid gap-3">
-        <legend className="mb-2 text-sm font-medium">Availability</legend>
+        <legend className="mb-2 text-sm font-medium">{t('Availability')}</legend>
 
         <Field
           id="status"
-          label="Status"
-          hint="Whether it can be booked at all."
+          label={t('Status')}
+          hint={t('Whether it can be booked at all.')}
           error={errors.status}
         >
           <select
@@ -386,10 +398,10 @@ export function ServiceForm({
             defaultValue={service?.status ?? 'ACTIVE'}
             className={`${selectClass} sm:w-48`}
           >
-            <option value="DRAFT">Draft</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-            <option value="ARCHIVED">Archived</option>
+            <option value="DRAFT">{t('Draft')}</option>
+            <option value="ACTIVE">{t('Active')}</option>
+            <option value="INACTIVE">{t('Inactive')}</option>
+            <option value="ARCHIVED">{t('Archived')}</option>
           </select>
         </Field>
 
@@ -397,53 +409,55 @@ export function ServiceForm({
             and unlisted — reception can book it, the public cannot see it. */}
         <Checkbox
           name="isOnlineBookable"
-          label="Show on the public booking site"
-          hint="Uncheck for internal-only work. Staff can still book it while the status is active."
+          label={t('Show on the public booking site')}
+          hint={t(
+            'Uncheck for internal-only work. Staff can still book it while the status is active.',
+          )}
           defaultChecked={service?.isOnlineBookable ?? true}
         />
         <Checkbox
           name="requiresEmployee"
-          label="Requires a member of staff"
+          label={t('Requires a member of staff')}
           defaultChecked={service?.requiresEmployee ?? true}
         />
         <Checkbox
           name="requiresResource"
-          label="Requires a room or equipment"
+          label={t('Requires a room or equipment')}
           defaultChecked={service?.requiresResource ?? false}
         />
       </fieldset>
 
       <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-medium">Booking rules for this service</legend>
+        <legend className="mb-2 text-sm font-medium">{t('Booking rules for this service')}</legend>
         <p className="text-muted-foreground -mt-1 text-xs sm:col-span-2">
-          Leave a field empty to use the company’s booking rules.
+          {t('Leave a field empty to use the company’s booking rules.')}
         </p>
         <RuleField
           name="bookingLeadTimeMin"
-          label="Minimum notice"
+          label={t('Minimum notice')}
           unit="minutes"
           value={service?.bookingRules?.bookingLeadTimeMin}
           error={errors.bookingLeadTimeMin}
         />
         <RuleField
           name="maxAdvanceBookingDays"
-          label="Book up to"
+          label={t('Book up to')}
           unit="days ahead"
           value={service?.bookingRules?.maxAdvanceBookingDays}
           error={errors.maxAdvanceBookingDays}
         />
         <RuleField
           name="cancellationWindowHours"
-          label="Cancellation deadline"
+          label={t('Cancellation deadline')}
           unit="hours before"
           value={service?.bookingRules?.cancellationWindowHours}
           error={errors.cancellationWindowHours}
         />
         <RuleField
           name="maxConcurrentBookings"
-          label="At most at the same time"
+          label={t('At most at the same time')}
           unit="bookings per branch"
-          hint="Across all staff, e.g. limited equipment or a capped class."
+          hint={t('Across all staff, e.g. limited equipment or a capped class.')}
           value={service?.bookingRules?.maxConcurrentBookings}
           error={errors.maxConcurrentBookings}
         />
@@ -452,10 +466,10 @@ export function ServiceForm({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          {serviceId ? 'Save changes' : 'Create service'}
+          {serviceId ? t('Save changes') : t('Create service')}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          Cancel
+          {t('Cancel')}
         </Button>
         {serviceId ? (
           <Button
@@ -466,7 +480,7 @@ export function ServiceForm({
             disabled={pending}
           >
             {/* Soft delete: appointment history keeps resolving. */}
-            Remove service
+            {t('Remove service')}
           </Button>
         ) : null}
       </div>
@@ -539,6 +553,7 @@ function RuleField(props: {
   value: number | null | undefined;
   error?: string;
 }) {
+  const t = useT();
   return (
     <Field id={props.name} label={props.label} hint={props.hint} error={props.error}>
       <div className="flex items-center gap-2">
@@ -549,7 +564,7 @@ function RuleField(props: {
           inputMode="numeric"
           min={0}
           step={1}
-          placeholder="Default"
+          placeholder={t('Default')}
           defaultValue={props.value ?? ''}
           className="w-28"
         />

@@ -15,7 +15,11 @@ import type {
   PublicSlot,
   PublicUnavailableReason,
 } from '@/services/public-booking.service';
-import { usePublicAvailability, usePublicEmployees, usePublicServices } from '../api/use-public-booking';
+import {
+  usePublicAvailability,
+  usePublicEmployees,
+  usePublicServices,
+} from '../api/use-public-booking';
 import {
   customerFormSchema,
   formatDay,
@@ -23,6 +27,7 @@ import {
   wallTime,
   type CustomerFormValues,
 } from '../model/booking-flow';
+import { useT } from '@/lib/i18n';
 
 const CHOICE =
   'border-border/70 bg-card hover:border-primary/60 hover:bg-muted/40 focus-visible:ring-ring/50 flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors outline-none focus-visible:ring-3';
@@ -36,8 +41,9 @@ export function price(minor: string, currency: string): string {
 // -----------------------------------------------------------------------------
 
 export function BranchStep(props: { branches: PublicBranch[]; onSelect: (id: string) => void }) {
+  const t = useT();
   if (props.branches.length === 0) {
-    return <Empty>This business isn’t taking online bookings at the moment.</Empty>;
+    return <Empty>{t('This business isn’t taking online bookings at the moment.')}</Empty>;
   }
   return (
     <ul className="grid gap-3">
@@ -47,7 +53,9 @@ export function BranchStep(props: { branches: PublicBranch[]; onSelect: (id: str
             <MapPin aria-hidden className="text-muted-foreground mt-0.5 size-5 shrink-0" />
             <span className="grid gap-0.5">
               <span className="font-medium">{b.name}</span>
-              {b.address ? <span className="text-muted-foreground text-sm">{b.address}</span> : null}
+              {b.address ? (
+                <span className="text-muted-foreground text-sm">{b.address}</span>
+              ) : null}
             </span>
           </button>
         </li>
@@ -66,6 +74,7 @@ export function ServiceStep(props: {
   selectedId: string | null;
   onSelect: (service: PublicService) => void;
 }) {
+  const t = useT();
   const services = usePublicServices(props.slug, props.branchId);
   const [category, setCategory] = useState<string>('all');
 
@@ -77,18 +86,22 @@ export function ServiceStep(props: {
     [services.data, category],
   );
 
-  if (services.isPending) return <ListSkeleton label="Loading services…" />;
+  if (services.isPending) return <ListSkeleton label={t('Loading services…')} />;
   if (services.error) return <LoadError what="services" retry={() => void services.refetch()} />;
 
   const categories = services.data.categories;
   if (services.data.services.length === 0) {
-    return <Empty>No services can be booked online at this location yet.</Empty>;
+    return <Empty>{t('No services can be booked online at this location yet.')}</Empty>;
   }
 
   return (
     <div className="grid gap-4">
       {categories.length > 1 ? (
-        <div role="tablist" aria-label="Service categories" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <div
+          role="tablist"
+          aria-label={t('Service categories')}
+          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+        >
           {[{ id: 'all', name: 'All' }, ...categories].map((c) => (
             <button
               key={c.id}
@@ -121,11 +134,13 @@ export function ServiceStep(props: {
               <span className="grid min-w-0 flex-1 gap-1">
                 <span className="font-medium">{s.name}</span>
                 {s.description ? (
-                  <span className="text-muted-foreground line-clamp-2 text-sm">{s.description}</span>
+                  <span className="text-muted-foreground line-clamp-2 text-sm">
+                    {s.description}
+                  </span>
                 ) : null}
                 <span className="text-muted-foreground flex items-center gap-1 text-xs">
                   <Clock aria-hidden className="size-3.5" />
-                  {s.durationMin} min
+                  {t('{minutes} min', { minutes: s.durationMin })}
                 </span>
               </span>
               <span className="shrink-0 font-medium tabular-nums">
@@ -149,9 +164,10 @@ export function EmployeeStep(props: {
   serviceId: string;
   onSelect: (employeeId: string | null) => void;
 }) {
+  const t = useT();
   const employees = usePublicEmployees(props.slug, props.branchId, props.serviceId);
 
-  if (employees.isPending) return <ListSkeleton label="Loading staff…" />;
+  if (employees.isPending) return <ListSkeleton label={t('Loading staff…')} />;
   if (employees.error) return <LoadError what="staff" retry={() => void employees.refetch()} />;
 
   return (
@@ -160,8 +176,8 @@ export function EmployeeStep(props: {
         <button type="button" className={CHOICE} onClick={() => props.onSelect(null)}>
           <User aria-hidden className="text-muted-foreground mt-0.5 size-5 shrink-0" />
           <span className="grid gap-0.5">
-            <span className="font-medium">Anyone available</span>
-            <span className="text-muted-foreground text-sm">Most times to choose from</span>
+            <span className="font-medium">{t('Anyone available')}</span>
+            <span className="text-muted-foreground text-sm">{t('Most times to choose from')}</span>
           </span>
         </button>
       </li>
@@ -176,7 +192,9 @@ export function EmployeeStep(props: {
             </span>
             <span className="grid gap-0.5">
               <span className="font-medium">{e.name}</span>
-              {e.jobTitle ? <span className="text-muted-foreground text-sm">{e.jobTitle}</span> : null}
+              {e.jobTitle ? (
+                <span className="text-muted-foreground text-sm">{e.jobTitle}</span>
+              ) : null}
             </span>
           </button>
         </li>
@@ -209,6 +227,7 @@ export function TimeStep(props: {
   onDate: (date: string) => void;
   onSelect: (slot: PublicSlot) => void;
 }) {
+  const t = useT();
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => isoDay(i)), []);
   const availability = usePublicAvailability(props.slug, {
     branchId: props.branchId,
@@ -222,13 +241,17 @@ export function TimeStep(props: {
     <div className="grid gap-4">
       {props.notice ? (
         <Alert role="alert">
-          <AlertTitle>That time was just taken</AlertTitle>
+          <AlertTitle>{t('That time was just taken')}</AlertTitle>
           <AlertDescription>{props.notice}</AlertDescription>
         </Alert>
       ) : null}
 
       <div className="grid gap-2">
-        <div role="radiogroup" aria-label="Date" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <div
+          role="radiogroup"
+          aria-label={t('Date')}
+          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+        >
           {days.map((d) => {
             const active = d === props.date;
             const [weekday = '', ...rest] = formatDay(d, props.locale).split(' ');
@@ -255,7 +278,7 @@ export function TimeStep(props: {
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="pb-date" className="text-muted-foreground text-xs">
-            Another date
+            {t('Another date')}
           </Label>
           <input
             id="pb-date"
@@ -270,7 +293,7 @@ export function TimeStep(props: {
 
       {availability.isPending ? (
         <div aria-busy="true" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-          <span className="sr-only">Finding available times…</span>
+          <span className="sr-only">{t('Finding available times…')}</span>
           {Array.from({ length: 8 }, (_, i) => (
             <Skeleton key={i} className="h-11" />
           ))}
@@ -280,10 +303,16 @@ export function TimeStep(props: {
       ) : day && day.slots.length > 0 ? (
         <div className="grid gap-2">
           <p className="text-muted-foreground flex items-center gap-2 text-xs">
-            {availability.isFetching ? <Loader2 aria-hidden className="size-3 animate-spin" /> : null}
-            {formatDay(props.date, props.locale, true)} · times shown in {day.timezone}
+            {availability.isFetching ? (
+              <Loader2 aria-hidden className="size-3 animate-spin" />
+            ) : null}
+            {formatDay(props.date, props.locale, true)} {t('· times shown in')} {day.timezone}
           </p>
-          <div role="radiogroup" aria-label="Available times" className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+          <div
+            role="radiogroup"
+            aria-label={t('Available times')}
+            className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5"
+          >
             {day.slots.map((slot) => (
               <button
                 key={slot.startAt}
@@ -300,8 +329,8 @@ export function TimeStep(props: {
         </div>
       ) : (
         <Empty>
-          {day?.unavailableReason ? REASON[day.unavailableReason] : 'No times left on this day.'}{' '}
-          Try another date.
+          {day?.unavailableReason ? REASON[day.unavailableReason] : t('No times left on this day.')}{' '}
+          {t('Try another date.')}
         </Empty>
       )}
     </div>
@@ -319,6 +348,7 @@ export function DetailsStep(props: {
   serverErrors: FieldErrors;
   onSubmit: (values: CustomerFormValues) => void;
 }) {
+  const t = useT();
   const [values, setValues] = useState<CustomerFormValues>({
     firstName: '',
     lastName: '',
@@ -352,25 +382,56 @@ export function DetailsStep(props: {
   return (
     <form noValidate onSubmit={submit} className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="pb-first" label="First name" error={shown.firstName}>
-          <Input id="pb-first" autoComplete="given-name" value={values.firstName} onChange={set('firstName')} aria-invalid={Boolean(shown.firstName)} />
+        <Field id="pb-first" label={t('First name')} error={shown.firstName}>
+          <Input
+            id="pb-first"
+            autoComplete="given-name"
+            value={values.firstName}
+            onChange={set('firstName')}
+            aria-invalid={Boolean(shown.firstName)}
+          />
         </Field>
-        <Field id="pb-last" label="Last name (optional)" error={shown.lastName}>
-          <Input id="pb-last" autoComplete="family-name" value={values.lastName} onChange={set('lastName')} />
+        <Field id="pb-last" label={t('Last name (optional)')} error={shown.lastName}>
+          <Input
+            id="pb-last"
+            autoComplete="family-name"
+            value={values.lastName}
+            onChange={set('lastName')}
+          />
         </Field>
       </div>
-      <Field id="pb-phone" label="Phone" error={shown.phone}>
-        <Input id="pb-phone" type="tel" inputMode="tel" autoComplete="tel" value={values.phone} onChange={set('phone')} aria-invalid={Boolean(shown.phone)} />
+      <Field id="pb-phone" label={t('Phone')} error={shown.phone}>
+        <Input
+          id="pb-phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={values.phone}
+          onChange={set('phone')}
+          aria-invalid={Boolean(shown.phone)}
+        />
       </Field>
-      <Field id="pb-email" label="Email (optional)" error={shown.email}>
-        <Input id="pb-email" type="email" inputMode="email" autoComplete="email" value={values.email} onChange={set('email')} aria-invalid={Boolean(shown.email)} />
+      <Field id="pb-email" label={t('Email (optional)')} error={shown.email}>
+        <Input
+          id="pb-email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={values.email}
+          onChange={set('email')}
+          aria-invalid={Boolean(shown.email)}
+        />
       </Field>
-      <Field id="pb-note" label="Anything we should know? (optional)" error={shown.note}>
+      <Field id="pb-note" label={t('Anything we should know? (optional)')} error={shown.note}>
         <Input id="pb-note" value={values.note} maxLength={1000} onChange={set('note')} />
       </Field>
       <Button type="submit" size="lg" className="h-12 w-full sm:w-auto" disabled={props.submitting}>
-        {props.submitting ? <Loader2 aria-hidden className="animate-spin" /> : <Check aria-hidden />}
-        Confirm booking
+        {props.submitting ? (
+          <Loader2 aria-hidden className="animate-spin" />
+        ) : (
+          <Check aria-hidden />
+        )}
+        {t('Confirm booking')}
       </Button>
     </form>
   );
@@ -414,13 +475,14 @@ function ListSkeleton({ label }: { label: string }) {
 }
 
 function LoadError({ what, retry }: { what: string; retry: () => void }) {
+  const t = useT();
   return (
     <Alert variant="destructive" role="alert">
-      <AlertTitle>Couldn’t load {what}</AlertTitle>
+      <AlertTitle>{t('Couldn’t load {what}', { what })}</AlertTitle>
       <AlertDescription className="grid gap-2">
-        <span>Check your connection and try again.</span>
+        <span>{t('Check your connection and try again.')}</span>
         <Button size="sm" variant="outline" className="w-fit" onClick={retry}>
-          Try again
+          {t('Try again')}
         </Button>
       </AlertDescription>
     </Alert>

@@ -70,6 +70,7 @@ export interface CreateBranchInput {
   phone?: string | null;
   email?: string | null;
   addressLine1?: string | null;
+  addressLine2?: string | null;
   city?: string | null;
   district?: string | null;
   postalCode?: string | null;
@@ -98,8 +99,11 @@ export const branchesService = {
   create: (companyId: string, input: CreateBranchInput) =>
     apiClient.post<Branch>(`/companies/${companyId}/branches`, input),
 
-  update: (companyId: string, branchId: string, input: Partial<CreateBranchInput> & { status?: BranchStatus }) =>
-    apiClient.patch<Branch>(`/companies/${companyId}/branches/${branchId}`, input),
+  update: (
+    companyId: string,
+    branchId: string,
+    input: Partial<CreateBranchInput> & { status?: BranchStatus },
+  ) => apiClient.patch<Branch>(`/companies/${companyId}/branches/${branchId}`, input),
 
   /** Soft delete — the branch stops appearing, its bookings keep resolving. */
   remove: (companyId: string, branchId: string) =>
@@ -111,10 +115,7 @@ export const branchesService = {
     }),
 
   updateSettings: (companyId: string, branchId: string, input: Partial<BranchSettings>) =>
-    apiClient.patch<BranchSettings>(
-      `/companies/${companyId}/branches/${branchId}/settings`,
-      input,
-    ),
+    apiClient.patch<BranchSettings>(`/companies/${companyId}/branches/${branchId}/settings`, input),
 
   getBusinessHours: (companyId: string, branchId: string, signal?: AbortSignal) =>
     apiClient.get<{ days: BusinessHoursDay[] }>(

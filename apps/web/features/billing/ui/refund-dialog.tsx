@@ -11,6 +11,7 @@ import { currencyFormat } from '@/lib/currency';
 import { ApiError } from '@/services/api-error';
 import type { Payment } from '@/services/billing.service';
 import { useRefundPayment } from '../api/use-billing';
+import { useT } from '@/lib/i18n';
 
 /**
  * Giving money back, behind a confirmation.
@@ -30,10 +31,13 @@ import { useRefundPayment } from '../api/use-billing';
  * anything.
  */
 export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => void }) {
+  const t = useT();
   const format = currencyFormat(payment.currencyCode);
   const refundable = BigInt(payment.refundableMinor);
 
-  const [amount, setAmount] = useState(minorToDecimalString(payment.refundableMinor, format.minorUnit));
+  const [amount, setAmount] = useState(
+    minorToDecimalString(payment.refundableMinor, format.minorUnit),
+  );
   const [reason, setReason] = useState('');
   const [destination, setDestination] = useState(
     // A gift-card payment can only go back to the card. Handing cash over for a
@@ -55,7 +59,7 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
       : BigInt(parsed) <= 0n
         ? 'A refund must be more than zero.'
         : BigInt(parsed) > refundable
-          ? `Only ${money(payment.refundableMinor)} is still refundable.`
+          ? t('Only {money} is still refundable.', { money: money(payment.refundableMinor) })
           : null;
 
   const reasonError = reason.trim().length < 3 ? 'Say why — it goes on the audit trail.' : null;
@@ -67,7 +71,7 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
       await refund.mutateAsync({ amountMinor: parsed!, reason: reason.trim(), destination });
       onClose();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not process the refund.');
+      setError(caught instanceof ApiError ? caught.message : t('Could not process the refund.'));
       setConfirming(false);
     }
   };
@@ -81,31 +85,34 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
     >
       <header className="grid gap-1">
         <h3 id="refund-title" className="text-sm font-semibold">
-          Refund {payment.paymentNumber}
+          {t('Refund {paymentNumber}', { paymentNumber: payment.paymentNumber })}
         </h3>
         <p className="text-muted-foreground text-xs">
-          {money(payment.amountMinor)} taken by {payment.method.toLowerCase().replace(/_/g, ' ')}
+          {money(payment.amountMinor)} {t('taken by')}{' '}
+          {payment.method.toLowerCase().replace(/_/g, ' ')}
           {payment.refundedMinor !== '0'
-            ? ` · ${money(payment.refundedMinor)} already refunded`
+            ? t(' · {money} already refunded', { money: money(payment.refundedMinor) })
             : ''}
         </p>
       </header>
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not refund</AlertTitle>
+          <AlertTitle>{t('Could not refund')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
 
       {confirming ? (
         <Alert role="alert">
-          <AlertTitle>Refund {money(parsed!)}?</AlertTitle>
+          <AlertTitle>
+            {t('Refund')} {money(parsed!)}?
+          </AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>
               {destination === 'GIFT_CARD'
-                ? 'The value goes back onto the gift card it came from.'
-                : 'This records money going back the way it came. It cannot be undone here.'}
+                ? t('The value goes back onto the gift card it came from.')
+                : t('This records money going back the way it came. It cannot be undone here.')}
             </p>
             <div className="flex gap-2">
               <Button
@@ -115,10 +122,10 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
                 onClick={() => void submit()}
               >
                 {refund.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Refund {money(parsed!)}
+                {t('Refund')} {money(parsed!)}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setConfirming(false)}>
-                Back
+                {t('Back')}
               </Button>
             </div>
           </AlertDescription>
@@ -126,7 +133,9 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
       ) : (
         <>
           <div className="grid gap-1.5">
-            <Label htmlFor="refund-amount">Amount ({payment.currencyCode})</Label>
+            <Label htmlFor="refund-amount">
+              {t('Amount ({currencyCode})', { currencyCode: payment.currencyCode })}
+            </Label>
             <Input
               id="refund-amount"
               inputMode="decimal"
@@ -140,13 +149,13 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
               </p>
             ) : (
               <p className="text-muted-foreground text-xs">
-                Up to {money(payment.refundableMinor)}.
+                {t('Up to')} {money(payment.refundableMinor)}.
               </p>
             )}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="refund-destination">Where it goes</Label>
+            <Label htmlFor="refund-destination">{t('Where it goes')}</Label>
             <select
               id="refund-destination"
               value={destination}
@@ -154,26 +163,26 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
               className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3 disabled:opacity-60"
               onChange={(e) => setDestination(e.target.value)}
             >
-              <option value="ORIGINAL_METHOD">Back the way it came</option>
-              <option value="GIFT_CARD">Onto a gift card</option>
-              <option value="CASH">Cash</option>
-              <option value="BANK_TRANSFER">Bank transfer</option>
+              <option value="ORIGINAL_METHOD">{t('Back the way it came')}</option>
+              <option value="GIFT_CARD">{t('Onto a gift card')}</option>
+              <option value="CASH">{t('Cash')}</option>
+              <option value="BANK_TRANSFER">{t('Bank transfer')}</option>
             </select>
             {payment.method === 'GIFT_CARD' ? (
               <p className="text-muted-foreground text-xs">
-                A gift-card payment can only go back onto that card.
+                {t('A gift-card payment can only go back onto that card.')}
               </p>
             ) : null}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="refund-reason">Reason</Label>
+            <Label htmlFor="refund-reason">{t('Reason')}</Label>
             <Input
               id="refund-reason"
               value={reason}
               maxLength={512}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Service not performed"
+              placeholder={t('Service not performed')}
             />
             {reason.length > 0 && reasonError ? (
               <p role="alert" className="text-destructive text-xs">
@@ -184,10 +193,10 @@ export function RefundDialog({ payment, onClose }: { payment: Payment; onClose: 
 
           <div className="flex gap-2">
             <Button size="sm" disabled={!canSubmit} onClick={() => setConfirming(true)}>
-              Continue
+              {t('Continue')}
             </Button>
             <Button size="sm" variant="outline" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
           </div>
         </>

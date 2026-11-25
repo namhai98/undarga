@@ -10,7 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/features/auth';
+import { useBusinessTimezone } from '@/features/companies';
 import { useEmployees } from '@/features/employees';
+import { formatInZone as when, wallToIso } from '@/lib/zoned';
 import { ApiError } from '@/services/api-error';
 import type {
   TimeOff,
@@ -19,6 +21,7 @@ import type {
   TimeOffType,
 } from '@/services/time-off.service';
 import { useCreateTimeOff, useTimeOff, useUpdateTimeOff } from '../api/use-time-off';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -39,15 +42,6 @@ const STATUS_LABEL: Record<TimeOffStatus, string> = {
   REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
 };
-
-/** `datetime-local` value (this device's time) → ISO instant. */
-function toInstant(local: string): string {
-  return new Date(local).toISOString();
-}
-
-function when(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
 
 function errorText(error: unknown, fallback: string): string {
   if (!(error instanceof ApiError)) return fallback;
@@ -78,6 +72,7 @@ function conflictsOf(error: unknown): TimeOffConflict[] {
  * cancelled automatically — the server lists them and asks for confirmation.
  */
 export function TimeOffPage() {
+  const t = useT();
   const canApprove = useCan('timeoff:approve');
   const canRequest = useCan('timeoff:request');
   const [status, setStatus] = useState<TimeOffStatus | ''>('');
@@ -86,8 +81,8 @@ export function TimeOffPage() {
   if (!canApprove && !canRequest) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see time off.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>{t('You do not have permission to see time off.')}</AlertDescription>
       </Alert>
     );
   }
@@ -95,11 +90,13 @@ export function TimeOffPage() {
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Time off</h1>
+        <h1 className="text-xl font-semibold">{t('Time off')}</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
           {canApprove
-            ? 'Approved time off blocks bookings for that staff member straight away. Requests from staff wait here for approval.'
-            : 'Request time off for yourself. It blocks bookings once a manager approves it.'}
+            ? t(
+                'Approved time off blocks bookings for that staff member straight away. Requests from staff wait here for approval.',
+              )
+            : t('Request time off for yourself. It blocks bookings once a manager approves it.')}
         </p>
       </header>
 
@@ -109,15 +106,15 @@ export function TimeOffPage() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">
-              {canApprove ? 'All time off' : 'Your time off'}
+              {canApprove ? t('All time off') : t('Your time off')}
             </CardTitle>
             <select
-              aria-label="Filter by status"
+              aria-label={t('Filter by status')}
               className={selectClass}
               value={status}
               onChange={(e) => setStatus(e.target.value as TimeOffStatus | '')}
             >
-              <option value="">Any status</option>
+              <option value="">{t('Any status')}</option>
               {Object.entries(STATUS_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -130,15 +127,15 @@ export function TimeOffPage() {
           {list.isPending ? <Skeleton className="h-24 w-full" aria-busy="true" /> : null}
           {list.error ? (
             <p role="alert" className="text-destructive text-sm">
-              Could not load time off.
+              {t('Could not load time off.')}
             </p>
           ) : null}
           {list.data && list.data.items.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No time off recorded.</p>
+            <p className="text-muted-foreground text-sm">{t('No time off recorded.')}</p>
           ) : null}
           <ul className="grid gap-2">
-            {(list.data?.items ?? []).map((t) => (
-              <TimeOffRow key={t.id} entry={t} canApprove={canApprove} />
+            {(list.data?.items ?? []).map((item) => (
+              <TimeOffRow key={item.id} entry={item} canApprove={canApprove} />
             ))}
           </ul>
         </CardContent>
@@ -148,6 +145,7 @@ export function TimeOffPage() {
 }
 
 function NewTimeOff({ canApprove }: { canApprove: boolean }) {
+  const t = useT();
   const canReadStaff = useCan('employee:read');
   const employees = useEmployees({ status: 'ACTIVE', limit: 100 });
   const create = useCreateTimeOff();
@@ -159,6 +157,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<TimeOffConflict[]>([]);
   const [done, setDone] = useState<string | null>(null);
+  const tz = useBusinessTimezone();
 
   const needsEmployee = canApprove;
   const invalid = (needsEmployee && !employeeId) || !from || !to || new Date(to) <= new Date(from);
@@ -170,23 +169,25 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
       const saved = await create.mutateAsync({
         ...(employeeId ? { employeeId } : {}),
         type,
-        startsAt: toInstant(from),
-        endsAt: toInstant(to),
+        startsAt: wallToIso(from, tz),
+        endsAt: wallToIso(to, tz),
         reason: reason.trim() || null,
         ...(allowConflicts ? { allowConflicts: true } : {}),
       });
       setConflicts([]);
       setDone(
         saved.status === 'APPROVED'
-          ? `Recorded. ${saved.employeeName} is now unavailable for bookings in that period.`
-          : 'Requested. It blocks bookings once a manager approves it.',
+          ? t('Recorded. {employeeName} is now unavailable for bookings in that period.', {
+              employeeName: saved.employeeName,
+            })
+          : t('Requested. It blocks bookings once a manager approves it.'),
       );
       setFrom('');
       setTo('');
       setReason('');
     } catch (caught) {
       setConflicts(conflictsOf(caught));
-      setError(errorText(caught, 'Could not save the time off.'));
+      setError(errorText(caught, t('Could not save the time off.')));
     }
   };
 
@@ -194,14 +195,14 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          {canApprove ? 'Record time off' : 'Request time off'}
+          {canApprove ? t('Record time off') : t('Request time off')}
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {needsEmployee ? (
             <div className="grid gap-1.5">
-              <Label htmlFor="timeoff-employee">Staff member</Label>
+              <Label htmlFor="timeoff-employee">{t('Staff member')}</Label>
               <select
                 id="timeoff-employee"
                 className={selectClass}
@@ -209,7 +210,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
                 disabled={!canReadStaff}
                 onChange={(e) => setEmployeeId(e.target.value)}
               >
-                <option value="">Select…</option>
+                <option value="">{t('Select…')}</option>
                 {(employees.data?.items ?? []).map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.displayName}
@@ -219,7 +220,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
             </div>
           ) : null}
           <div className="grid gap-1.5">
-            <Label htmlFor="timeoff-type">Type</Label>
+            <Label htmlFor="timeoff-type">{t('Type')}</Label>
             <select
               id="timeoff-type"
               className={selectClass}
@@ -234,7 +235,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
             </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="timeoff-from">From</Label>
+            <Label htmlFor="timeoff-from">{t('From')}</Label>
             <Input
               id="timeoff-from"
               type="datetime-local"
@@ -243,7 +244,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="timeoff-to">Until</Label>
+            <Label htmlFor="timeoff-to">{t('Until')}</Label>
             <Input
               id="timeoff-to"
               type="datetime-local"
@@ -253,7 +254,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
           </div>
         </div>
         <div className="grid gap-1.5 sm:max-w-md">
-          <Label htmlFor="timeoff-reason">Note (optional, staff only)</Label>
+          <Label htmlFor="timeoff-reason">{t('Note (optional, staff only)')}</Label>
           <Input
             id="timeoff-reason"
             value={reason}
@@ -261,11 +262,13 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
             onChange={(e) => setReason(e.target.value)}
           />
         </div>
-        <p className="text-muted-foreground text-xs">Times are in this device’s time zone.</p>
+        <p className="text-muted-foreground text-xs">
+          {t('Times are in the business’s time zone ({tz}).', { tz })}
+        </p>
 
         {error ? (
           <Alert variant="destructive" role="alert">
-            <AlertTitle>Not saved</AlertTitle>
+            <AlertTitle>{t('Not saved')}</AlertTitle>
             <AlertDescription className="grid gap-2">
               <p>{error}</p>
               {conflicts.length ? (
@@ -276,7 +279,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
                         <a className="underline" href={`/appointments/${c.appointmentId}`}>
                           {c.appointmentNumber}
                         </a>{' '}
-                        · {when(c.startsAt)}
+                        · {when(c.startsAt, tz)}
                       </li>
                     ))}
                   </ul>
@@ -287,7 +290,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
                       disabled={create.isPending}
                       onClick={() => void submit(true)}
                     >
-                      Record anyway (appointments stay booked)
+                      {t('Record anyway (appointments stay booked)')}
                     </Button>
                   </div>
                 </>
@@ -304,7 +307,7 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
         <div>
           <Button disabled={invalid || create.isPending} onClick={() => void submit()}>
             {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            {canApprove ? 'Record time off' : 'Request time off'}
+            {canApprove ? t('Record time off') : t('Request time off')}
           </Button>
         </div>
       </CardContent>
@@ -313,9 +316,11 @@ function NewTimeOff({ canApprove }: { canApprove: boolean }) {
 }
 
 function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean }) {
+  const t = useT();
   const update = useUpdateTimeOff();
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<TimeOffConflict[]>([]);
+  const tz = useBusinessTimezone();
 
   const change = async (status: 'APPROVED' | 'REJECTED' | 'CANCELLED', allowConflicts = false) => {
     setError(null);
@@ -328,7 +333,7 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
       setConflicts([]);
     } catch (caught) {
       setConflicts(conflictsOf(caught));
-      setError(errorText(caught, 'Could not change this time off.'));
+      setError(errorText(caught, t('Could not change this time off.')));
     }
   };
 
@@ -339,10 +344,10 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="grid gap-0.5">
           <span className="font-medium">
-            {entry.employeeName} · {TYPE_LABEL[entry.type]}
+            {entry.employeeName} · {t(TYPE_LABEL[entry.type])}
           </span>
           <span className="text-muted-foreground tabular-nums">
-            {when(entry.startsAt)} → {when(entry.endsAt)}
+            {when(entry.startsAt, tz)} → {when(entry.endsAt, tz)}
           </span>
           {entry.reason ? (
             <span className="text-muted-foreground text-xs">{entry.reason}</span>
@@ -357,7 +362,7 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
                 : 'secondary'
           }
         >
-          {STATUS_LABEL[entry.status]}
+          {t(STATUS_LABEL[entry.status])}
         </Badge>
       </div>
       {open ? (
@@ -365,7 +370,7 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
           {canApprove && entry.status === 'PENDING' ? (
             <>
               <Button size="sm" disabled={update.isPending} onClick={() => void change('APPROVED')}>
-                Approve
+                {t('Approve')}
               </Button>
               <Button
                 size="sm"
@@ -373,7 +378,7 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
                 disabled={update.isPending}
                 onClick={() => void change('REJECTED')}
               >
-                Reject
+                {t('Reject')}
               </Button>
             </>
           ) : null}
@@ -384,7 +389,7 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
               disabled={update.isPending}
               onClick={() => void change('CANCELLED')}
             >
-              {entry.status === 'PENDING' && !canApprove ? 'Withdraw' : 'Cancel'}
+              {entry.status === 'PENDING' && !canApprove ? t('Withdraw') : t('Cancel')}
             </Button>
           ) : null}
         </div>
@@ -395,8 +400,11 @@ function TimeOffRow({ entry, canApprove }: { entry: TimeOff; canApprove: boolean
           {conflicts.length ? (
             <div>
               <Button size="sm" variant="destructive" onClick={() => void change('APPROVED', true)}>
-                Approve anyway ({conflicts.length} appointment{conflicts.length === 1 ? '' : 's'}{' '}
-                stay booked)
+                {conflicts.length === 1
+                  ? t('Approve anyway (1 appointment stays booked)')
+                  : t('Approve anyway ({count} appointments stay booked)', {
+                      count: conflicts.length,
+                    })}
               </Button>
             </div>
           ) : null}

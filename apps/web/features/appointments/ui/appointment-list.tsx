@@ -17,6 +17,7 @@ import type { AppointmentQuery, AppointmentStatus } from '@/services/appointment
 import { useAppointments } from '../api/use-appointments';
 import { STATUS_LABEL, localDate, localTime, todayIso } from '../model/appointment-display';
 import { StatusBadge } from './status-badge';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
 
@@ -30,6 +31,7 @@ const selectClass =
  * week, which is what a front desk looks at; widen it with the dates.
  */
 export function AppointmentList() {
+  const t = useT();
   const canBook = useCan('appointment:write');
   const branches = useBranches();
   const employees = useEmployees({ status: 'ACTIVE', limit: 100 });
@@ -67,23 +69,23 @@ export function AppointmentList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Appointments</h2>
+          <h2 className="text-lg font-semibold">{t('Appointments')}</h2>
           <p className="text-muted-foreground text-sm">
-            {appointments.isPending ? 'Loading…' : `${total} in this view`}
+            {appointments.isPending ? t('Loading…') : t('{total} in this view', { total })}
           </p>
         </div>
         {/* Hidden without the permission — the API refuses it regardless. */}
         {canBook ? (
           <Link href="/appointments/new" className={buttonVariants({ size: 'sm' })}>
             <Plus aria-hidden className="size-4" />
-            New appointment
+            {t('New appointment')}
           </Link>
         ) : null}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <div className="grid gap-1.5 sm:col-span-3 lg:col-span-2">
-          <Label htmlFor="appt-search">Search</Label>
+          <Label htmlFor="appt-search">{t('Search')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -92,14 +94,14 @@ export function AppointmentList() {
             <Input
               id="appt-search"
               value={search}
-              placeholder="Appointment number"
+              placeholder={t('Appointment number')}
               className="pl-8"
               onChange={(e) => change(() => setSearch(e.target.value))}
             />
           </div>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="appt-from">From</Label>
+          <Label htmlFor="appt-from">{t('From')}</Label>
           <input
             id="appt-from"
             type="date"
@@ -109,7 +111,7 @@ export function AppointmentList() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="appt-to">To</Label>
+          <Label htmlFor="appt-to">{t('To')}</Label>
           <input
             id="appt-to"
             type="date"
@@ -120,32 +122,32 @@ export function AppointmentList() {
           />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="appt-status">Status</Label>
+          <Label htmlFor="appt-status">{t('Status')}</Label>
           <select
             id="appt-status"
             className={selectClass}
             value={status}
             onChange={(e) => change(() => setStatus(e.target.value as AppointmentStatus | ''))}
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {(Object.keys(STATUS_LABEL) as AppointmentStatus[])
               .filter((s) => s !== 'HOLD' && s !== 'EXPIRED')
               .map((s) => (
                 <option key={s} value={s}>
-                  {STATUS_LABEL[s]}
+                  {t(STATUS_LABEL[s])}
                 </option>
               ))}
           </select>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="appt-branch">Branch</Label>
+          <Label htmlFor="appt-branch">{t('Branch')}</Label>
           <select
             id="appt-branch"
             className={selectClass}
             value={branchId}
             onChange={(e) => change(() => setBranchId(e.target.value))}
           >
-            <option value="">All branches</option>
+            <option value="">{t('All branches')}</option>
             {(branches.data?.items ?? []).map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -154,14 +156,14 @@ export function AppointmentList() {
           </select>
         </div>
         <div className="grid gap-1.5 sm:col-span-3 lg:col-span-2">
-          <Label htmlFor="appt-employee">Employee</Label>
+          <Label htmlFor="appt-employee">{t('Employee')}</Label>
           <select
             id="appt-employee"
             className={selectClass}
             value={employeeId}
             onChange={(e) => change(() => setEmployeeId(e.target.value))}
           >
-            <option value="">Anyone</option>
+            <option value="">{t('Anyone')}</option>
             {(employees.data?.items ?? []).map((e) => (
               <option key={e.id} value={e.id}>
                 {e.displayName}
@@ -173,14 +175,14 @@ export function AppointmentList() {
 
       {appointments.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load appointments</AlertTitle>
-          <AlertDescription>Please check the filters and try again.</AlertDescription>
+          <AlertTitle>{t('Could not load appointments')}</AlertTitle>
+          <AlertDescription>{t('Please check the filters and try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {appointments.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading appointments…</span>
+          <span className="sr-only">{t('Loading appointments…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -189,8 +191,10 @@ export function AppointmentList() {
 
       {!appointments.isPending && !appointments.error && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm font-medium">No appointments in this view</p>
-          <p className="text-muted-foreground mt-1 text-sm">Try widening the dates or filters.</p>
+          <p className="text-sm font-medium">{t('No appointments in this view')}</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {t('Try widening the dates or filters.')}
+          </p>
         </div>
       ) : null}
 
@@ -199,13 +203,27 @@ export function AppointmentList() {
           <table className="w-full text-sm">
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
-                <th scope="col" className="py-2 pr-3 font-medium">When</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Customer</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Service</th>
-                <th scope="col" className="py-2 pr-3 font-medium">With</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Branch</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Total</th>
-                <th scope="col" className="py-2 font-medium">Status</th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('When')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Customer')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Service')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('With')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Branch')}
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  {t('Total')}
+                </th>
+                <th scope="col" className="py-2 font-medium">
+                  {t('Status')}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -246,7 +264,11 @@ export function AppointmentList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -255,7 +277,7 @@ export function AppointmentList() {
               disabled={offset === 0 || appointments.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -264,7 +286,7 @@ export function AppointmentList() {
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               {appointments.isFetching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>

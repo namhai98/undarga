@@ -47,8 +47,15 @@ export function usePlatformLogin() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ email, password }: { email: string; password: string }) =>
-      platformService.login(email, password),
+    mutationFn: ({
+      email,
+      password,
+      mfaCode,
+    }: {
+      email: string;
+      password: string;
+      mfaCode?: string;
+    }) => platformService.login(email, password, mfaCode),
     /**
      * Cleared BEFORE the request, not after it.
      *

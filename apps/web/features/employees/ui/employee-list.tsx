@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Search, UserRound } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,15 +16,11 @@ import { ImageUpload } from '@/features/media';
 import { filesService } from '@/services/files.service';
 import { employeeKeys, useEmployees } from '../api/use-employees';
 import type { EmployeeQuery, EmployeeStatus } from '@/services/employees.service';
+import { AddEmployeeForm } from './add-employee';
+import { STATUS_LABEL } from './shared';
+import { useT } from '@/lib/i18n';
 
 const PAGE_SIZE = 25;
-
-const STATUS_LABEL: Record<EmployeeStatus, string> = {
-  ACTIVE: 'Active',
-  ON_LEAVE: 'On leave',
-  INACTIVE: 'Inactive',
-  TERMINATED: 'Terminated',
-};
 
 /**
  * The staff list: search, filter, paginate.
@@ -38,6 +35,7 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
  * throwing the design away twice.
  */
 export function EmployeeList() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<EmployeeStatus | ''>('');
   const [branchId, setBranchId] = useState('');
@@ -49,6 +47,7 @@ export function EmployeeList() {
   const queryClient = useQueryClient();
   /** The employee whose photo is being changed, if any. */
   const [photoFor, setPhotoFor] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const query: EmployeeQuery = {
     ...(search ? { search } : {}),
@@ -72,18 +71,24 @@ export function EmployeeList() {
     <section className="grid gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">Staff</h2>
+          <h2 className="text-lg font-semibold">{t('Staff')}</h2>
           <p className="text-muted-foreground text-sm">
-            {employees.isPending ? 'Loading…' : `${total} ${total === 1 ? 'person' : 'people'}`}
+            {employees.isPending ? t('Loading…') : `${total} ${total === 1 ? 'person' : 'people'}`}
           </p>
         </div>
         {/* Hidden without the permission — the API refuses it regardless. */}
-        {canWrite ? <Button size="sm">Add employee</Button> : null}
+        {canWrite && !adding ? (
+          <Button size="sm" onClick={() => setAdding(true)}>
+            {t('Add employee')}
+          </Button>
+        ) : null}
       </header>
+
+      {adding ? <AddEmployeeForm onCancel={() => setAdding(false)} /> : null}
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
         <div className="grid gap-1.5">
-          <Label htmlFor="employee-search">Search</Label>
+          <Label htmlFor="employee-search">{t('Search')}</Label>
           <div className="relative">
             <Search
               aria-hidden
@@ -92,7 +97,7 @@ export function EmployeeList() {
             <Input
               id="employee-search"
               value={search}
-              placeholder="Name or code"
+              placeholder={t('Name or code')}
               className="pl-8"
               onChange={(e) => changeFilter(() => setSearch(e.target.value))}
             />
@@ -100,14 +105,14 @@ export function EmployeeList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="employee-status">Status</Label>
+          <Label htmlFor="employee-status">{t('Status')}</Label>
           <select
             id="employee-status"
             value={status}
             onChange={(e) => changeFilter(() => setStatus(e.target.value as EmployeeStatus | ''))}
             className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3"
           >
-            <option value="">All</option>
+            <option value="">{t('All')}</option>
             {Object.entries(STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -117,14 +122,14 @@ export function EmployeeList() {
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="employee-branch">Branch</Label>
+          <Label htmlFor="employee-branch">{t('Branch')}</Label>
           <select
             id="employee-branch"
             value={branchId}
             onChange={(e) => changeFilter(() => setBranchId(e.target.value))}
             className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3"
           >
-            <option value="">All branches</option>
+            <option value="">{t('All branches')}</option>
             {(branches.data?.items ?? []).map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -136,14 +141,14 @@ export function EmployeeList() {
 
       {employees.error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Could not load staff</AlertTitle>
-          <AlertDescription>Please try again.</AlertDescription>
+          <AlertTitle>{t('Could not load staff')}</AlertTitle>
+          <AlertDescription>{t('Please try again.')}</AlertDescription>
         </Alert>
       ) : null}
 
       {employees.isPending ? (
         <div className="grid gap-2" aria-busy="true">
-          <span className="sr-only">Loading staff…</span>
+          <span className="sr-only">{t('Loading staff…')}</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
@@ -153,12 +158,12 @@ export function EmployeeList() {
       {!employees.isPending && items.length === 0 ? (
         <div className="border-border/60 rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">
-            {search || status || branchId ? 'Nobody matches those filters' : 'No staff yet'}
+            {search || status || branchId ? t('Nobody matches those filters') : t('No staff yet')}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
             {search || status || branchId
-              ? 'Try widening the search.'
-              : 'Add the people customers can book with.'}
+              ? t('Try widening the search.')
+              : t('Add the people customers can book with.')}
           </p>
         </div>
       ) : null}
@@ -168,15 +173,17 @@ export function EmployeeList() {
             const employee = items.find((e) => e.id === photoFor)!;
             return (
               <section
-                aria-label={`Photo of ${employee.displayName}`}
+                aria-label={t('Photo of {displayName}', { displayName: employee.displayName })}
                 className="border-border/60 grid gap-3 rounded-lg border p-4"
               >
                 <ImageUpload
                   purpose="EMPLOYEE_PHOTO"
                   targetId={employee.id}
                   fileId={employee.avatarFileId}
-                  label={`Photo of ${employee.displayName}`}
-                  hint="Shown on your booking page. At least 96 × 96 pixels; square works best."
+                  label={t('Photo of {displayName}', { displayName: employee.displayName })}
+                  hint={t(
+                    'Shown on your booking page. At least 96 × 96 pixels; square works best.',
+                  )}
                   shape="round"
                   canEdit={canWrite}
                   onChange={() => {
@@ -188,7 +195,7 @@ export function EmployeeList() {
                 />
                 <div>
                   <Button type="button" size="sm" variant="ghost" onClick={() => setPhotoFor(null)}>
-                    Done
+                    {t('Done')}
                   </Button>
                 </div>
               </section>
@@ -203,25 +210,25 @@ export function EmployeeList() {
             <thead className="text-muted-foreground border-border/60 border-b text-left text-xs">
               <tr>
                 <th scope="col" className="w-10 py-2 pr-3 font-medium">
-                  <span className="sr-only">Photo</span>
+                  <span className="sr-only">{t('Photo')}</span>
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Name
+                  {t('Name')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Code
+                  {t('Code')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Job title
+                  {t('Job title')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Branches
+                  {t('Branches')}
                 </th>
                 <th scope="col" className="py-2 pr-3 font-medium">
-                  Login
+                  {t('Login')}
                 </th>
                 <th scope="col" className="py-2 font-medium">
-                  Status
+                  {t('Status')}
                 </th>
               </tr>
             </thead>
@@ -232,17 +239,21 @@ export function EmployeeList() {
                     <Avatar fileId={employee.avatarFileId} />
                   </td>
                   <td className="py-2 pr-3 font-medium">
-                    {employee.displayName}
+                    <Link href={`/staff/${employee.id}`} className="hover:underline">
+                      {employee.displayName}
+                    </Link>
                     {canWrite ? (
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
                         className="ml-1 h-6 px-1.5 text-xs"
-                        aria-label={`Change photo of ${employee.displayName}`}
+                        aria-label={t('Change photo of {displayName}', {
+                          displayName: employee.displayName,
+                        })}
                         onClick={() => setPhotoFor(employee.id)}
                       >
-                        Photo
+                        {t('Photo')}
                       </Button>
                     ) : null}
                   </td>
@@ -258,7 +269,9 @@ export function EmployeeList() {
                       <Badge variant="secondary">
                         {/* Pending until they accept — the account row is not even
                             readable to this company before then. */}
-                        {employee.account?.status === 'PENDING_ACCEPTANCE' ? 'Invited' : 'Yes'}
+                        {employee.account?.status === 'PENDING_ACCEPTANCE'
+                          ? t('Invited')
+                          : t('Yes')}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -266,7 +279,7 @@ export function EmployeeList() {
                   </td>
                   <td className="py-2">
                     <Badge variant={employee.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                      {STATUS_LABEL[employee.status]}
+                      {t(STATUS_LABEL[employee.status])}
                     </Badge>
                   </td>
                 </tr>
@@ -279,7 +292,11 @@ export function EmployeeList() {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between gap-3">
           <p className="text-muted-foreground text-xs">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('{from}–{to} of {total}', {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, total),
+              total: total,
+            })}
           </p>
           <div className="flex gap-2">
             <Button
@@ -288,7 +305,7 @@ export function EmployeeList() {
               disabled={offset === 0 || employees.isFetching}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
-              Previous
+              {t('Previous')}
             </Button>
             <Button
               variant="outline"
@@ -297,7 +314,7 @@ export function EmployeeList() {
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               {employees.isFetching ? <Loader2 className="animate-spin" aria-hidden /> : null}
-              Next
+              {t('Next')}
             </Button>
           </div>
         </div>

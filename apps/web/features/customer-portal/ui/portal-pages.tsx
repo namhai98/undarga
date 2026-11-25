@@ -20,7 +20,16 @@ import {
   useGiftCardHistory,
   useUpdateProfile,
 } from '../api/use-customer-portal';
-import { GIFT_TXN_LABEL, METHOD_LABEL, STATUS_LABEL, day, money, statusTone, when } from '../model/format';
+import {
+  GIFT_TXN_LABEL,
+  METHOD_LABEL,
+  STATUS_LABEL,
+  day,
+  money,
+  statusTone,
+  when,
+} from '../model/format';
+import { useT } from '@/lib/i18n';
 
 const PAGE = 10;
 
@@ -29,39 +38,52 @@ const PAGE = 10;
 // =============================================================================
 
 export function PortalOverview({ slug }: { slug: string }) {
+  const t = useT();
   const profile = useCustomerProfile(slug);
   const upcoming = useCustomerAppointments(slug, 'upcoming', 0, 3);
   const cards = useCustomerGiftCards(slug);
   const payments = useCustomerPayments(slug, 0, 3);
 
-  const held = (cards.data?.items ?? []).filter((c) => c.relation === 'HOLDER' && c.status === 'ACTIVE');
+  const held = (cards.data?.items ?? []).filter(
+    (c) => c.relation === 'HOLDER' && c.status === 'ACTIVE',
+  );
 
   return (
     <div className="grid gap-6">
       <h1 className="text-xl font-semibold">
-        {profile.data ? `Hello, ${profile.data.firstName}` : 'Hello'}
+        {profile.data ? t('Hello, {firstName}', { firstName: profile.data.firstName }) : t('Hello')}
       </h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>Coming up</CardTitle>
-          <CardDescription>Your next appointments.</CardDescription>
+          <CardTitle>{t('Coming up')}</CardTitle>
+          <CardDescription>{t('Your next appointments.')}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
-          <Loadable query={upcoming} label="Loading your appointments…" error="Could not load your appointments.">
+          <Loadable
+            query={upcoming}
+            label={t('Loading your appointments…')}
+            error="Could not load your appointments."
+          >
             {(data) =>
               data.items.length === 0 ? (
-                <Empty title="Nothing booked" body="When you book, your appointments appear here.">
+                <Empty
+                  title={t('Nothing booked')}
+                  body="When you book, your appointments appear here."
+                >
                   <Link href={`/book/${slug}`} className={buttonVariants({ size: 'sm' })}>
-                    Book an appointment
+                    {t('Book an appointment')}
                   </Link>
                 </Empty>
               ) : (
                 <>
                   <AppointmentRows slug={slug} items={data.items} />
                   {data.total > data.items.length ? (
-                    <Link href={`/portal/${slug}/appointments`} className="text-sm underline underline-offset-4">
-                      See all {data.total}
+                    <Link
+                      href={`/portal/${slug}/appointments`}
+                      className="text-sm underline underline-offset-4"
+                    >
+                      {t('See all {total}', { total: data.total })}
                     </Link>
                   ) : null}
                 </>
@@ -74,19 +96,25 @@ export function PortalOverview({ slug }: { slug: string }) {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Gift cards</CardTitle>
+            <CardTitle>{t('Gift cards')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <Loadable query={cards} label="Loading gift cards…" error="Could not load your gift cards.">
+            <Loadable
+              query={cards}
+              label={t('Loading gift cards…')}
+              error="Could not load your gift cards."
+            >
               {() =>
                 held.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No active gift cards.</p>
+                  <p className="text-muted-foreground text-sm">{t('No active gift cards.')}</p>
                 ) : (
                   <ul className="grid gap-2">
                     {held.map((card) => (
                       <li key={card.id} className="flex justify-between gap-3 text-sm">
                         <span className="font-mono">•••• {card.codeLast4}</span>
-                        <span className="font-medium tabular-nums">{money(card.balanceMinor!, card.currencyCode)}</span>
+                        <span className="font-medium tabular-nums">
+                          {money(card.balanceMinor!, card.currencyCode)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -97,22 +125,30 @@ export function PortalOverview({ slug }: { slug: string }) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Recent payments</CardTitle>
+            <CardTitle>{t('Recent payments')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <Loadable query={payments} label="Loading payments…" error="Could not load your payments.">
+            <Loadable
+              query={payments}
+              label={t('Loading payments…')}
+              error="Could not load your payments."
+            >
               {(data) =>
                 data.items.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No payments yet.</p>
+                  <p className="text-muted-foreground text-sm">{t('No payments yet.')}</p>
                 ) : (
                   <ul className="grid gap-2">
                     {data.items.map((payment) => (
                       <li key={payment.id} className="flex justify-between gap-3 text-sm">
                         <span>
                           {day(payment.paidAt)} · {METHOD_LABEL[payment.method] ?? payment.method}
-                          {payment.status !== 'SUCCEEDED' ? ` · ${payment.status.toLowerCase()}` : ''}
+                          {payment.status !== 'SUCCEEDED'
+                            ? ` · ${payment.status.toLowerCase()}`
+                            : ''}
                         </span>
-                        <span className="tabular-nums">{money(payment.amountMinor, payment.currencyCode)}</span>
+                        <span className="tabular-nums">
+                          {money(payment.amountMinor, payment.currencyCode)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -137,46 +173,57 @@ const TABS: Array<{ scope: PortalAppointmentScope; label: string; empty: string 
 ];
 
 export function PortalAppointments({ slug }: { slug: string }) {
+  const t = useT();
   const [scope, setScope] = useState<PortalAppointmentScope>('upcoming');
   const [offset, setOffset] = useState(0);
   const list = useCustomerAppointments(slug, scope, offset, PAGE);
-  const tab = TABS.find((t) => t.scope === scope)!;
+  const tab = TABS.find((item) => item.scope === scope)!;
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-xl font-semibold">My appointments</h1>
-      <div role="tablist" aria-label="Appointments" className="flex gap-2">
-        {TABS.map((t) => (
+      <h1 className="text-xl font-semibold">{t('My appointments')}</h1>
+      <div role="tablist" aria-label={t('Appointments')} className="flex gap-2">
+        {TABS.map((item) => (
           <Button
-            key={t.scope}
+            key={item.scope}
             role="tab"
-            aria-selected={t.scope === scope}
-            variant={t.scope === scope ? 'default' : 'outline'}
+            aria-selected={item.scope === scope}
+            variant={item.scope === scope ? 'default' : 'outline'}
             size="sm"
             onClick={() => {
-              setScope(t.scope);
+              setScope(item.scope);
               setOffset(0);
             }}
           >
-            {t.label}
+            {item.label}
           </Button>
         ))}
       </div>
 
-      <Loadable query={list} label="Loading your appointments…" error="Could not load your appointments.">
+      <Loadable
+        query={list}
+        label={t('Loading your appointments…')}
+        error="Could not load your appointments."
+      >
         {(data) =>
           data.items.length === 0 ? (
             <Empty title={tab.empty} body="">
               {scope === 'upcoming' ? (
                 <Link href={`/book/${slug}`} className={buttonVariants({ size: 'sm' })}>
-                  Book an appointment
+                  {t('Book an appointment')}
                 </Link>
               ) : null}
             </Empty>
           ) : (
             <>
               <AppointmentRows slug={slug} items={data.items} />
-              <Pager offset={offset} total={data.total} pageSize={PAGE} busy={list.isFetching} onChange={setOffset} />
+              <Pager
+                offset={offset}
+                total={data.total}
+                pageSize={PAGE}
+                busy={list.isFetching}
+                onChange={setOffset}
+              />
             </>
           )
         }
@@ -186,6 +233,7 @@ export function PortalAppointments({ slug }: { slug: string }) {
 }
 
 function AppointmentRows({ slug, items }: { slug: string; items: PortalAppointment[] }) {
+  const t = useT();
   return (
     <ul className="grid gap-2">
       {items.map((a) => (
@@ -195,15 +243,16 @@ function AppointmentRows({ slug, items }: { slug: string; items: PortalAppointme
             className="border-border/60 hover:bg-muted/50 grid gap-1 rounded-lg border p-3 transition-colors"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">{a.service ?? 'Appointment'}</span>
-              <Badge variant={statusTone(a.status)}>{STATUS_LABEL[a.status]}</Badge>
+              <span className="font-medium">{a.service ?? t('Appointment')}</span>
+              <Badge variant={statusTone(a.status)}>{t(STATUS_LABEL[a.status])}</Badge>
             </div>
             <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
               <CalendarDays aria-hidden className="size-4" />
               {when(a.startsAt, a.timezone)}
             </span>
             <span className="text-muted-foreground text-xs">
-              {[a.branch, a.employee].filter(Boolean).join(' · ')} · {money(a.totalMinor, a.currencyCode)}
+              {[a.branch, a.employee].filter(Boolean).join(' · ')} ·{' '}
+              {money(a.totalMinor, a.currencyCode)}
             </span>
           </Link>
         </li>
@@ -217,11 +266,16 @@ function AppointmentRows({ slug, items }: { slug: string; items: PortalAppointme
 // =============================================================================
 
 export function PortalProfile({ slug }: { slug: string }) {
+  const t = useT();
   const profile = useCustomerProfile(slug);
   return (
     <div className="grid max-w-lg gap-4">
-      <h1 className="text-xl font-semibold">My profile</h1>
-      <Loadable query={profile} label="Loading your profile…" error="Could not load your profile.">
+      <h1 className="text-xl font-semibold">{t('My profile')}</h1>
+      <Loadable
+        query={profile}
+        label={t('Loading your profile…')}
+        error="Could not load your profile."
+      >
         {(data) => <ProfileForm slug={slug} initial={data} />}
       </Loadable>
     </div>
@@ -233,8 +287,14 @@ function ProfileForm({
   initial,
 }: {
   slug: string;
-  initial: { firstName: string; lastName: string | null; phone: string | null; email: string | null };
+  initial: {
+    firstName: string;
+    lastName: string | null;
+    phone: string | null;
+    email: string | null;
+  };
 }) {
+  const t = useT();
   const [firstName, setFirstName] = useState(initial.firstName);
   const [lastName, setLastName] = useState(initial.lastName ?? '');
   const [phone, setPhone] = useState(initial.phone ?? '');
@@ -246,7 +306,8 @@ function ProfileForm({
     setMessage(null);
     const found: Record<string, string> = {};
     if (!firstName.trim()) found.firstName = 'Enter your first name.';
-    if (phone.trim() && !/^\+?[\d\s()./-]{6,}$/.test(phone.trim())) found.phone = 'Enter a phone number.';
+    if (phone.trim() && !/^\+?[\d\s()./-]{6,}$/.test(phone.trim()))
+      found.phone = 'Enter a phone number.';
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     try {
@@ -260,7 +321,10 @@ function ProfileForm({
       if (caught instanceof ApiError && caught.code === 'CONFLICT') {
         setErrors({ phone: caught.message });
       } else {
-        setMessage({ ok: false, text: caught instanceof ApiError ? caught.message : 'Could not save. Try again.' });
+        setMessage({
+          ok: false,
+          text: caught instanceof ApiError ? caught.message : 'Could not save. Try again.',
+        });
       }
     }
   };
@@ -275,27 +339,50 @@ function ProfileForm({
       }}
     >
       {message ? (
-        <Alert variant={message.ok ? 'default' : 'destructive'} role={message.ok ? 'status' : 'alert'}>
+        <Alert
+          variant={message.ok ? 'default' : 'destructive'}
+          role={message.ok ? 'status' : 'alert'}
+        >
           <AlertDescription>{message.text}</AlertDescription>
         </Alert>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="firstName" label="First name" error={errors.firstName}>
-          <Input id="firstName" value={firstName} maxLength={96} onChange={(e) => setFirstName(e.target.value)} />
+        <Field id="firstName" label={t('First name')} error={errors.firstName}>
+          <Input
+            id="firstName"
+            value={firstName}
+            maxLength={96}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
         </Field>
-        <Field id="lastName" label="Last name">
-          <Input id="lastName" value={lastName} maxLength={96} onChange={(e) => setLastName(e.target.value)} />
+        <Field id="lastName" label={t('Last name')}>
+          <Input
+            id="lastName"
+            value={lastName}
+            maxLength={96}
+            onChange={(e) => setLastName(e.target.value)}
+          />
         </Field>
       </div>
-      <Field id="phone" label="Phone" error={errors.phone}>
-        <Input id="phone" type="tel" value={phone} maxLength={32} onChange={(e) => setPhone(e.target.value)} />
+      <Field id="phone" label={t('Phone')} error={errors.phone}>
+        <Input
+          id="phone"
+          type="tel"
+          value={phone}
+          maxLength={32}
+          onChange={(e) => setPhone(e.target.value)}
+        />
       </Field>
-      <Field id="email" label="Email" hint="You sign in with this address. Ask the business to change it.">
+      <Field
+        id="email"
+        label={t('Email')}
+        hint={t('You sign in with this address. Ask the business to change it.')}
+      >
         <Input id="email" value={initial.email ?? ''} readOnly disabled />
       </Field>
       <Button type="submit" className="w-fit" disabled={update.isPending}>
         {update.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Save
+        {t('Save')}
       </Button>
     </form>
   );
@@ -306,16 +393,24 @@ function ProfileForm({
 // =============================================================================
 
 export function PortalGiftCards({ slug }: { slug: string }) {
+  const t = useT();
   const cards = useCustomerGiftCards(slug);
   const [open, setOpen] = useState<string | null>(null);
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-xl font-semibold">My gift cards</h1>
-      <Loadable query={cards} label="Loading gift cards…" error="Could not load your gift cards.">
+      <h1 className="text-xl font-semibold">{t('My gift cards')}</h1>
+      <Loadable
+        query={cards}
+        label={t('Loading gift cards…')}
+        error="Could not load your gift cards."
+      >
         {(data) =>
           data.items.length === 0 ? (
-            <Empty title="No gift cards" body="Gift cards you hold or buy here appear on this page." />
+            <Empty
+              title={t('No gift cards')}
+              body="Gift cards you hold or buy here appear on this page."
+            />
           ) : (
             <ul className="grid gap-3">
               {data.items.map((card) => (
@@ -328,10 +423,16 @@ export function PortalGiftCards({ slug }: { slug: string }) {
                   </div>
                   {card.relation === 'HOLDER' ? (
                     <>
-                      <p className="text-2xl font-semibold tabular-nums">{money(card.balanceMinor!, card.currencyCode)}</p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {money(card.balanceMinor!, card.currencyCode)}
+                      </p>
                       <p className="text-muted-foreground text-xs">
-                        of {money(card.initialBalanceMinor, card.currencyCode)}
-                        {card.expiresAt ? ` · expires ${day(card.expiresAt)}` : ' · no expiry'}
+                        {t('of {amount}', {
+                          amount: money(card.initialBalanceMinor, card.currencyCode),
+                        })}
+                        {card.expiresAt
+                          ? t(' · expires {date}', { date: day(card.expiresAt) })
+                          : t(' · no expiry')}
                       </p>
                       <Button
                         variant="outline"
@@ -340,14 +441,23 @@ export function PortalGiftCards({ slug }: { slug: string }) {
                         aria-expanded={open === card.id}
                         onClick={() => setOpen(open === card.id ? null : card.id)}
                       >
-                        {open === card.id ? 'Hide history' : 'Show history'}
+                        {open === card.id ? t('Hide history') : t('Show history')}
                       </Button>
                       {open === card.id ? <GiftCardHistoryList slug={slug} id={card.id} /> : null}
                     </>
                   ) : (
                     <p className="text-muted-foreground text-sm">
-                      You bought this {money(card.initialBalanceMinor, card.currencyCode)} card
-                      {card.recipientName ? ` for ${card.recipientName}` : ''}. Its balance is theirs to see.
+                      {card.recipientName
+                        ? t(
+                            'You bought this {amount} card for {name}. Its balance is theirs to see.',
+                            {
+                              amount: money(card.initialBalanceMinor, card.currencyCode),
+                              name: card.recipientName,
+                            },
+                          )
+                        : t('You bought this {amount} card. Its balance is theirs to see.', {
+                            amount: money(card.initialBalanceMinor, card.currencyCode),
+                          })}
                     </p>
                   )}
                 </li>
@@ -361,13 +471,18 @@ export function PortalGiftCards({ slug }: { slug: string }) {
 }
 
 function GiftCardHistoryList({ slug, id }: { slug: string; id: string }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const history = useGiftCardHistory(slug, id, offset, PAGE);
   return (
-    <Loadable query={history} label="Loading history…" error="Could not load this card’s history.">
+    <Loadable
+      query={history}
+      label={t('Loading history…')}
+      error="Could not load this card’s history."
+    >
       {(data) =>
         data.items.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No activity yet.</p>
+          <p className="text-muted-foreground text-sm">{t('No activity yet.')}</p>
         ) : (
           <>
             <ul className="grid gap-1.5 text-sm">
@@ -379,12 +494,21 @@ function GiftCardHistoryList({ slug, id }: { slug: string; id: string }) {
                   </span>
                   <span className="tabular-nums">
                     {money(row.amountMinor, row.currencyCode)}
-                    <span className="text-muted-foreground"> → {money(row.balanceAfterMinor, row.currencyCode)}</span>
+                    <span className="text-muted-foreground">
+                      {' '}
+                      → {money(row.balanceAfterMinor, row.currencyCode)}
+                    </span>
                   </span>
                 </li>
               ))}
             </ul>
-            <Pager offset={offset} total={data.total} pageSize={PAGE} busy={history.isFetching} onChange={setOffset} />
+            <Pager
+              offset={offset}
+              total={data.total}
+              pageSize={PAGE}
+              busy={history.isFetching}
+              onChange={setOffset}
+            />
           </>
         )
       }
@@ -407,6 +531,7 @@ export function Loadable<T>({
   error: string;
   children: (data: T) => React.ReactNode;
 }) {
+  const t = useT();
   if (query.isPending) {
     return (
       <div className="grid gap-2" aria-busy="true">
@@ -419,7 +544,7 @@ export function Loadable<T>({
   if (query.error || query.data === undefined) {
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Something went wrong</AlertTitle>
+        <AlertTitle>{t('Something went wrong')}</AlertTitle>
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     );
@@ -427,7 +552,15 @@ export function Loadable<T>({
   return <>{children(query.data)}</>;
 }
 
-export function Empty({ title, body, children }: { title: string; body: string; children?: React.ReactNode }) {
+export function Empty({
+  title,
+  body,
+  children,
+}: {
+  title: string;
+  body: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="border-border/60 grid justify-items-center gap-2 rounded-lg border border-dashed p-6 text-center">
       <p className="text-sm font-medium">{title}</p>
@@ -450,18 +583,33 @@ function Pager({
   busy: boolean;
   onChange: (offset: number) => void;
 }) {
+  const t = useT();
   if (total <= pageSize) return null;
   return (
     <div className="flex items-center justify-between gap-3">
       <p className="text-muted-foreground text-xs">
-        {offset + 1}–{Math.min(offset + pageSize, total)} of {total}
+        {t('{from}–{to} of {total}', {
+          from: offset + 1,
+          to: Math.min(offset + pageSize, total),
+          total: total,
+        })}
       </p>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={offset === 0 || busy} onClick={() => onChange(Math.max(0, offset - pageSize))}>
-          Previous
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset === 0 || busy}
+          onClick={() => onChange(Math.max(0, offset - pageSize))}
+        >
+          {t('Previous')}
         </Button>
-        <Button variant="outline" size="sm" disabled={offset + pageSize >= total || busy} onClick={() => onChange(offset + pageSize)}>
-          Next
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset + pageSize >= total || busy}
+          onClick={() => onChange(offset + pageSize)}
+        >
+          {t('Next')}
         </Button>
       </div>
     </div>

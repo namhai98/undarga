@@ -68,9 +68,22 @@ export const companyService = {
   get: (companyId: string, signal?: AbortSignal) =>
     apiClient.get<Company>(`/companies/${companyId}`, { signal }),
 
-  update: (companyId: string, input: Partial<Pick<Company,
-    'displayName' | 'legalName' | 'contactEmail' | 'contactPhone' | 'defaultTimezoneName' | 'locale'
-  >>) => apiClient.patch<Company>(`/companies/${companyId}`, input),
+  update: (
+    companyId: string,
+    input: Partial<
+      Pick<
+        Company,
+        | 'displayName'
+        | 'legalName'
+        | 'registrationNumber'
+        | 'taxNumber'
+        | 'contactEmail'
+        | 'contactPhone'
+        | 'defaultTimezoneName'
+        | 'locale'
+      >
+    >,
+  ) => apiClient.patch<Company>(`/companies/${companyId}`, input),
 
   /** One-way. There is no self-service reactivation — see the API docs. */
   deactivate: (companyId: string, reason?: string) =>

@@ -17,6 +17,7 @@ import {
   giftCardStatusVariant,
 } from '../model/gift-card-display';
 import { IssueForm } from './gift-card-list';
+import { useT } from '@/lib/i18n';
 
 /**
  * The gift cards that belong to one customer, on their page.
@@ -25,6 +26,7 @@ import { IssueForm } from './gift-card-list';
  * request to be refused. Issuing from here pre-assigns the customer.
  */
 export function CustomerGiftCards({ customerId }: { customerId: string }) {
+  const t = useT();
   const canRead = useCan('giftcard:read');
   const canIssue = useCan('giftcard:issue');
   const company = useCompany();
@@ -43,26 +45,29 @@ export function CustomerGiftCards({ customerId }: { customerId: string }) {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div className="grid gap-1">
-          <CardTitle>Gift cards</CardTitle>
+          <CardTitle>{t('Gift cards')}</CardTitle>
           <CardDescription>
             {cards.isPending
-              ? 'Loading…'
-              : `${cards.data?.total ?? 0} assigned to ${customerName}.`}
+              ? t('Loading…')
+              : t('{value} assigned to {customerName}.', {
+                  value: cards.data?.total ?? 0,
+                  customerName,
+                })}
           </CardDescription>
         </div>
         {canIssue && !issuing ? (
           <Button size="sm" variant="outline" onClick={() => setIssuing(true)}>
-            Issue a card
+            {t('Issue a card')}
           </Button>
         ) : null}
       </CardHeader>
       <CardContent className="grid gap-3">
         {issued ? (
           <div role="alert" className="bg-muted grid gap-2 rounded-lg p-3 text-sm">
-            <p className="font-medium">Card issued — this code will not be shown again:</p>
+            <p className="font-medium">{t('Card issued — this code will not be shown again:')}</p>
             <code className="font-mono text-base tracking-widest">{issued.code}</code>
             <Button size="sm" variant="ghost" className="w-fit" onClick={() => setIssued(null)}>
-              I have it
+              {t('I have it')}
             </Button>
           </div>
         ) : null}
@@ -83,12 +88,12 @@ export function CustomerGiftCards({ customerId }: { customerId: string }) {
 
         {cards.error ? (
           <p role="alert" className="text-destructive text-sm">
-            Could not load gift cards.
+            {t('Could not load gift cards.')}
           </p>
         ) : null}
 
         {!cards.isPending && !cards.error && items.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No gift cards.</p>
+          <p className="text-muted-foreground text-sm">{t('No gift cards.')}</p>
         ) : null}
 
         {items.length > 0 ? (
@@ -101,16 +106,20 @@ export function CustomerGiftCards({ customerId }: { customerId: string }) {
                 <span className="tabular-nums">
                   {giftCardMoney(card.currentBalanceMinor, card.currencyCode)}
                   <span className="text-muted-foreground ml-1 text-xs">
-                    of {giftCardMoney(card.initialBalanceMinor, card.currencyCode)}
+                    {t('of {amount}', {
+                      amount: giftCardMoney(card.initialBalanceMinor, card.currencyCode),
+                    })}
                   </span>
                 </span>
                 <span className="text-muted-foreground text-xs">
                   {card.expiresAt
-                    ? `Expires ${new Date(card.expiresAt).toLocaleDateString()}`
-                    : 'No expiry'}
+                    ? t('Expires {toLocaleDateString}', {
+                        toLocaleDateString: new Date(card.expiresAt).toLocaleDateString(),
+                      })
+                    : t('No expiry')}
                 </span>
                 <Badge variant={giftCardStatusVariant(card.status)}>
-                  {GIFT_CARD_STATUS_LABEL[card.status]}
+                  {t(GIFT_CARD_STATUS_LABEL[card.status])}
                 </Badge>
               </li>
             ))}

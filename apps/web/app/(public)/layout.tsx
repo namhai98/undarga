@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { LocaleSwitcher } from '@/components/locale-switcher';
+import { getT } from '@/lib/i18n/server';
 
 /**
  * Shell for the screens you reach without a session: sign in, accept an
@@ -9,12 +11,16 @@ import Link from 'next/link';
  * and, more importantly, to keep them out of `(app)`, whose layout demands a
  * session.
  */
-export default function PublicLayout({ children }: LayoutProps<'/'>) {
+export default async function PublicLayout({ children }: LayoutProps<'/'>) {
+  const t = await getT();
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-6 px-6 py-12">
-      <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
-        Undarga
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
+          {t('Undarga')}
+        </Link>
+        <LocaleSwitcher />
+      </div>
       {children}
     </main>
   );

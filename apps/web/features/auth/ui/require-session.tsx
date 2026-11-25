@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSession } from '../model/use-session';
+import { useT } from '@/lib/i18n';
 
 /**
  * Keeps signed-out visitors off the authenticated screens.
@@ -33,6 +34,7 @@ import { useSession } from '../model/use-session';
  * is no server-side token to fetch with, so it could not have been otherwise.
  */
 export function RequireSession({ children }: { children: ReactNode }) {
+  const t = useT();
   const { status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -52,7 +54,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
   if (status === 'loading') {
     return (
       <div className="mx-auto w-full max-w-4xl px-6 py-10" aria-busy="true" aria-live="polite">
-        <span className="sr-only">Restoring your session…</span>
+        <span className="sr-only">{t('Restoring your session…')}</span>
         <Skeleton className="h-8 w-48" />
         <Skeleton className="mt-4 h-32 w-full" />
       </div>

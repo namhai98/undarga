@@ -1,13 +1,17 @@
 import type { Metadata } from 'next';
 import { AcceptInvitationForm } from '@/features/auth';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = {
-  title: 'Accept invitation — Undarga',
-  // The URL carries a one-time token, so keep it out of search indexes and out
-  // of any Referer sent onward from this page.
-  robots: { index: false, follow: false },
-  referrer: 'no-referrer',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t('Accept invitation — Undarga'),
+    // The URL carries a one-time token, so keep it out of search indexes and out
+    // of any Referer sent onward from this page.
+    robots: { index: false, follow: false },
+    referrer: 'no-referrer',
+  };
+}
 
 /**
  * The page an invitation link opens.
@@ -21,15 +25,16 @@ export const metadata: Metadata = {
 export default async function AcceptInvitationPage({
   searchParams,
 }: PageProps<'/invitations/accept'>) {
+  const t = await getT();
   const params = await searchParams;
   const token = typeof params.token === 'string' ? params.token : '';
 
   return (
     <div className="grid gap-6">
       <div className="grid gap-1">
-        <h1 className="text-xl font-semibold">Join your team</h1>
+        <h1 className="text-xl font-semibold">{t('Join your team')}</h1>
         <p className="text-muted-foreground text-sm">
-          Accepting adds you to the company below.
+          {t('Accepting adds you to the company below.')}
         </p>
       </div>
 

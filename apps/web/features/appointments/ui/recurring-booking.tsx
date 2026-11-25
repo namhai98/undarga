@@ -22,6 +22,7 @@ import {
   localTime,
   occurrenceReason,
 } from '../model/appointment-display';
+import { useT } from '@/lib/i18n';
 
 const selectClass =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-8 rounded-lg border px-2.5 text-sm outline-none focus-visible:ring-3';
@@ -55,6 +56,7 @@ export function RecurringBooking({
   startDate: string;
   onBooked: (result: { firstAppointmentId: string | null; seriesId: string }) => void;
 }) {
+  const t = useT();
   const startWeekday = new Date(`${startDate}T00:00:00Z`).getUTCDay();
   const [frequency, setFrequency] = useState<RecurrenceFrequency>('WEEKLY');
   const [interval, setInterval] = useState(1);
@@ -84,7 +86,7 @@ export function RecurringBooking({
         : endMode === 'date' && endDate < startDate
           ? 'The end date must be on or after the first date.'
           : endMode === 'count' && (count < 1 || count > MAX_OCCURRENCES)
-            ? `Between 1 and ${MAX_OCCURRENCES} occurrences.`
+            ? t('Between 1 and {MAXOCCURRENCES} occurrences.', { MAXOCCURRENCES: MAX_OCCURRENCES })
             : null;
 
   /** Any change to the rule makes the checked list stale. */
@@ -101,7 +103,7 @@ export function RecurringBooking({
     try {
       setPreview(await check.mutateAsync(input));
     } catch (caught) {
-      setError(bookingErrorMessage(caught, 'Could not check these dates.'));
+      setError(bookingErrorMessage(caught, 'Could not check these dates.', t));
     }
   };
 
@@ -114,7 +116,7 @@ export function RecurringBooking({
       });
       onBooked({ firstAppointmentId: series.occurrences[0]?.id ?? null, seriesId: series.id });
     } catch (caught) {
-      setError(bookingErrorMessage(caught, 'Could not book this series.'));
+      setError(bookingErrorMessage(caught, 'Could not book this series.', t));
       // A date was taken since the check: show the fresh state of every date.
       if (caught instanceof ApiError && caught.code === 'SERIES_CONFLICT') void runPreview();
     }
@@ -125,23 +127,23 @@ export function RecurringBooking({
   const canBook = preview !== null && bookable > 0 && (conflicts === 0 || skipConflicts);
 
   return (
-    <div className="grid gap-3" aria-label="Repeat">
+    <div className="grid gap-3" aria-label={t('Repeat')}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
-          <Label htmlFor="repeat-frequency">Repeats</Label>
+          <Label htmlFor="repeat-frequency">{t('Repeats')}</Label>
           <select
             id="repeat-frequency"
             className={selectClass}
             value={frequency}
             onChange={(e) => changed(setFrequency)(e.target.value as RecurrenceFrequency)}
           >
-            <option value="DAILY">Daily</option>
-            <option value="WEEKLY">Weekly</option>
-            <option value="MONTHLY">Monthly (same day of month)</option>
+            <option value="DAILY">{t('Daily')}</option>
+            <option value="WEEKLY">{t('Weekly')}</option>
+            <option value="MONTHLY">{t('Monthly (same day of month)')}</option>
           </select>
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="repeat-interval">Every</Label>
+          <Label htmlFor="repeat-interval">{t('Every')}</Label>
           <div className="flex items-center gap-2">
             <Input
               id="repeat-interval"
@@ -161,7 +163,7 @@ export function RecurringBooking({
 
       {frequency === 'WEEKLY' ? (
         <fieldset className="grid gap-1.5">
-          <legend className="text-sm font-medium">On</legend>
+          <legend className="text-sm font-medium">{t('On')}</legend>
           <div className="flex flex-wrap gap-2">
             {WEEKDAY_SHORT.map((label, day) => (
               <label key={label} className="flex items-center gap-1 text-sm">
@@ -174,7 +176,7 @@ export function RecurringBooking({
                     )
                   }
                 />
-                {label}
+                {t(label)}
               </label>
             ))}
           </div>
@@ -182,7 +184,7 @@ export function RecurringBooking({
       ) : null}
 
       <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">Ends</legend>
+        <legend className="text-sm font-medium">{t('Ends')}</legend>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-1">
             <input
@@ -191,10 +193,10 @@ export function RecurringBooking({
               checked={endMode === 'count'}
               onChange={() => changed(setEndMode)('count')}
             />
-            After
+            {t('After')}
           </label>
           <Input
-            aria-label="Number of occurrences"
+            aria-label={t('Number of occurrences')}
             type="number"
             min={1}
             max={MAX_OCCURRENCES}
@@ -203,7 +205,7 @@ export function RecurringBooking({
             disabled={endMode !== 'count'}
             onChange={(e) => changed(setCount)(Number(e.target.value) || 1)}
           />
-          <span>occurrences</span>
+          <span>{t('occurrences')}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <label className="flex items-center gap-1">
@@ -213,10 +215,10 @@ export function RecurringBooking({
               checked={endMode === 'date'}
               onChange={() => changed(setEndMode)('date')}
             />
-            On
+            {t('On')}
           </label>
           <Input
-            aria-label="End date"
+            aria-label={t('End date')}
             type="date"
             className="w-44"
             min={startDate}
@@ -231,7 +233,7 @@ export function RecurringBooking({
 
       {error ? (
         <Alert variant="destructive" role="alert">
-          <AlertTitle>Not booked</AlertTitle>
+          <AlertTitle>{t('Not booked')}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -245,8 +247,8 @@ export function RecurringBooking({
             checked={skipConflicts}
             onChange={(e) => setSkipConflicts(e.target.checked)}
           />
-          Book the {bookable} available date{bookable === 1 ? '' : 's'} and skip the {conflicts}{' '}
-          that cannot be booked
+          {t('Book the')} {bookable} {t('available date')}
+          {bookable === 1 ? '' : 's'} {t('and skip the')} {conflicts} {t('that cannot be booked')}
         </label>
       ) : null}
 
@@ -257,13 +259,15 @@ export function RecurringBooking({
           onClick={() => void runPreview()}
         >
           {check.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Check dates
+          {t('Check dates')}
         </Button>
         <Button disabled={!canBook || create.isPending} onClick={() => void book()}>
           {create.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
           {preview
-            ? `Book ${skipConflicts ? bookable : preview.occurrences.length} appointments`
-            : 'Book series'}
+            ? t('Book {value} appointments', {
+                value: skipConflicts ? bookable : preview.occurrences.length,
+              })
+            : t('Book series')}
         </Button>
       </div>
     </div>
@@ -271,20 +275,29 @@ export function RecurringBooking({
 }
 
 function PreviewList({ preview }: { preview: SeriesPreview }) {
+  const t = useT();
   return (
     <div className="grid gap-2">
       <p className="text-sm">
-        {preview.bookableCount} of {preview.occurrences.length} dates can be booked
-        {preview.conflictCount ? `; ${preview.conflictCount} cannot.` : '.'}
+        {preview.conflictCount
+          ? t('{bookable} of {total} dates can be booked; {conflicts} cannot.', {
+              bookable: preview.bookableCount,
+              total: preview.occurrences.length,
+              conflicts: preview.conflictCount,
+            })
+          : t('{bookable} of {total} dates can be booked.', {
+              bookable: preview.bookableCount,
+              total: preview.occurrences.length,
+            })}
       </p>
-      <ul className="grid max-h-64 gap-1 overflow-y-auto text-sm" aria-label="Occurrences">
+      <ul className="grid max-h-64 gap-1 overflow-y-auto text-sm" aria-label={t('Occurrences')}>
         {preview.occurrences.map((o) => (
           <Occurrence key={o.index} occurrence={o} />
         ))}
       </ul>
       {preview.skippedDates.length ? (
         <p className="text-muted-foreground text-xs">
-          Skipped (no such day that month): {preview.skippedDates.join(', ')}
+          {t('Skipped (no such day that month):')} {preview.skippedDates.join(', ')}
         </p>
       ) : null}
     </div>
@@ -292,17 +305,18 @@ function PreviewList({ preview }: { preview: SeriesPreview }) {
 }
 
 function Occurrence({ occurrence: o }: { occurrence: SeriesOccurrencePreview }) {
+  const t = useT();
   return (
     <li className="flex flex-wrap items-center gap-2">
       <span className="w-28 tabular-nums">{o.date}</span>
       <span className="w-12 tabular-nums">{localTime(o.startsAt)}</span>
       {o.bookable ? (
-        <Badge variant="secondary">Available</Badge>
+        <Badge variant="secondary">{t('Available')}</Badge>
       ) : (
         <>
-          <Badge variant="destructive">Cannot book</Badge>
+          <Badge variant="destructive">{t('Cannot book')}</Badge>
           <span className="text-muted-foreground text-xs">
-            {occurrenceReason(o.reason, o.message)}
+            {occurrenceReason(o.reason, o.message, t)}
           </span>
         </>
       )}

@@ -9,6 +9,7 @@ import { NotificationHistory } from './notification-history';
 import { NotificationProviders } from './notification-providers';
 import { NotificationSettingsForm } from './notification-settings-form';
 import { NotificationTemplates } from './notification-templates';
+import { useT } from '@/lib/i18n';
 
 type Tab = 'history' | 'templates' | 'providers' | 'settings';
 const TABS: Array<{ id: Tab; label: string }> = [
@@ -26,6 +27,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * carries the catalog of message types, which the history uses for labels.
  */
 export function NotificationsPage() {
+  const t = useT();
   const canRead = useCan('settings:read');
   const [tab, setTab] = useState<Tab>('history');
   const settings = useNotificationSettings();
@@ -33,8 +35,8 @@ export function NotificationsPage() {
   if (!canRead) {
     return (
       <Alert role="status">
-        <AlertTitle>Not available</AlertTitle>
-        <AlertDescription>You do not have permission to see notifications.</AlertDescription>
+        <AlertTitle>{t('Not available')}</AlertTitle>
+        <AlertDescription>{t('You do not have permission to see notifications.')}</AlertDescription>
       </Alert>
     );
   }
@@ -42,34 +44,35 @@ export function NotificationsPage() {
   return (
     <div className="grid gap-4">
       <header className="grid gap-1">
-        <h1 className="text-xl font-semibold">Notifications</h1>
+        <h1 className="text-xl font-semibold">{t('Notifications')}</h1>
         <p className="text-muted-foreground text-sm">
-          Email, SMS and push messages to customers about their bookings, payments and gift cards,
-          and billing notices to the owner.
+          {t(
+            'Email, SMS and push messages to customers about their bookings, payments and gift cards, and billing notices to the owner.',
+          )}
         </p>
       </header>
 
       <div
         role="tablist"
-        aria-label="Notifications"
+        aria-label={t('Notifications')}
         className="border-border/60 flex gap-1 border-b"
       >
-        {TABS.map((t) => (
+        {TABS.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             role="tab"
             type="button"
-            id={`notif-tab-${t.id}`}
-            aria-selected={tab === t.id}
-            aria-controls={`notif-panel-${t.id}`}
+            id={`notif-tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls={`notif-panel-${item.id}`}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-              tab === t.id
+              tab === item.id
                 ? 'border-primary font-medium'
                 : 'text-muted-foreground border-transparent hover:text-foreground'
             }`}
-            onClick={() => setTab(t.id)}
+            onClick={() => setTab(item.id)}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </div>
@@ -83,8 +86,8 @@ export function NotificationsPage() {
             <Skeleton className="h-60 w-full" aria-busy="true" />
           ) : settings.error || !settings.data ? (
             <Alert variant="destructive" role="alert">
-              <AlertTitle>Could not load settings</AlertTitle>
-              <AlertDescription>Please try again.</AlertDescription>
+              <AlertTitle>{t('Could not load settings')}</AlertTitle>
+              <AlertDescription>{t('Please try again.')}</AlertDescription>
             </Alert>
           ) : (
             <NotificationSettingsForm settings={settings.data} />

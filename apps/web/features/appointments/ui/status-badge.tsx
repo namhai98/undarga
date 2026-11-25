@@ -1,8 +1,13 @@
+'use client';
+
 import { Badge } from '@/components/ui/badge';
 import type { AppointmentStatus } from '@/services/appointments.service';
 import { STATUS_LABEL } from '../model/appointment-display';
+import { useT } from '@/lib/i18n';
 
-const VARIANT: Partial<Record<AppointmentStatus, 'default' | 'secondary' | 'destructive' | 'outline'>> = {
+const VARIANT: Partial<
+  Record<AppointmentStatus, 'default' | 'secondary' | 'destructive' | 'outline'>
+> = {
   CONFIRMED: 'default',
   IN_PROGRESS: 'default',
   COMPLETED: 'secondary',
@@ -11,5 +16,6 @@ const VARIANT: Partial<Record<AppointmentStatus, 'default' | 'secondary' | 'dest
 };
 
 export function StatusBadge({ status }: { status: AppointmentStatus }) {
-  return <Badge variant={VARIANT[status] ?? 'secondary'}>{STATUS_LABEL[status]}</Badge>;
+  const t = useT();
+  return <Badge variant={VARIANT[status] ?? 'secondary'}>{t(STATUS_LABEL[status])}</Badge>;
 }

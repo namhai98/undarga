@@ -45,7 +45,12 @@ export interface EmployeeDetail extends EmployeeSummary {
   };
   /** Staff-only. Never merge this into publicProfile. */
   privateProfile: { phone: string | null; emergencyContact: string | null };
-  branches: Array<{ branchId: string; name: string | null; code: string | null; isPrimary: boolean }>;
+  branches: Array<{
+    branchId: string;
+    name: string | null;
+    code: string | null;
+    isPrimary: boolean;
+  }>;
   services: Array<{
     serviceId: string;
     name: string | null;
@@ -123,9 +128,7 @@ export const employeesService = {
     ),
 
   removeBranch: (companyId: string, employeeId: string, branchId: string) =>
-    apiClient.delete<void>(
-      `/companies/${companyId}/employees/${employeeId}/branches/${branchId}`,
-    ),
+    apiClient.delete<void>(`/companies/${companyId}/employees/${employeeId}/branches/${branchId}`),
 
   assignService: (companyId: string, employeeId: string, serviceId: string) =>
     apiClient.post<unknown>(`/companies/${companyId}/employees/${employeeId}/services`, {
@@ -133,9 +136,7 @@ export const employeesService = {
     }),
 
   removeService: (companyId: string, employeeId: string, serviceId: string) =>
-    apiClient.delete<void>(
-      `/companies/${companyId}/employees/${employeeId}/services/${serviceId}`,
-    ),
+    apiClient.delete<void>(`/companies/${companyId}/employees/${employeeId}/services/${serviceId}`),
 
   /** Returns a one-time invitation link. Never a password. */
   linkAccount: (companyId: string, employeeId: string, email: string, roleKeys: string[]) =>
@@ -147,4 +148,79 @@ export const employeesService = {
 
   unlinkAccount: (companyId: string, employeeId: string) =>
     apiClient.delete<void>(`/companies/${companyId}/employees/${employeeId}/account`),
+
+  /** One-off days (day off, or different hours) from today, 90 days ahead. */
+  listExceptions: (companyId: string, employeeId: string, signal?: AbortSignal) =>
+    apiClient.get<{ items: ScheduleException[] }>(
+      `/companies/${companyId}/employees/${employeeId}/schedule-exceptions`,
+      { signal },
+    ),
+
+  putException: (
+    companyId: string,
+    employeeId: string,
+    input: {
+      date: string;
+      isWorking: boolean;
+      startsAt?: string;
+      endsAt?: string;
+      note?: string | null;
+    },
+  ) =>
+    apiClient.put<ScheduleException>(
+      `/companies/${companyId}/employees/${employeeId}/schedule-exceptions`,
+      input,
+    ),
+
+  removeException: (companyId: string, employeeId: string, exceptionId: string) =>
+    apiClient.delete<void>(
+      `/companies/${companyId}/employees/${employeeId}/schedule-exceptions/${exceptionId}`,
+    ),
+
+  /** The week in force today at one branch. A missing day is a day off. */
+  getSchedule: (companyId: string, employeeId: string, branchId: string, signal?: AbortSignal) =>
+    apiClient.get<EmployeeSchedule>(`/companies/${companyId}/employees/${employeeId}/schedule`, {
+      query: { branchId },
+      signal,
+    }),
+
+  /** Replaces the whole week at that branch from today. Days left out are days off. */
+  putSchedule: (companyId: string, employeeId: string, input: ScheduleInput) =>
+    apiClient.put<EmployeeSchedule>(
+      `/companies/${companyId}/employees/${employeeId}/schedule`,
+      input,
+    ),
 };
+
+export interface ScheduleInput {
+  branchId: string;
+  days: Array<{
+    dayOfWeek: number;
+    startsAt: string;
+    endsAt: string;
+    breaks?: Array<{ startsAt: string; endsAt: string }>;
+  }>;
+}
+
+export interface ScheduleException {
+  id: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  isWorking: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  note: string | null;
+}
+
+export interface EmployeeSchedule {
+  branchId: string;
+  days: Array<{
+    /** 0 = Sunday … 6 = Saturday. */
+    dayOfWeek: number;
+    /** `HH:MM`, the branch's wall clock. */
+    startsAt: string;
+    endsAt: string;
+    crossesMidnight: boolean;
+    breaks: Array<{ startsAt: string; endsAt: string }>;
+  }>;
+}

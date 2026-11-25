@@ -9,6 +9,7 @@ import type {
   AvailabilityUnavailableReason,
 } from '@/services/availability.service';
 import { localTime } from '../model/appointment-display';
+import { useT } from '@/lib/i18n';
 
 const REASON_COPY: Record<AvailabilityUnavailableReason, string> = {
   BRANCH_CLOSED: 'This branch is closed on this date.',
@@ -36,6 +37,7 @@ export function SlotPicker(props: {
   selected: string | null;
   onSelect: (slot: AvailabilitySlot) => void;
 }) {
+  const t = useT();
   const availability = useAvailability({
     branchId: props.branchId || undefined,
     serviceId: props.serviceId || undefined,
@@ -45,13 +47,15 @@ export function SlotPicker(props: {
   });
 
   if (!props.branchId || !props.serviceId || !props.date) {
-    return <p className="text-muted-foreground text-sm">Choose a branch, a service and a date.</p>;
+    return (
+      <p className="text-muted-foreground text-sm">{t('Choose a branch, a service and a date.')}</p>
+    );
   }
 
   if (availability.isPending) {
     return (
       <div className="grid gap-2" aria-busy="true">
-        <span className="sr-only">Calculating availability…</span>
+        <span className="sr-only">{t('Calculating availability…')}</span>
         <Skeleton className="h-9 w-full" />
       </div>
     );
@@ -60,8 +64,8 @@ export function SlotPicker(props: {
   if (availability.error) {
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Could not load available times</AlertTitle>
-        <AlertDescription>Please try again.</AlertDescription>
+        <AlertTitle>{t('Could not load available times')}</AlertTitle>
+        <AlertDescription>{t('Please try again.')}</AlertDescription>
       </Alert>
     );
   }
@@ -72,7 +76,7 @@ export function SlotPicker(props: {
       <div className="border-border/60 rounded-lg border border-dashed p-6 text-center text-sm">
         {day?.unavailableReason
           ? REASON_COPY[day.unavailableReason]
-          : 'No available times for this date.'}
+          : t('No available times for this date.')}
       </div>
     );
   }
@@ -81,10 +85,14 @@ export function SlotPicker(props: {
     <div className="grid gap-2">
       <p className="text-muted-foreground flex items-center gap-2 text-xs">
         {availability.isFetching ? <Loader2 className="size-3 animate-spin" aria-hidden /> : null}
-        {day.slots.length} time{day.slots.length === 1 ? '' : 's'} · {day.serviceDurationMin}m ·
-        times in {day.timezone}
+        {t(
+          day.slots.length === 1
+            ? '1 time · {duration}m · times in {timezone}'
+            : '{count} times · {duration}m · times in {timezone}',
+          { count: day.slots.length, duration: day.serviceDurationMin, timezone: day.timezone },
+        )}
       </p>
-      <div role="radiogroup" aria-label="Available times" className="flex flex-wrap gap-2">
+      <div role="radiogroup" aria-label={t('Available times')} className="flex flex-wrap gap-2">
         {day.slots.map((slot) => {
           const active = props.selected === slot.startAt;
           return (

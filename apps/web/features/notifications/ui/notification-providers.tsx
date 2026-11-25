@@ -26,6 +26,7 @@ import {
   notificationErrorMessage,
   providerLabel,
 } from '../model/notification-display';
+import { useT } from '@/lib/i18n';
 
 const CONNECTION_LABEL: Record<ProviderStatus, string> = {
   UNVERIFIED: 'Not checked',
@@ -52,6 +53,7 @@ const ACTIVE_LABEL: Record<ProviderChannelView['active'], string> = {
  * decides whose account speaks to the company's customers.
  */
 export function NotificationProviders() {
+  const t = useT();
   const providers = useNotificationProviders();
   const canVerify = useCan('settings:write');
   const canBilling = useCan('settings:billing:write');
@@ -61,24 +63,26 @@ export function NotificationProviders() {
   if (providers.error || !providers.data) {
     return (
       <Alert variant="destructive" role="alert">
-        <AlertTitle>Could not load providers</AlertTitle>
-        <AlertDescription>Please try again.</AlertDescription>
+        <AlertTitle>{t('Could not load providers')}</AlertTitle>
+        <AlertDescription>{t('Please try again.')}</AlertDescription>
       </Alert>
     );
   }
 
   return (
-    <section className="grid gap-4" aria-label="Notification providers">
+    <section className="grid gap-4" aria-label={t('Notification providers')}>
       <p className="text-muted-foreground max-w-prose text-sm">
-        Messages go out through the platform&apos;s email and SMS accounts unless you connect your
-        own. A channel with no provider sends nothing.
+        {t(
+          "Messages go out through the platform's email and SMS accounts unless you connect your own. A channel with no provider sends nothing.",
+        )}
       </p>
       {!providers.data.companyAccountsAvailable ? (
         <Alert role="status">
-          <AlertTitle>Own accounts are not available</AlertTitle>
+          <AlertTitle>{t('Own accounts are not available')}</AlertTitle>
           <AlertDescription>
-            This server has no encryption key for stored credentials, so your own provider accounts
-            cannot be connected yet.
+            {t(
+              'This server has no encryption key for stored credentials, so your own provider accounts cannot be connected yet.',
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -103,6 +107,7 @@ function ChannelCard({
   canVerify: boolean;
   canManage: boolean;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const verify = useVerifyNotificationProvider();
@@ -146,41 +151,44 @@ function ChannelCard({
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>{CHANNEL_LABEL[view.channel]}</CardTitle>
+          <CardTitle>{t(CHANNEL_LABEL[view.channel])}</CardTitle>
           <Badge variant={view.active === 'none' ? 'secondary' : 'default'}>
-            {ACTIVE_LABEL[view.active]}
+            {t(ACTIVE_LABEL[view.active])}
           </Badge>
         </div>
-        <CardDescription>Platform provider: {providerLabel(view.platformProvider)}</CardDescription>
+        <CardDescription>
+          {t('Platform provider:')} {providerLabel(view.platformProvider)}
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">
         {view.channel === 'PUSH' ? (
           <p className="text-muted-foreground">
-            Push needs the app to register customers&apos; devices, which it does not do yet.
-            Nothing is sent by push.
+            {t(
+              "Push needs the app to register customers' devices, which it does not do yet. Nothing is sent by push.",
+            )}
           </p>
         ) : null}
 
         {company ? (
           <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[10rem_1fr]">
-            <dt className="text-muted-foreground">Your account</dt>
+            <dt className="text-muted-foreground">{t('Your account')}</dt>
             <dd>
               {providerLabel(company.provider)}
-              {company.isEnabled ? '' : ' (switched off)'}
+              {company.isEnabled ? '' : t(' (switched off)')}
             </dd>
-            <dt className="text-muted-foreground">Connection</dt>
+            <dt className="text-muted-foreground">{t('Connection')}</dt>
             <dd>
               <Badge variant={company.status === 'FAILED' ? 'destructive' : 'secondary'}>
-                {CONNECTION_LABEL[company.status]}
+                {t(CONNECTION_LABEL[company.status])}
               </Badge>
               {company.lastError ? (
                 <span className="text-destructive ml-2 text-xs">{company.lastError}</span>
               ) : null}
             </dd>
             <dt className="text-muted-foreground">
-              {company.provider === 'sendgrid' ? 'API key' : 'Auth token'}
+              {company.provider === 'sendgrid' ? t('API key') : t('Auth token')}
             </dt>
-            <dd className="font-mono text-xs" aria-label="Stored secret, masked">
+            <dd className="font-mono text-xs" aria-label={t('Stored secret, masked')}>
               {company.secretHint}
             </dd>
             {Object.entries(company.settings)
@@ -190,17 +198,17 @@ function ChannelCard({
               ))}
             {company.provider === 'sendgrid' ? (
               <>
-                <dt className="text-muted-foreground">Delivery receipts</dt>
+                <dt className="text-muted-foreground">{t('Delivery receipts')}</dt>
                 <dd>
                   {company.settings.webhookPublicKey
-                    ? 'Signed events on'
-                    : 'Off — no verification key'}
+                    ? t('Signed events on')
+                    : t('Off — no verification key')}
                 </dd>
               </>
             ) : null}
             {company.receiptUrl && company.provider === 'sendgrid' ? (
               <>
-                <dt className="text-muted-foreground">Event Webhook URL</dt>
+                <dt className="text-muted-foreground">{t('Event Webhook URL')}</dt>
                 <dd className="font-mono text-xs break-all">{company.receiptUrl}</dd>
               </>
             ) : null}
@@ -233,8 +241,10 @@ function ChannelCard({
             {canManage ? (
               <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
                 {company
-                  ? 'Edit account'
-                  : `Connect your own ${channel === 'EMAIL' ? 'SendGrid' : 'Twilio'} account`}
+                  ? t('Edit account')
+                  : t('Connect your own {value} account', {
+                      value: channel === 'EMAIL' ? 'SendGrid' : 'Twilio',
+                    })}
               </Button>
             ) : null}
             {company && canVerify ? (
@@ -245,7 +255,7 @@ function ChannelCard({
                 onClick={() => void check()}
               >
                 {verify.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-                Check connection
+                {t('Check connection')}
               </Button>
             ) : null}
             {company && canManage ? (
@@ -255,7 +265,7 @@ function ChannelCard({
                 disabled={remove.isPending}
                 onClick={() => void disconnect()}
               >
-                Disconnect
+                {t('Disconnect')}
               </Button>
             ) : null}
           </div>
@@ -293,6 +303,7 @@ function ProviderForm({
   onDone: (message: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const save = useSaveNotificationProvider();
   const existing = view.company;
   const settings = existing?.settings ?? {};
@@ -346,7 +357,7 @@ function ProviderForm({
     <form
       className="grid gap-3"
       onSubmit={(e) => void submit(e)}
-      aria-label={`${CHANNEL_LABEL[channel]} account`}
+      aria-label={t('{value} account', { value: CHANNEL_LABEL[channel] })}
     >
       <div className="grid gap-1.5">
         <Label htmlFor={id('secret')}>{secretLabel}</Label>
@@ -356,7 +367,13 @@ function ProviderForm({
           autoComplete="off"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
-          placeholder={existing ? `Stored (${existing.secretHint}) — leave blank to keep` : ''}
+          placeholder={
+            existing
+              ? t('Stored ({secretHint}) — leave blank to keep', {
+                  secretHint: existing.secretHint,
+                })
+              : ''
+          }
           required={!existing}
         />
       </div>
@@ -364,7 +381,7 @@ function ProviderForm({
         <>
           <TextField
             id={id('fromAddress')}
-            label="From address"
+            label={t('From address')}
             value={field('fromAddress')}
             onChange={set('fromAddress')}
             type="email"
@@ -372,13 +389,13 @@ function ProviderForm({
           />
           <TextField
             id={id('fromName')}
-            label="From name (optional)"
+            label={t('From name (optional)')}
             value={field('fromName')}
             onChange={set('fromName')}
           />
           <TextField
             id={id('webhookPublicKey')}
-            label="Event Webhook verification key (optional, enables delivery receipts)"
+            label={t('Event Webhook verification key (optional, enables delivery receipts)')}
             value={field('webhookPublicKey')}
             onChange={set('webhookPublicKey')}
           />
@@ -387,20 +404,20 @@ function ProviderForm({
         <>
           <TextField
             id={id('accountSid')}
-            label="Account SID"
+            label={t('Account SID')}
             value={field('accountSid')}
             onChange={set('accountSid')}
             required
           />
           <TextField
             id={id('fromNumber')}
-            label="From number (e.g. +97699112233)"
+            label={t('From number (e.g. +97699112233)')}
             value={field('fromNumber')}
             onChange={set('fromNumber')}
           />
           <TextField
             id={id('messagingServiceSid')}
-            label="Messaging Service SID (instead of a number)"
+            label={t('Messaging Service SID (instead of a number)')}
             value={field('messagingServiceSid')}
             onChange={set('messagingServiceSid')}
           />
@@ -412,7 +429,7 @@ function ProviderForm({
           checked={isEnabled}
           onChange={(e) => setIsEnabled(e.target.checked)}
         />
-        Send {CHANNEL_LABEL[channel].toLowerCase()} through this account
+        {t('Send')} {CHANNEL_LABEL[channel].toLowerCase()} {t('through this account')}
       </label>
       {error ? (
         <p role="alert" className="text-destructive text-sm">
@@ -422,10 +439,10 @@ function ProviderForm({
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={save.isPending}>
           {save.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Save account
+          {t('Save account')}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </form>

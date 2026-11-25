@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { PlatformMfaCard } from './platform-mfa';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,8 +53,14 @@ export function PlatformDashboard() {
         </p>
       </header>
 
+      <PlatformMfaCard />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Companies" value={data.companies.total} hint={`${data.companies.newInWindow} new in ${data.windowDays} days`} />
+        <Stat
+          label="Companies"
+          value={data.companies.total}
+          hint={`${data.companies.newInWindow} new in ${data.windowDays} days`}
+        />
         <Stat label="Active" value={data.companies.active} />
         <Stat
           label="Suspended"
@@ -70,9 +77,22 @@ export function PlatformDashboard() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Users" value={data.users.total} hint={`${data.users.activeMemberships} active memberships`} />
-        <Stat label="Appointments" value={data.appointments.total} hint={`${data.appointments.inWindow} in ${data.windowDays} days`} />
-        <Stat label="Trials" value={data.subscriptions.trial} hint={`${data.subscriptions.trialsEndingWithin7Days} ending this week`} tone={data.subscriptions.trialsEndingWithin7Days > 0 ? 'warn' : undefined} />
+        <Stat
+          label="Users"
+          value={data.users.total}
+          hint={`${data.users.activeMemberships} active memberships`}
+        />
+        <Stat
+          label="Appointments"
+          value={data.appointments.total}
+          hint={`${data.appointments.inWindow} in ${data.windowDays} days`}
+        />
+        <Stat
+          label="Trials"
+          value={data.subscriptions.trial}
+          hint={`${data.subscriptions.trialsEndingWithin7Days} ending this week`}
+          tone={data.subscriptions.trialsEndingWithin7Days > 0 ? 'warn' : undefined}
+        />
         <Stat label="Active subscriptions" value={data.subscriptions.active} />
       </div>
 

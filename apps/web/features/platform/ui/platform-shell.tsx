@@ -93,14 +93,30 @@ function PlatformLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** Set once the server has accepted the password and wants the second factor. */
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState('');
 
   const login = usePlatformLogin();
 
   const submit = async () => {
     setError(null);
     try {
-      await login.mutateAsync({ email: email.trim(), password });
+      await login.mutateAsync({
+        email: email.trim(),
+        password,
+        ...(needsCode ? { mfaCode: code.trim() } : {}),
+      });
     } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'MFA_REQUIRED') {
+        // Only sent after a correct password: ask for the code, say nothing else.
+        setNeedsCode(true);
+        return;
+      }
+      if (caught instanceof ApiError && caught.code === 'MFA_ENROLLMENT_REQUIRED') {
+        setError(caught.message);
+        return;
+      }
       // One message for every rejection. Distinguishing "no such operator" from
       // "wrong password" tells an attacker which half they got right, and an
       // operator account is a key to every tenant on the platform.
@@ -109,7 +125,9 @@ function PlatformLogin() {
       setError(
         !(caught instanceof ApiError) || caught.status >= 500
           ? 'The server is not responding. Try again shortly.'
-          : 'Those credentials were not accepted.',
+          : needsCode
+            ? 'That code was not accepted. Wait for the next one and try again.'
+            : 'Those credentials were not accepted.',
       );
     }
   };
@@ -163,9 +181,31 @@ function PlatformLogin() {
           />
         </div>
 
-        <Button type="submit" disabled={login.isPending || !email || !password}>
+        {needsCode ? (
+          <div className="grid gap-1.5">
+            <Label htmlFor="platform-code">Authenticator code</Label>
+            <Input
+              id="platform-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              required
+            />
+            <p className="text-muted-foreground text-xs">
+              The 6-digit code from your authenticator app.
+            </p>
+          </div>
+        ) : null}
+
+        <Button
+          type="submit"
+          disabled={login.isPending || !email || !password || (needsCode && code.length !== 6)}
+        >
           {login.isPending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-          Sign in
+          {needsCode ? 'Verify and sign in' : 'Sign in'}
         </Button>
 
         <p className="text-muted-foreground text-xs">

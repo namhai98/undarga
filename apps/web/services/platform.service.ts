@@ -111,12 +111,14 @@ export interface PlatformCompanyUser {
 
 export interface PlatformSubscriptionView {
   companyId: string;
-  subscription: PlatformCompanyDetail['subscription'] & {
-    cancelReason?: string | null;
-    expiredAt?: string | null;
-    provider?: string | null;
-    startedAt?: string;
-  } | null;
+  subscription:
+    | (PlatformCompanyDetail['subscription'] & {
+        cancelReason?: string | null;
+        expiredAt?: string | null;
+        provider?: string | null;
+        startedAt?: string;
+      })
+    | null;
   periodKey: string;
   usage: Array<{
     metric: string;
@@ -200,13 +202,17 @@ export const platformService = {
    * is no platform refresh endpoint to spend it at, so holding it would only
    * widen what an XSS could take.
    */
-  async login(email: string, password: string) {
+  async login(email: string, password: string, mfaCode?: string) {
     const session = await platformApiClient.post<{
       accessToken: string;
       expiresIn: number;
       user?: { id: string; email: string; fullName: string };
       permissions?: string[];
-    }>('/platform/auth/login', { email, password }, { anonymous: true });
+    }>(
+      '/platform/auth/login',
+      { email, password, ...(mfaCode ? { mfaCode } : {}) },
+      { anonymous: true },
+    );
 
     platformTokenStore.set({
       accessToken: session.accessToken,
@@ -215,6 +221,19 @@ export const platformService = {
 
     return session;
   },
+
+  /** Whether you have a second factor, and whether the server can store one. */
+  mfaStatus: (signal?: AbortSignal) =>
+    platformApiClient.get<{ enrolled: boolean; available: boolean }>('/platform/auth/mfa', {
+      signal,
+    }),
+
+  /** Returns the secret ONCE, for an authenticator app. */
+  mfaSetup: () =>
+    platformApiClient.post<{ secret: string; otpauthUri: string }>('/platform/auth/mfa/setup'),
+
+  mfaConfirm: (code: string) =>
+    platformApiClient.post<{ enrolled: true }>('/platform/auth/mfa/confirm', { code }),
 
   async logout() {
     try {
